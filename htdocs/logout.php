@@ -1,3 +1,4 @@
+<?php
 /*
  Copyright (C) 2025 Maurice Snoeren
 
@@ -11,7 +12,6 @@
  You should have received a copy of the GNU General Public License along with this program.
  If not, see https://www.gnu.org/licenses/.
 */
-<?php
 session_start();
 session_destroy();
 header('Location: index.php');

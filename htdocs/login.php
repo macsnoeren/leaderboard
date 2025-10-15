@@ -1,3 +1,4 @@
+<?php
 /*
  Copyright (C) 2025 Maurice Snoeren
 
@@ -11,8 +12,7 @@
  You should have received a copy of the GNU General Public License along with this program.
  If not, see https://www.gnu.org/licenses/.
 */
-<?php
-require_once 'config.php';
+require_once '../conf/config.php';
 
 if (isset($_SESSION['teacher_logged_in'])) {
     header('Location: teacher.php');
