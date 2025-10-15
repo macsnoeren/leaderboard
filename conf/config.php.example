@@ -1,0 +1,109 @@
+/*
+ Copyright (C) 2025 Maurice Snoeren
+
+ This program is free software: you can redistribute it and/or modify it under the terms of
+ the GNU General Public License as published by the Free Software Foundation, version 3.
+
+ This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with this program.
+ If not, see https://www.gnu.org/licenses/.
+*/
+<?php
+
+// NOTE: Please change the values and save the file as config.php
+
+// Database configuration
+define('DB_FILE', __DIR__ . '/database/leaderboard.db');
+
+// Email configuration
+define('SMTP_HOST', 'smtp.gmail.com');
+define('SMTP_PORT', 587);
+define('SMTP_USER', '<your-email@gmail.com>');
+define('SMTP_PASS', '<your-app-password>');
+define('FROM_EMAIL', '<your-email@gmail.com>');
+define('FROM_NAME', 'Assignment System');
+
+// Base URL
+define('BASE_URL', 'https://localhost/leaderboard');
+
+// Database connection and initialization
+function getDB() {
+    try {
+        $db = new PDO('sqlite:' . DB_FILE);
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        // Create tables if they don't exist
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                current_level INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+        
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                assignment_number INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                artifact_file TEXT
+            )
+        ");
+        
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS teachers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL
+            )
+        ");
+
+	$db->exec("
+    	  CREATE TABLE IF NOT EXISTS download_tokens (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               team_id INTEGER NOT NULL,
+               level INTEGER NOT NULL,
+               token TEXT NOT NULL UNIQUE,
+               expires_at DATETIME NOT NULL,
+               created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+               FOREIGN KEY(team_id) REFERENCES teams(id)
+    	  )
+	");
+
+        // Check if we need to insert default data
+        $count = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+        if ($count == 0) {
+            // Insert default assignments
+            $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, artifact_file) VALUES (?, ?, ?, ?)");
+            for ($i = 1; $i <= 14; $i++) {
+                $stmt->execute([
+                    $i,
+                    "Assignment $i",
+                    "Assignment $i description",
+                    "artifacts/assignment$i.pdf"
+                ]);
+            }
+        }
+        
+        // Check if default teacher exists
+        $count = $db->query("SELECT COUNT(*) FROM teachers")->fetchColumn();
+        if ($count == 0) {
+            // Default teacher (username: admin, password: admin123)
+            $password_hash = password_hash('admin123', PASSWORD_DEFAULT);
+            $db->exec("INSERT INTO teachers (username, password_hash) VALUES ('admin', '$password_hash')");
+        }
+        
+        return $db;
+    } catch (PDOException $e) {
+        die("Database connection failed: " . $e->getMessage());
+    }
+}
+
+session_start();
+?>
