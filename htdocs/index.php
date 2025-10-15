@@ -126,8 +126,8 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
 <body>
     <div class="container">
         <header>
-            <h1>🏆 Assignment Leaderboard</h1>
-            <p class="subtitle">Track your team's progress through all assignments</p>
+            <h1>Leaderboard Zebrawave Studios</h1>
+            <!--<p class="subtitle"></p>-->
         </header>
         
         <div class="leaderboard">
@@ -160,10 +160,6 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
-        </div>
-        
-        <div class="admin-link">
-            <a href="teacher.php">👨‍🏫 Teacher Login</a>
         </div>
     </div>
 </body>

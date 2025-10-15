@@ -214,7 +214,7 @@ function sendLevelUpEmail($to, $team_name, $level) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Dashboard</title>
+    <title>Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -336,8 +336,14 @@ function sendLevelUpEmail($to, $team_name, $level) {
 <body>
     <div class="container">
         <header>
-            <h1>👨‍🏫 Teacher Dashboard</h1>
-            <a href="logout.php" class="logout">Logout</a>
+            <h1>Dashboard</h1>
+	    <span>
+             <a target="_leaderboard" href="index.php" class="logout">Leaderboard</a> |
+             <a href="assignments.php" class="logout">Assignments</a> |
+             <a href="users.php" class="logout">Users</a> |
+             <a href="password.php" class="logout">Change password</a> |
+             <a href="logout.php" class="logout">Logout</a>
+	    </span>
         </header>
         
         <?php if (isset($_SESSION['success'])): ?>
