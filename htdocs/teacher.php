@@ -97,9 +97,7 @@ function sendLevelUpEmail($to, $team_id, $team_name, $level) {
 
     // Content
     $mail->isHTML(true);
-    $mail->Subject = "Congratulations! Level $level Completed";
-
-    //$download_link = BASE_URL . "/download.php?level=$level&email=" . urlencode($to);
+    $mail->Subject = "$team_name: Gefeiliciteerd! Level $level is behaald!";
 
     // Generate a unique secure token
     $token = bin2hex(random_bytes(32));
@@ -118,16 +116,16 @@ function sendLevelUpEmail($to, $team_id, $team_name, $level) {
     $mail->Body = "
       <html>
       <body style='font-family: Arial, sans-serif;'>
-      <h2>Congratulations, $team_name!</h2>
-	 <p>You've successfully completed level $level!</p>
-	 <p>Click the link below to download your assignment artifacts:</p>
+      <h2>Gefeliciteerd $team_name!</h2>
+	 <p>Jullie hebben level $level behaald!</p>
+	 <p>Klik op de onderstaande link om de documenten te krijgen voor de volgende opdracht:</p>
 	 <p><a href='$download_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Download Artifacts</a></p>
-	 <p>Keep up the great work!</p>
+	 <p>Ga vooral zo door! Goed bezig!!</p>
 	 </body>
 	</html>
     ";
 
-    $mail->AltBody = "Congratulations, $team_name! You've completed level $level. Download your artifacts at: $download_link";
+    $mail->AltBody = "Gefeliciteerd $team_name! Je hebt level $level behaald. Download de volgende opdracht: $download_link";
 
     $mail->send();
     return true;
@@ -162,7 +160,7 @@ function sendWelcomeEmail($to, $team_name) {
     $mail->Body = "
       <html>
       <body style='font-family: Arial, sans-serif;'>
-      <h2>Gefeiliteerd, $team_name!</h2>
+      <h2>Gefeiliteerd $team_name!</h2>
 	 <p>Je bent aangemeld als recherche team!</p>
 	 <p>Dit is een test e-mail om te controleren of alles in orde is.</p>
 	 <p>Weet waar je staat: <a href='$leaderboard_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Leaderboard</a></p>
