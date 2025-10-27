@@ -30,7 +30,7 @@ $db = getDB();
 
 // Handle level changes
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    if ($_POST['action'] === 'level_up' && isset($_POST['team_id'])) {
+    if (($_POST['action'] === 'level_up' || $_POST['action'] === 'resend_level_mail') && isset($_POST['team_id'])) {
         $team_id = (int)$_POST['team_id'];
         
         // Get team info
@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $team = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($team) {
-            $new_level = $team['current_level'] + 1;
+            $new_level = $team['current_level'] + ($_POST['action'] === 'level_up' ? 1 : 0);
             
             // Update level
             $stmt = $db->prepare("UPDATE teams SET current_level = ? WHERE id = ?");
@@ -50,6 +50,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             
             $_SESSION['success'] = "Team leveled up and email sent!";
         }
+/*	
+    } elseif ($_POST['action'] === 'resend_level_mail' && isset($_POST['team_id'])) {
+        $team_id = (int)$_POST['team_id'];
+        
+        // Get team info
+        $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
+        $stmt->execute([$team_id]);
+        $team = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($team) {                        
+            // Send email with artifacts
+            sendLevelUpEmail($team['email'], $team_id, $team['team_name'], $team['current_level']);
+            
+            $_SESSION['success'] = "Resend level information email!";
+        }
+*/
     } elseif ($_POST['action'] === 'add_team') {
         $team_name = trim($_POST['team_name']);
         $email = trim($_POST['email']);
@@ -97,7 +113,7 @@ function sendLevelUpEmail($to, $team_id, $team_name, $level) {
 
     // Content
     $mail->isHTML(true);
-    $mail->Subject = "$team_name: Gefeiliciteerd! Level $level is behaald!";
+    $mail->Subject = "$team_name: Gefeliciteerd! Level $level is behaald!";
 
     // Generate a unique secure token
     $token = bin2hex(random_bytes(32));
@@ -160,7 +176,7 @@ function sendWelcomeEmail($to, $team_name) {
     $mail->Body = "
       <html>
       <body style='font-family: Arial, sans-serif;'>
-      <h2>Gefeiliteerd $team_name!</h2>
+      <h2>Gefeliciteerd $team_name!</h2>
 	 <p>Je bent aangemeld als recherche team!</p>
 	 <p>Dit is een test e-mail om te controleren of alles in orde is.</p>
 	 <p>Weet waar je staat: <a href='$leaderboard_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Leaderboard</a></p>
@@ -398,6 +414,14 @@ function sendLevelUpEmail($to, $team_name, $level) {
                                     <button type="submit" class="level-up-btn" 
                                         <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
                                         Level Up
+                                    </button>
+                                </form>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="action" value="resend_level_mail">
+                                    <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
+                                    <button type="submit" class="level-up-btn" 
+                                        <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
+                                        Resend Mail
                                     </button>
                                 </form>
                                 <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this team?');">
