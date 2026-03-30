@@ -19,6 +19,7 @@
 define('DB_FILE', __DIR__ . '/database/leaderboard.db');
 
 // Email configuration
+define('ENABLE_EMAIL', True); // Gebruik voor het testen False!
 define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 587);
 define('SMTP_USER', '<your-email@gmail.com>');
