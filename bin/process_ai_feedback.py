@@ -8,261 +8,166 @@
 import requests
 import json
 import time
-from typing import List, Dict, Optional
+import re
+import logging
+from typing import List, Dict, Optional, Any
 import re
 from config import API_KEY, BASE_URL, OLLAMA_URL, LLM_MODELS, POLL_INTERVAL
 
-# =========================
-# LLM FEEDBACK FUNCTIE
-# =========================
+# Configureer logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
-def extract_json(data) -> Optional[Dict]:
-    """
-    Probeert een dict te maken van Ollama output.
+class AIFeedbackService:
+    def __init__(self):
+        self.api_key = API_KEY
+        self.base_url = BASE_URL
+        self.ollama_url = OLLAMA_URL
+        self.models = LLM_MODELS
+        self.poll_interval = POLL_INTERVAL
 
-    - Accepteert string of dict
-    - Verwijdert Markdown codeblocks zoals ```json ... ```
-    """
-    if isinstance(data, dict):
-        return data
+    def _get_headers(self) -> Dict[str, str]:
+        return {
+            "X-API-Token": self.api_key,
+            "Content-Type": "application/json"
+        }
 
-    if not isinstance(data, str):
-        return None
-
-    # Verwijder eventuele ```json ... ``` of ``` ... ```
-    cleaned = re.sub(r'```(?:json)?\n?|```', '', data)
-
-    # Zoek eerste {...} in de tekst
-    match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-    if not match:
-        return None
-
-    try:
-        return json.loads(match.group())
-    except json.JSONDecodeError:
-        return None
-
-def get_feedback_from_model(
-    q: Dict,
-    model_name: str
-) -> Optional[Dict]:
-    """
-    Vraagt feedback op bij één LLM-model.
-
-    :param q: Studentantwoord object uit de API
-    :param model_name: Naam van het LLM-model (Ollama)
-    :return: Dict met score en feedback of None bij fout
-    """
-
-    # Haal waarden op en zorg dat ze strings zijn (voorkom NoneType errors)
-    question_text = str(q.get('instruction') or "")
-    criteria = str(q.get('criteria') or "")
-    answer = str(q.get('last_team_message') or "")
-
-    # Gebruik de prompt uit de database als die er is, anders de hardcoded fallback
-    if q.get('prompt_text'):
-        print(f"[{model_name}] Gebruikt custom prompt uit database.")
-        prompt = q['prompt_text']
-        prompt = prompt.replace('{{question_text}}', question_text)
-        prompt = prompt.replace('{{criteria}}', criteria)
-        prompt = prompt.replace('{{student_answer}}', answer)
-    else:
-        prompt = f"""
-Negeer alle eerdere context.
-
-Je bent een automatisch beoordelingssysteem.
-Je mag GEEN uitleg, analyse of extra tekst geven.
-
-TAKEN:
-- Beoordeel het antwoord van de student.
-- Ken punten toe: 0, 1, 5 of 10.
-- 10 punten wanneer het juiste antwoord wordt gegeven.
-- 5 punten als het antwoord in de buurt komt.
-- 1 punt als er enigzins iets zinnigs in staat.
-- Geef korte feedback aan de student in de je-vorm.
-- Geef een korte uitleg wat beter kan in de je-vorm.
-
-GESTELDE VRAAG AAN STUDENT:
-{question_text}
-
-HET JUISTE ANTWOORD EN CRITERIA:
-{criteria}
-
-REGELS:
-- Geef ALLEEN de onderstaande output.
-- Gebruik exact deze labels.
-- Voeg niets toe.
-- Gebruik maximaal 4 zinnen feedback.
-
-OUTPUTFORMAAT JSON exact (verplicht):
-{{ 
-    "score": <0-10>,
-    "feedback": "<tekst>",
-    "uitleg": "<tekst>"
-}}
-
-STUDENTANTWOORD:
-{answer}
-"""
-    
-    payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "stream": False
-    }
-
-    try:
-        start_time = time.time()
-        response = requests.post(OLLAMA_URL, json=payload, timeout=600)
-        end_time = time.time()
-        duration = end_time - start_time
-        data = response.json()
-        raw = data.get("response", "")
-        parsed = extract_json(raw)
-
-        if not parsed:
-            print(f"[{model_name}] Kon geen geldige JSON vinden ({raw})")
-            print("RAW OUTPUT:", raw)
-            return None
+    def _extract_json(self, text: Any) -> Optional[Dict]:
+        if isinstance(text, dict): return text
+        if not isinstance(text, str): return None
         
-        parsed['duration'] = duration
-        return parsed
+        cleaned = re.sub(r'```(?:json)?\n?|```', '', text)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if not match: return None
 
-    except json.JSONDecodeError:
-        print(f"[{model_name}] JSON parsing mislukt: {parsed}")
-    except requests.RequestException as e:
-        print(f"[{model_name}] Request error:", e)
-
-    return None
-
-# =========================
-# STUDENTANTWOORDEN OPHALEN
-# =========================
-
-def fetch_open_student_answers() -> List[Dict]:
-    """
-    Haalt openstaande studentantwoorden op uit de API.
-    """
-
-    response = requests.get(
-        BASE_URL,
-        headers={"X-API-Token": API_KEY},
-        params={
-            "action": "get_pending"
-        },
-        timeout=30
-    )
-
-    if response.status_code != 200:
-        print(f"API Fout: Status {response.status_code}")
-        print("Response:", response.text)
-        return []
-
-    try:
-        return response.json()
-    except Exception as e:
-        print(f"JSON Decodeer fout: {e}")
-        print("Raw output van server:", response.text)
-        return []
-
-# =========================
-# FEEDBACK VERSTUREN
-# =========================
-
-def submit_ai_feedback(
-    team_id: int,
-    feedback_text: str,
-    should_level_up: bool = False
-):
-    """
-    Verstuurt de AI feedback naar de backend.
-    """
-
-    payload = {
-        "team_id": team_id,
-        "message": feedback_text,
-        "level_up": should_level_up
-    }
-
-    requests.post(
-        f"{BASE_URL}?action=send_suggestion",
-        headers={"X-API-Token": API_KEY},
-        json=payload,
-        timeout=180
-    )
-
-
-# =========================
-# HOOFDLOOP
-# =========================
-
-def run():
-    """
-    Hoofdproces:
-    - Loopt continu
-    - Checkt elke 30 seconden op nieuwe antwoorden
-    - Genereert feedback met meerdere LLM-modellen
-    """
-
-    print("AI feedback service gestart...")
-
-    while True:
         try:
-            answers = fetch_open_student_answers()
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            return None
 
-            if not answers:
-                print("Geen nieuwe studentantwoorden.")
-            else:
-                print(f"{len(answers)} nieuwe antwoorden gevonden.")
-
-            for q in answers:
-                all_feedback = []
-                total_score = 0
-                failed = False
-
-                for model in LLM_MODELS:
-                    print(f"Feedback opvragen voor team {q['team_name']} met model {model}")
-                    
-                    result = get_feedback_from_model(q, model)
-                    total_score += result.get('score', 0) if result else 0
-
-                    if result:
-                        all_feedback.append(
-                            f"Model: {model}\n"
-                            f"Tijdsduur: {result['duration']:.2f}s\n"
-                            f"Aantal punten: {result['score']}\n"
-                            f"Feedback: {result['feedback']}"
-                        )
-                    else:
-                        print(f"Model {model} faalde. Feedback wordt niet verstuurd.")
-                        failed = True
-                        break
-
-                if failed or not all_feedback:
-                    continue
-
-                final_feedback = "\n\n".join(all_feedback)
-                avg_score = total_score / len(LLM_MODELS)
-                can_level_up = avg_score >= 7.0
-
-                submit_ai_feedback(
-                    team_id=q["team_id"],
-                    feedback_text=final_feedback,
-                    should_level_up=can_level_up
-                )
-
-                print(f"Suggestie verstuurd voor team {q['team_name']} (Advies Level Up: {can_level_up})")
-
+    def fetch_pending_tasks(self) -> List[Dict]:
+        try:
+            response = requests.get(
+                self.base_url,
+                headers=self._get_headers(),
+                params={"action": "get_pending", "token": self.api_key}, # Fallback token in URL
+                timeout=30
+            )
+            
+            if response.status_code == 401:
+                logger.error("Authenticatie mislukt. Controleer je API_KEY.")
+                return []
+            
+            response.raise_for_status()
+            return response.json()
         except Exception as e:
-            print("Onverwachte fout:", e)
+            logger.error(f"Fout bij ophalen taken: {e}")
+            return []
 
-        print(f"Wachten {POLL_INTERVAL} seconden...\n")
-        time.sleep(POLL_INTERVAL)
+    def get_model_feedback(self, task: Dict, model: str) -> Optional[Dict]:
+        instruction = str(task.get('instruction') or "")
+        criteria = str(task.get('criteria') or "")
+        answer = str(task.get('last_team_message') or "")
 
+        prompt = f"""
+        Negeer eerdere context. Je bent een automatische beoordelaar voor een recherche-spel.
+        
+        OPDRACHT VOOR TEAM: {instruction}
+        BEOORDELINGSCRITERIA: {criteria}
+        ANTWOORD VAN HET TEAM: {answer}
 
-# =========================
-# START SCRIPT
-# =========================
+        TAAK:
+        1. Geef een score van 0 tot 10.
+        2. Geef korte feedback in de 'jullie'-vorm.
+        3. Geef een korte uitleg wat er beter kan.
+
+        OUTPUT MOET EXACT DEZE JSON ZIJN:
+        {{
+            "score": <getal>,
+            "feedback": "<tekst>",
+            "uitleg": "<tekst>"
+        }}
+        """
+        
+        try:
+            start = time.time()
+            resp = requests.post(
+                self.ollama_url,
+                json={"model": model, "prompt": prompt, "stream": False},
+                timeout=300
+            )
+            resp.raise_for_status()
+            duration = time.time() - start
+            
+            raw_response = resp.json().get("response", "")
+            result = self._extract_json(raw_response)
+            
+            if result:
+                result['duration'] = duration
+                return result
+        except Exception as e:
+            logger.warning(f"Model {model} fout: {e}")
+        return None
+
+    def submit_suggestion(self, team_id: int, message: str, level_up: bool):
+        try:
+            payload = {
+                "team_id": team_id,
+                "message": message,
+                "level_up": level_up
+            }
+            resp = requests.post(
+                f"{self.base_url}?action=send_suggestion&token={self.api_key}",
+                headers=self._get_headers(),
+                json=payload,
+                timeout=30
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as e:
+            logger.error(f"Fout bij versturen suggestie voor team {team_id}: {e}")
+            return False
+
+    def run(self):
+        logger.info(f"AI Feedback Service gestart. Interval: {self.poll_interval}s")
+        
+        while True:
+            tasks = self.fetch_pending_tasks()
+            if tasks:
+                logger.info(f"{len(tasks)} antwoorden gevonden om te verwerken.")
+            
+            for task in tasks:
+                team_name = task.get('team_name', 'Onbekend')
+
+                for model in self.models:
+                    logger.info(f"Analyseren: Team '{team_name}' met {model}...")
+                    res = self.get_model_feedback(task, model)
+                    
+                    if res:
+                        score = res.get('score', 0)
+                        # Formatteer de feedback voor een individueel model
+                        model_feedback = f"**AI Advies ({model})** - Score: {score}/10\n\n"
+                        model_feedback += f"{res['feedback']}\n\n"
+                        model_feedback += f"*Tip: {res['uitleg']}*"
+                        
+                        can_level_up = score >= 7.0
+                        
+                        if self.submit_suggestion(task['team_id'], model_feedback, can_level_up):
+                            logger.info(f"Suggestie van {model} verstuurd voor {team_name}")
+                    else:
+                        logger.warning(f"Model {model} gaf geen resultaat.")
+
+            time.sleep(self.poll_interval)
 
 if __name__ == "__main__":
-    run()
+    try:
+        service = AIFeedbackService()
+        service.run()
+    except KeyboardInterrupt:
+        logger.info("Service gestopt door gebruiker.")
+    except Exception as e:
+        logger.critical(f"Kritieke fout in service: {e}")

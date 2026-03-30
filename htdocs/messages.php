@@ -92,7 +92,10 @@ if (isset($_GET['ajax'])) {
         foreach ($chat_messages as $m) {
             echo '<div class="message ' . $m['sender'] . '">';
             echo '<small>' . ($m['sender'] === 'team' ? 'Team' : 'Jij') . ' - ' . $m['created_at'] . '</small><br>';
-            echo nl2br(htmlspecialchars($m['message']));
+            echo '<div class="msg-body">' . nl2br(htmlspecialchars($m['message'])) . '</div>';
+            if ($m['sender'] === 'suggestion') {
+                echo '<button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em; margin-top: 8px;" onclick="useSuggestion(this)">Overnemen</button>';
+            }
             echo '</div>';
         }
     } elseif ($_GET['ajax'] === 'sidebar') {
@@ -126,7 +129,7 @@ $extraCSS = '
     .message { margin-bottom: 15px; padding: 12px; border-radius: 10px; max-width: 75%; font-size: 0.95em; line-height: 1.4; }
     .message.team { background: #e3f2fd; align-self: flex-start; }
     .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
-    .message.suggestion { background: #f3e5f5; border: 1px dashed #9c27b0; align-self: flex-start; color: #4a148c; font-style: italic; }
+    .message.suggestion { background: #f3e5f5; border: 1px dashed #9c27b0; align-self: flex-start; color: #4a148c; }
 </style>';
 
 include 'admin_header.php';
@@ -175,7 +178,10 @@ include 'admin_header.php';
                         <?php foreach ($chat_messages as $m): ?>
                             <div class="message <?= $m['sender'] ?>">
                                 <small><?= $m['sender'] === 'team' ? 'Team' : 'Jij' ?> - <?= $m['created_at'] ?></small><br>
-                                <?= nl2br(htmlspecialchars($m['message'])) ?>
+                                <div class="msg-body"><?= nl2br(htmlspecialchars($m['message'])) ?></div>
+                                <?php if ($m['sender'] === 'suggestion'): ?>
+                                    <button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em; margin-top: 8px;" onclick="useSuggestion(this)">Overnemen</button>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -183,7 +189,7 @@ include 'admin_header.php';
                         <input type="hidden" name="action" value="reply">
                         <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
                         <input type="hidden" name="level" value="<?= $selected_team['current_level'] ?>">
-                        <textarea name="message" rows="3" placeholder="Type je reactie..." required></textarea>
+                        <textarea id="teacher-reply-box" name="message" rows="3" placeholder="Type je reactie..." required></textarea>
                         <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Verstuur Antwoord</button>
                     </form>
                 </div>
@@ -227,6 +233,15 @@ $extraJS = "
         }
         setInterval(updateChat, 5000);
         scrollToBottom();
+
+        function useSuggestion(btn) {
+            const msgBody = btn.parentElement.querySelector('.msg-body').innerText;
+            const textarea = document.getElementById('teacher-reply-box');
+            if (textarea) {
+                textarea.value = msgBody;
+                textarea.focus();
+            }
+        }
 
         function renderAdminMarkdown() {
             const desc = document.getElementById('admin-assignment-desc');
