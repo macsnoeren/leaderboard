@@ -180,30 +180,26 @@ if (isset($_GET['ajax'])) {
     <main>
         <section class="assignment-section">
             <div class="assignment-card">
-                <?php if ($assignment): ?>
-                    <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
-                    <div class="assignment-desc" id="assignment-desc"><?= htmlspecialchars($assignment['description']) ?></div>
-                    
-                    <div class="assignment-meta">
-                        <span id="display-time-limit"><?= ($assignment['time_limit'] > 0) ? "Verwachte benodige tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
-                    </div>
+                <div class="assignment-title" id="assignment-title">
+                    <?= $assignment ? htmlspecialchars($assignment['title']) : 'Geen Opdracht' ?>
+                </div>
+                <div class="assignment-desc" id="assignment-desc">
+                    <?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?>
+                </div>
+                
+                <div class="assignment-meta">
+                    <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "⏳ Beschikbare tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
+                </div>
 
-                    <div id="instruction-wrapper" style="<?= empty($assignment['instruction']) ? 'display:none;' : '' ?>">
-                        <div class="instruction-box" id="assignment-instruction"><?= htmlspecialchars($assignment['instruction']) ?></div>
-                    </div>
+                <div id="instruction-wrapper" style="<?= (!$assignment || empty($assignment['instruction'])) ? 'display:none;' : '' ?>">
+                    <div class="assignment-detail-title">📍 De Opdracht</div>
+                    <div class="instruction-box" id="assignment-instruction"><?= $assignment ? htmlspecialchars($assignment['instruction']) : '' ?></div>
+                </div>
 
-                    <div class="download-box" id="download-box" style="<?= empty($assignment['artifact_file']) ? 'display: none;' : '' ?>">
-                        <?php if ($download_count < $max_downloads): ?>
-                            <a href="team_download.php?token=<?= $token ?>" class="download-btn">Download Bestanden</a>
-                        <?php else: ?>
-                            <button class="download-btn disabled" disabled>Download Limiet Bereikt</button>
-                        <?php endif; ?>
-                        <div class="remaining">Downloads gebruikt: <?= $download_count ?> / <?= $max_downloads ?></div>
-                    </div>
-                <?php else: ?>
-                    <div class="assignment-title" id="assignment-title">Geen Opdracht</div>
-                    <div class="assignment-desc" id="assignment-desc">Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.</div>
-                <?php endif; ?>
+                <div class="download-box" id="download-box" style="<?= (!$assignment || empty($assignment['artifact_file'])) ? 'display: none;' : '' ?>">
+                    <a href="team_download.php?token=<?= $token ?>" class="download-btn" id="dl-link">Download Bestanden</a>
+                    <div class="remaining">Downloads gebruikt: <span id="display-dl-count"><?= $download_count ?></span> / <?= $max_downloads ?></div>
+                </div>
             </div>
         </section>
 
