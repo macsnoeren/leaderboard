@@ -46,6 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if ($teacher && password_verify($password, $teacher['password_hash'])) {
+        if ($teacher['is_active'] == 0) {
+            $error = 'Jouw account is gedeactiveerd. Neem contact op met de beheerder.';
+            goto end_post_request;
+        }
+
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_id'] = $teacher['id'];
         $_SESSION['teacher_role'] = $teacher['role'] ?? 'user';
@@ -63,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Invalid username or password';
     }
 }
+end_post_request:
 ?>
 <!DOCTYPE html>
 <html lang="en">

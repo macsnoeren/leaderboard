@@ -188,21 +188,34 @@ $users = $db->query("SELECT id, username, role, force_password_change FROM teach
                             <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
                             <td><span class="badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= $u['role'] ?></span></td>
                             <td>
-                                <?php if ($u['force_password_change']): ?>
-                                    <span class="badge" style="background:#f44336;">Wachtwoord wijzigen verplicht</span>
+                                <?php if ($u['is_active']): ?>
+                                    <?php if ($u['force_password_change']): ?>
+                                        <span class="badge" style="background:#fbc02d;">⚠️ Wijzigen verplicht</span>
+                                    <?php else: ?>
+                                        <span style="color: #4caf50; font-size: 0.85em;">● Actief</span>
+                                    <?php endif; ?>
                                 <?php else: ?>
-                                    <span style="color: #4caf50; font-size: 0.85em;">● Actief</span>
+                                    <span class="badge" style="background:#f44336;">● Gedeactiveerd</span>
                                 <?php endif; ?>
                             </td>
                             <td>
                                 <form method="POST" style="display:inline-flex; gap: 5px; align-items: center;">
                                     <input type="hidden" name="action" value="reset_password">
                                     <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                    <input type="text" name="new_password" placeholder="Nieuw wachtwoord" style="width: 140px; padding: 5px;" required>
+                                    <input type="text" name="new_password" placeholder="Nieuw wachtwoord" style="width: 140px; padding: 5px;" minlength="6" required>
                                     <label style="font-size: 0.75em; font-weight: normal;"><input type="checkbox" name="force_change" value="1" checked> Forceer wijziging</label>
                                     <button type="submit" class="btn btn-primary" style="padding: 5px 10px;">Reset</button>
                                 </form>
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Verwijder deze docent?')">
+                                    <input type="hidden" name="action" value="delete_user">
+                                    <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                    <?php if ($u['is_active']): ?>
+                                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px;" name="action" value="disable_user">Deactiveren</button>
+                                    <?php else: ?>
+                                        <button type="submit" class="btn btn-primary" style="padding: 5px 10px;" name="action" value="enable_user">Activeren</button>
+                                    <?php endif; ?>
+                                </form>
+                                <form method="POST" style="display:inline;" onsubmit="return confirm('WEET JE ZEKER dat je deze docent permanent wilt verwijderen? Dit kan NIET ongedaan gemaakt worden!');">
                                     <input type="hidden" name="action" value="delete_user">
                                     <input type="hidden" name="id" value="<?= $u['id'] ?>">
                                     <button type="submit" class="btn btn-danger" style="padding: 5px 10px;">Verwijderen</button>
