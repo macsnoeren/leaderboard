@@ -16,6 +16,10 @@
 require_once '../conf/config.php';
 
 $db = getDB();
+
+// Quick fix voor ontbrekende kolommen op publieke pagina
+try { @$db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (PDOException $e) {}
+
 $teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 ?>
