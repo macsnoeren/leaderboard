@@ -2,13 +2,7 @@
 session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php';
-
-require_once 'PHPMailer/src/PHPMailer.php';
-require_once 'PHPMailer/src/SMTP.php';
-require_once 'PHPMailer/src/Exception.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+require_once '../conf/mail_functions.php';
 
 if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
@@ -127,7 +121,7 @@ $extraCSS = '
     .team-item:hover, .team-item.active { background: #f0f4ff; }
     .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     .messages-box { flex: 1; height: 500px; overflow-y: auto; margin-bottom: 20px; padding: 10px; display: flex; flex-direction: column; min-height: 0; }
-    .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 70%; }
+    .message { margin-bottom: 15px; padding: 12px; border-radius: 10px; max-width: 75%; font-size: 0.95em; line-height: 1.4; }
     .message.team { background: #e3f2fd; align-self: flex-start; }
     .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
 </style>';
@@ -162,7 +156,7 @@ include 'admin_header.php';
                             <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');">
                                 <input type="hidden" name="action" value="level_up">
                                 <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
-                                <button type="submit" style="background: #4caf50; margin-top: 0;">Level Up!</button>
+                                <button type="submit" class="btn btn-success" style="margin-top: 0; padding: 8px 16px;">🚀 Level Up!</button>
                             </form>
                         </div>
                     </div>
@@ -182,7 +176,7 @@ include 'admin_header.php';
                         <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
                         <input type="hidden" name="level" value="<?= $selected_team['current_level'] ?>">
                         <textarea name="message" rows="3" placeholder="Type je reactie..." required></textarea>
-                        <button type="submit">Beantwoorden</button>
+                        <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Verstuur Antwoord</button>
                     </form>
                 </div>
             <?php else: ?>
