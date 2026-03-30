@@ -3,6 +3,13 @@ if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
     exit;
 }
+
+// Beveiliging: Forceer wachtwoordwijziging op ELKE pagina als de vlag aan staat
+if (isset($_SESSION['force_password_change']) && basename($_SERVER['PHP_SELF']) !== 'password.php' && basename($_SERVER['PHP_SELF']) !== 'logout.php') {
+    header('Location: password.php');
+    exit;
+}
+
 $db = getDB();
 $unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
 $currentPage = basename($_SERVER['PHP_SELF']);

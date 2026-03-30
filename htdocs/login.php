@@ -51,6 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             goto end_post_request;
         }
 
+        // Beveiliging: Voorkom Session Fixation
+        session_regenerate_id(true);
+
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_id'] = $teacher['id'];
         $_SESSION['teacher_role'] = $teacher['role'] ?? 'user';

@@ -46,6 +46,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $fileTmp = $_FILES['artifact_file']['tmp_name'];
             $fileName = basename($_FILES['artifact_file']['name']);
             $ext = pathinfo($fileName, PATHINFO_EXTENSION);
+            
+            // Beveiliging: Whitelist extensies tegen RCE
+            $allowed = ['pdf', 'zip', 'txt', 'jpg', 'png'];
+            if (!in_array($ext, $allowed)) {
+                $_SESSION['error'] = "Bestandstype niet toegestaan.";
+                header('Location: assignments.php');
+                exit;
+            }
 
             // Veilig bestandsnaam genereren
             $safeName = 'assignment_' . $assignment_number . '_' . time() . '.' . $ext;
