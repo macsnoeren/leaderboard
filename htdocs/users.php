@@ -90,9 +90,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $message = "Password for user ID $id updated successfully.";
         }
     }
+
+    // Handle Enable User
+    if ($_POST['action'] === 'enable_user' && isset($_POST['id'])) {
+        $id = (int)$_POST['id'];
+        
+        // Voorkom dat je jezelf deactiveert/activeert (voor de veiligheid)
+        if ($id === $_SESSION['teacher_id']) {
+            $message = "Je kunt je eigen account status niet wijzigen.";
+        } else {
+            $stmt = $db->prepare("UPDATE teachers SET is_active = 1 WHERE id = ?");
+            $stmt->execute([$id]);
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_ENABLE', ?)")->execute([$_SESSION['teacher_id'], "Admin heeft docent ID: $id geactiveerd."]);
+            $message = "Docent is geactiveerd.";
+        }
+    }
+
+    // Handle Disable User
+    if ($_POST['action'] === 'disable_user' && isset($_POST['id'])) {
+        $id = (int)$_POST['id'];
+
+        if ($id === $_SESSION['teacher_id']) {
+            $message = "Je kunt je eigen account niet deactiveren.";
+        } else {
+            // Controleer of er ten minste één actieve admin overblijft
+            $stmt = $db->prepare("SELECT role FROM teachers WHERE id = ?");
+            $stmt->execute([$id]);
+            $user_role = $stmt->fetchColumn();
+            
+            if ($user_role === 'admin' && $db->query("SELECT COUNT(*) FROM teachers WHERE role = 'admin' AND is_active = 1")->fetchColumn() <= 1) {
+                $message = "Fout: Je kunt de laatste actieve beheerder niet deactiveren.";
+            } else {
+                $stmt = $db->prepare("UPDATE teachers SET is_active = 0 WHERE id = ?");
+                $stmt->execute([$id]);
+                $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_DISABLE', ?)")->execute([$_SESSION['teacher_id'], "Admin heeft docent ID: $id gedeactiveerd."]);
+                $message = "Docent is gedeactiveerd.";
+            }
+        }
+    }
 }
 
-$users = $db->query("SELECT id, username, role, force_password_change FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$users = $db->query("SELECT id, username, role, force_password_change, is_active FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
