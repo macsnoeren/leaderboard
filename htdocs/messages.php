@@ -126,6 +126,7 @@ $extraCSS = '
     .message { margin-bottom: 15px; padding: 12px; border-radius: 10px; max-width: 75%; font-size: 0.95em; line-height: 1.4; }
     .message.team { background: #e3f2fd; align-self: flex-start; }
     .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
+    .message.suggestion { background: #f3e5f5; border: 1px dashed #9c27b0; align-self: flex-start; color: #4a148c; font-style: italic; }
 </style>';
 
 include 'admin_header.php';

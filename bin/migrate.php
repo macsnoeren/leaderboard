@@ -59,6 +59,9 @@ try {
         $db->exec("ALTER TABLE team_messages ADD COLUMN is_read INTEGER DEFAULT 0");
     } catch (PDOException $e) {}
 
+    // 5. Maak tabel voor API keys
+    $db->exec("CREATE TABLE IF NOT EXISTS api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, key_name TEXT, api_key TEXT UNIQUE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

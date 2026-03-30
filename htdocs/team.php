@@ -46,7 +46,7 @@ $download_count = $stmt->fetchColumn() ?: 0;
 $max_downloads = 10;
 
 // Haal chatberichten op voor dit level
-$stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? ORDER BY created_at ASC");
+$stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
 $stmt->execute([$team['id'], $team['current_level']]);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -57,6 +57,7 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
 if (isset($_GET['ajax'])) {
     $msg_html = '';
     foreach ($messages as $m) {
+        if ($m['sender'] === 'suggestion') continue;
         $msg_html .= '<div class="message ' . $m['sender'] . '">';
         $msg_html .= '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
         $msg_html .= '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
