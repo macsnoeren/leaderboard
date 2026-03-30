@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_UPDATE', ?)")->execute([$_SESSION['teacher_id'], "Team '{$team['team_name']}' action: {$_POST['action']} (New level: $new_level)"]);
             
             // Send email with artifacts
-            sendLevelUpEmail($team['email'], $team_id, $team['team_name'], $new_level);
+            @sendLevelUpEmail($db, $team['email'], $team_id, $team['team_name'], $new_level);
             
             $_SESSION['success'] = "Team leveled up and email sent!";
         }
@@ -111,12 +111,14 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
 // Tel ongelezen berichten van teams
 $unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
 
-function sendLevelUpEmail($to, $team_id, $team_name, $level) {
+function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
   $mail = new PHPMailer(true);
 
   try {
     // SMTP configuration
     $mail->isSMTP();
+    $mail->Timeout = 10;
+    $mail->SMTPConnectTimeout = 5;
     $mail->Host = SMTP_HOST;
     $mail->SMTPAuth = true;
     $mail->Username = SMTP_USER;
@@ -137,7 +139,7 @@ function sendLevelUpEmail($to, $team_id, $team_name, $level) {
     $expires_at = date('Y-m-d H:i:s', time() + 86400); // 24h valid
 
     // Store token
-    $stmt = getDB()->prepare("
+    $stmt = $db->prepare("
 			     INSERT INTO download_tokens (team_id, level, token, expires_at)
 			     VALUES (?, ?, ?, ?)
                              ");
@@ -173,6 +175,8 @@ function sendWelcomeEmail($to, $team_name, $token) {
   try {
     // SMTP configuration
     $mail->isSMTP();
+    $mail->Timeout = 10;
+    $mail->SMTPConnectTimeout = 5;
     $mail->Host = SMTP_HOST;
     $mail->SMTPAuth = true;
     $mail->Username = SMTP_USER;

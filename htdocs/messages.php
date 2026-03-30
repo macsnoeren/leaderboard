@@ -17,10 +17,12 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $db = getDB();
 
-function sendLevelUpEmail($to, $team_id, $team_name, $level) {
+function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
+        $mail->Timeout = 10;
+        $mail->SMTPConnectTimeout = 5;
         $mail->Host = SMTP_HOST;
         $mail->SMTPAuth = true;
         $mail->Username = SMTP_USER;
@@ -37,7 +39,7 @@ function sendLevelUpEmail($to, $team_id, $team_name, $level) {
         $token = bin2hex(random_bytes(32));
         $expires_at = date('Y-m-d H:i:s', time() + 86400);
 
-        $stmt = getDB()->prepare("INSERT INTO download_tokens (team_id, level, token, expires_at) VALUES (?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO download_tokens (team_id, level, token, expires_at) VALUES (?, ?, ?, ?)");
         $stmt->execute([$team_id, $level, $token, $expires_at]);
 
         $download_link = BASE_URL . "/download.php?token=$token";
@@ -94,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_UPDATE', ?)")
            ->execute([$_SESSION['teacher_id'], "Team '{$team['team_name']}' level up via chat naar $new_level"]);
         
-        sendLevelUpEmail($team['email'], $team_id, $team['team_name'], $new_level);
+        @sendLevelUpEmail($db, $team['email'], $team_id, $team['team_name'], $new_level);
         header("Location: messages.php?team_id=$team_id");
         exit;
     }
