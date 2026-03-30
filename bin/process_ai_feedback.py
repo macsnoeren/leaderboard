@@ -55,9 +55,9 @@ def get_feedback_from_model(
     """
 
     # Haal waarden op en zorg dat ze strings zijn (voorkom NoneType errors)
-    question_text = str(q.get('question_text') or "")
+    question_text = str(q.get('instruction') or "")
     criteria = str(q.get('criteria') or "")
-    answer = str(q.get('answer') or "")
+    answer = str(q.get('last_team_message') or "")
 
     # Gebruik de prompt uit de database als die er is, anders de hardcoded fallback
     if q.get('prompt_text'):
@@ -146,19 +146,23 @@ def fetch_open_student_answers() -> List[Dict]:
 
     response = requests.get(
         BASE_URL,
+        headers={"X-API-Token": API_KEY},
         params={
-            "action": "open_student_answers",
-            "api_key": API_KEY,
-            "limit": 5
+            "action": "get_pending"
         },
         timeout=30
     )
 
-    data = response.json()
-    if "answers" in data:
-        return data.get("answers", [])
-    else:
-        print("Kan geen de studentantwoorden ophalen.")
+    if response.status_code != 200:
+        print(f"API Fout: Status {response.status_code}")
+        print("Response:", response.text)
+        return []
+
+    try:
+        return response.json()
+    except Exception as e:
+        print(f"JSON Decodeer fout: {e}")
+        print("Raw output van server:", response.text)
         return []
 
 # =========================
@@ -166,26 +170,25 @@ def fetch_open_student_answers() -> List[Dict]:
 # =========================
 
 def submit_ai_feedback(
-    student_answer_id: int,
-    feedback_text: str
+    team_id: int,
+    feedback_text: str,
+    should_level_up: bool = False
 ):
     """
     Verstuurt de AI feedback naar de backend.
     """
 
     payload = {
-        "api_key": API_KEY,
-        "student_answer_id": student_answer_id,
-        "ai_feedback": feedback_text
+        "team_id": team_id,
+        "message": feedback_text,
+        "level_up": should_level_up
     }
 
     requests.post(
-        f"{BASE_URL}?action=submit_ai_feedback",
+        f"{BASE_URL}?action=send_suggestion",
+        headers={"X-API-Token": API_KEY},
         json=payload,
-        timeout=180,
-        params={
-            "api_key": API_KEY,
-        }
+        timeout=180
     )
 
 
@@ -214,13 +217,14 @@ def run():
 
             for q in answers:
                 all_feedback = []
+                total_score = 0
                 failed = False
 
                 for model in LLM_MODELS:
-                    print(f"Feedback opvragen voor student_answer_id {q['student_answer_id']} met model {model}")
+                    print(f"Feedback opvragen voor team {q['team_name']} met model {model}")
                     
                     result = get_feedback_from_model(q, model)
-                    fetch_open_student_answers() # Do nothing, just for show that the parser is active.
+                    total_score += result.get('score', 0) if result else 0
 
                     if result:
                         all_feedback.append(
@@ -230,7 +234,7 @@ def run():
                             f"Feedback: {result['feedback']}"
                         )
                     else:
-                        print(f"Model {model} faalde voor antwoord {q['student_answer_id']}. Feedback wordt niet verstuurd.")
+                        print(f"Model {model} faalde. Feedback wordt niet verstuurd.")
                         failed = True
                         break
 
@@ -238,16 +242,16 @@ def run():
                     continue
 
                 final_feedback = "\n\n".join(all_feedback)
+                avg_score = total_score / len(LLM_MODELS)
+                can_level_up = avg_score >= 7.0
 
                 submit_ai_feedback(
-                    student_answer_id=q["student_answer_id"],
-                    feedback_text=final_feedback
+                    team_id=q["team_id"],
+                    feedback_text=final_feedback,
+                    should_level_up=can_level_up
                 )
 
-                print(
-                    f"Feedback verstuurd voor student_answer_id "
-                    f"{q['student_answer_id']}"
-                )
+                print(f"Suggestie verstuurd voor team {q['team_name']} (Advies Level Up: {can_level_up})")
 
         except Exception as e:
             print("Onverwachte fout:", e)
