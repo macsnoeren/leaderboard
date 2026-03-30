@@ -12,6 +12,8 @@
  You should have received a copy of the GNU General Public License along with this program.
  If not, see https://www.gnu.org/licenses/.
 */
+session_start();
+
 require_once '../conf/config.php';
 require_once '../conf/database.php';
 
@@ -27,7 +29,7 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'add_user') {
         $username = trim($_POST['username']);
-        $password = trim($_POST['password']);
+        $password = $_POST['password']; // Wachtwoorden niet trimmen voor consistentie
 
         if (strlen($username) < 3 || strlen($password) < 4) {
             $message = "Username or password too short.";
