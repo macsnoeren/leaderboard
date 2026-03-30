@@ -197,12 +197,13 @@ if (isset($_GET['ajax'])) {
         .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .messages-box { 
             flex: 1; 
-            max-height: 500px; 
+            height: 500px; 
             overflow-y: auto; 
             margin-bottom: 20px; 
             padding: 10px; 
             display: flex; 
             flex-direction: column; 
+            min-height: 0;
         }
         .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 70%; }
         .message.team { background: #e3f2fd; align-self: flex-start; }

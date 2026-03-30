@@ -109,7 +109,7 @@ if (isset($_GET['ajax'])) {
         /* Chat Section */
         .chat-section { background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; }
         .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; }
-        .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; }
+        .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; min-height: 0; }
         .message { padding: 10px 15px; border-radius: 12px; max-width: 85%; font-size: 0.95em; position: relative; }
         .message.team { align-self: flex-end; background: #667eea; color: white; border-bottom-right-radius: 2px; }
         .message.teacher { align-self: flex-start; background: #e4e6eb; color: #050505; border-bottom-left-radius: 2px; }
