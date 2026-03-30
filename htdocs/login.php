@@ -18,23 +18,8 @@ $error = '';
 
 $db = getDB();
 
-// Zorg dat de basis tabellen bestaan (voor een verse installatie)
-$db->exec("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)");
-$db->exec("CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY AUTOINCREMENT, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE)");
-$db->exec("CREATE TABLE IF NOT EXISTS assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_number INTEGER, title TEXT, description TEXT, artifact_file TEXT)");
-$db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
-$db->exec("CREATE TABLE IF NOT EXISTS team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
-$db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
-
-// Migratie voor bestaande installaties: voeg ontbrekende kolommen toe aan 'teams'
-try { @$db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
-try { @$db->exec("ALTER TABLE teams ADD COLUMN access_token TEXT"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
-// Zorg dat teams zonder token er alsnog een krijgen
-try {
-    $db->exec("UPDATE teams SET access_token = lower(hex(randomblob(32))) WHERE access_token IS NULL");
-} catch (PDOException $e) { /* Kolom bestaat nog niet of tabel is bezet */ }
-
 // Controleer of er al gebruikers zijn
+// Als de tabel niet bestaat of leeg is, activeren we de setup_mode.
 try {
     $res = $db->query("SELECT id FROM teachers LIMIT 1");
     $firstUser = $res ? $res->fetch() : false;
@@ -56,6 +41,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if ($setup_mode) {
         // Maak de eerste admin aan
+        // Zorg dat de tabellen eerst worden aangemaakt bij een schone installatie
+        $db->exec("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)");
+        $db->exec("CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY AUTOINCREMENT, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE)");
+        $db->exec("CREATE TABLE IF NOT EXISTS assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_number INTEGER, title TEXT, description TEXT, artifact_file TEXT)");
+        $db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
+        $db->exec("CREATE TABLE IF NOT EXISTS team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
+        $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
         $stmt = $db->prepare("INSERT INTO teachers (username, password_hash) VALUES (?, ?)");
         $stmt->execute([$username, $password_hash]);
