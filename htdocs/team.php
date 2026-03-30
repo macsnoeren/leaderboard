@@ -67,7 +67,6 @@ if (isset($_GET['ajax'])) {
         'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
         'assignment_desc' => $assignment ? $assignment['description'] : 'Wacht op instructies.',
         'assignment_instruction' => $assignment ? $assignment['instruction'] : '',
-        'assignment_criteria' => $assignment ? $assignment['criteria'] : '',
         'time_limit' => $assignment ? (int)$assignment['time_limit'] : 0,
         'has_file' => !empty($assignment['artifact_file']),
         'start_time' => $startTime
@@ -99,8 +98,7 @@ if (isset($_GET['ajax'])) {
         .assignment-meta { display: flex; gap: 20px; margin-top: 15px; font-size: 0.9em; color: #667eea; font-weight: bold; }
         .assignment-detail-title { font-weight: bold; color: #333; margin-top: 20px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
         .instruction-box { background: #ffffff; padding: 25px; border-radius: 12px; margin-top: 10px; border: 2px solid #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); position: relative; }
-        .instruction-box::before { content: "BELEIDSINSTRUCTIE"; position: absolute; top: -10px; left: 20px; background: #667eea; color: white; font-size: 0.65em; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
-        .criteria-box { background: #fffde7; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #fbc02d; font-size: 0.95em; }
+        .instruction-box::before { content: "OPDRACHT"; position: absolute; top: -10px; left: 20px; background: #667eea; color: white; font-size: 0.65em; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
 
         /* Main Content Layout */
         main { display: grid; grid-template-columns: 1fr 400px; flex: 1; overflow: hidden; gap: 0; }
@@ -187,15 +185,9 @@ if (isset($_GET['ajax'])) {
                     </div>
 
                     <div id="instruction-wrapper" style="<?= empty($assignment['instruction']) ? 'display:none;' : '' ?>">
-                        <div class="assignment-detail-title">📍 De Opdracht</div>
                         <div class="instruction-box" id="assignment-instruction"><?= htmlspecialchars($assignment['instruction']) ?></div>
                     </div>
 
-                    <div id="criteria-wrapper" style="<?= empty($assignment['criteria']) ? 'display:none;' : '' ?>">
-                        <div class="assignment-detail-title">📋 Beoordelingscriteria</div>
-                        <div class="criteria-box" id="assignment-criteria"><?= htmlspecialchars($assignment['criteria']) ?></div>
-                    </div>
-                    
                     <div class="download-box" id="download-box" style="<?= empty($assignment['artifact_file']) ? 'display: none;' : '' ?>">
                         <?php if ($download_count < $max_downloads): ?>
                             <a href="team_download.php?token=<?= $token ?>" class="download-btn">Download Bestanden</a>
@@ -277,7 +269,7 @@ if (isset($_GET['ajax'])) {
         }
 
         function renderMarkdown() {
-            const fields = ['assignment-desc', 'assignment-instruction', 'assignment-criteria'];
+            const fields = ['assignment-desc', 'assignment-instruction'];
             fields.forEach(id => {
                 const el = document.getElementById(id);
                 if (el && el.getAttribute('data-rendered') !== 'true') {
@@ -322,11 +314,6 @@ if (isset($_GET['ajax'])) {
                         instrWrapper.style.display = data.assignment_instruction ? 'block' : 'none';
                         document.getElementById('assignment-instruction').innerText = data.assignment_instruction;
                         document.getElementById('assignment-instruction').removeAttribute('data-rendered');
-
-                        const critWrapper = document.getElementById('criteria-wrapper');
-                        critWrapper.style.display = data.assignment_criteria ? 'block' : 'none';
-                        document.getElementById('assignment-criteria').innerText = data.assignment_criteria;
-                        document.getElementById('assignment-criteria').removeAttribute('data-rendered');
                       
                         const downloadBox = document.getElementById('download-box');
                         if (downloadBox) {
