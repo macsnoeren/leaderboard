@@ -113,7 +113,9 @@ if (isset($_GET['ajax'])) {
 $pageTitle = 'Berichten';
 $extraCSS = '
 <style>
-    .main-content { display: flex; height: 100vh; overflow: hidden; padding: 0 !important; }
+    .main-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; padding: 0 !important; }
+    .test-mode-banner { padding: 15px 40px 0 40px; flex-shrink: 0; }
+    .messages-layout-wrapper { display: flex; flex: 1; overflow: hidden; width: 100%; }
     .team-list-panel { width: 300px; background: white; border-right: 1px solid #ddd; overflow-y: auto; display: flex; flex-direction: column; }
     .team-list-header { padding: 20px; border-bottom: 1px solid #eee; font-weight: bold; }
     .chat-area { flex: 1; padding: 40px; display: flex; flex-direction: column; overflow-y: auto; }
@@ -128,6 +130,11 @@ $extraCSS = '
 
 include 'admin_header.php';
 ?>
+    <?php if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false): ?>
+        <div class="test-mode-banner"></div> <!-- CSS zorgt voor de correcte uitlijning van de banner uit de header -->
+    <?php endif; ?>
+
+    <div class="messages-layout-wrapper">
         <div class="team-list-panel" id="sidebar-list">
             <div class="team-list-header">Teams</div>
             <?php foreach ($teams_with_msgs as $t): ?>
