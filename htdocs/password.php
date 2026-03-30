@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare("UPDATE teachers SET password_hash = ? WHERE id = ?");
             $stmt->execute([$new_hash, $_SESSION['teacher_id']]);
 
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'PWD_CHANGE', 'User changed their own password')")->execute([$_SESSION['teacher_id']]);
             $success = "Password updated successfully!";
         } else {
             $error = "Old password is incorrect.";

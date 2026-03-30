@@ -45,6 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $sql = "UPDATE teams SET current_level = ?" . ($_POST['action'] === 'level_up' ? ", level_updated_at = CURRENT_TIMESTAMP" : "") . " WHERE id = ?";
             $stmt = $db->prepare($sql);
             $stmt->execute([$new_level, $team_id]);
+
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_UPDATE', ?)")->execute([$_SESSION['teacher_id'], "Team '{$team['team_name']}' action: {$_POST['action']} (New level: $new_level)"]);
             
             // Send email with artifacts
             sendLevelUpEmail($team['email'], $team_id, $team['team_name'], $new_level);
@@ -75,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $db->prepare("INSERT INTO teams (team_name, email, access_token, level_updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)");
         $stmt->execute([$team_name, $email, $access_token]);
         
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added team: $team_name"]);
         $_SESSION['success'] = "Team added successfully!";
 	sendWelcomeEmail($email, $team_name, $access_token);
 	
@@ -86,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 	$stmt = $db->prepare("DELETE FROM download_tokens WHERE team_id = ?");
 	$stmt->execute([$team_id]);
 
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Deleted team ID: $team_id"]);
         $_SESSION['success'] = "Team deleted successfully!";
     }
     
@@ -359,6 +363,7 @@ function sendLevelUpEmail($to, $team_name, $level) {
              <a target="_leaderboard" href="index.php" class="logout">Leaderboard</a> |
              <a href="assignments.php" class="logout">Assignments</a> |
              <a href="users.php" class="logout">Users</a> |
+             <a href="audit.php" class="logout">Audit Logs</a> |
              <a href="password.php" class="logout">Change password</a> |
              <a href="logout.php" class="logout">Logout</a>
 	    </span>

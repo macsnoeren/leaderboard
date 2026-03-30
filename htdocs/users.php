@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $password_hash = password_hash($password, PASSWORD_DEFAULT);
                 $stmt = $db->prepare("INSERT INTO teachers (username, password_hash) VALUES (?, ?)");
                 $stmt->execute([$username, $password_hash]);
+                $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added new teacher: $username"]);
                 $message = "User added successfully!";
             }
         }
@@ -54,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         } else {
             $stmt = $db->prepare("DELETE FROM teachers WHERE id = ?");
             $stmt->execute([$id]);
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Deleted teacher ID: $id"]);
             $message = "User deleted successfully.";
         }
     }
@@ -65,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $hash = password_hash($newPass, PASSWORD_DEFAULT);
         $stmt = $db->prepare("UPDATE teachers SET password_hash = ? WHERE id = ?");
         $stmt->execute([$hash, $id]);
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_RESET_PWD', ?)")->execute([$_SESSION['teacher_id'], "Reset password for teacher ID: $id"]);
         $message = "Password for user ID $id reset to: $newPass";
     }
 }

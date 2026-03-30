@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, artifact_file)
                               VALUES (?, ?, ?, ?)");
         $stmt->execute([$assignment_number, $title, $description, $artifact_file]);
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'ASSIGNMENT_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added assignment #$assignment_number: $title"]);
 
         $_SESSION['success'] = "Assignment added successfully!";
         header('Location: assignments.php');
@@ -81,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt = $db->prepare("DELETE FROM assignments WHERE id = ?");
         $stmt->execute([$id]);
 
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'ASSIGNMENT_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Deleted assignment ID: $id"]);
         $_SESSION['success'] = "Assignment deleted successfully!";
         header('Location: assignments.php');
         exit;
