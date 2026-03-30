@@ -324,13 +324,13 @@ if (isset($_GET['ajax'])) {
                         const downloadBox = document.getElementById('download-box');
 
                         // Check for final level completion
-                        if (data.level >= data.total_assignments) {
+                        if (data.level > data.total_assignments) { // Aangepast: > in plaats van >=
                             document.getElementById('overlay-title').innerText = "🏆 GEFELICITEERD KAMPIONEN! 🏆";
                             document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
                             document.getElementById('overlay-rank').innerText = `Jullie eindigen op positie #${data.rank}! Fantastisch werk!`;
                         } else {
                             document.getElementById('overlay-title').innerText = "🎉 GEFELICITEERD! 🎉";
-                            document.getElementById('overlay-message').innerText = `Jullie zijn naar level ${data.level}!`;
+                            document.getElementById('overlay-message').innerText = `Jullie zijn naar level ${data.level}!`; // Toont het nieuwe level
                             document.getElementById('overlay-rank').innerText = ''; // Leeg maken voor normale level-up
                         }
 
