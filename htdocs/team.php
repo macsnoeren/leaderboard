@@ -181,7 +181,7 @@ if (isset($_GET['ajax'])) {
                     <div class="assignment-desc" id="assignment-desc"><?= htmlspecialchars($assignment['description']) ?></div>
                     
                     <div class="assignment-meta">
-                        <span id="display-time-limit"><?= ($assignment['time_limit'] > 0) ? "⏳ Beschikbare tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
+                        <span id="display-time-limit"><?= ($assignment['time_limit'] > 0) ? "Verwachte benodige tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
                     </div>
 
                     <div id="instruction-wrapper" style="<?= empty($assignment['instruction']) ? 'display:none;' : '' ?>">
