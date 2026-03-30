@@ -52,15 +52,22 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // AJAX endpoint voor live updates
 if (isset($_GET['ajax'])) {
-    $html = '';
+    $msg_html = '';
     foreach ($messages as $m) {
-        $html .= '<div class="message ' . $m['sender'] . '">';
-        $html .= '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
-        $html .= '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
-        $html .= '</div>';
+        $msg_html .= '<div class="message ' . $m['sender'] . '">';
+        $msg_html .= '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
+        $msg_html .= '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
+        $msg_html .= '</div>';
     }
     header('Content-Type: application/json');
-    echo json_encode(['html' => $html, 'level' => (int)$team['current_level']]);
+    echo json_encode([
+        'html' => $msg_html, 
+        'level' => (int)$team['current_level'],
+        'rank' => $rank,
+        'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
+        'assignment_desc' => $assignment ? nl2br(htmlspecialchars($assignment['description'])) : 'Wacht op instructies.',
+        'start_time' => $startTime
+    ]);
     exit;
 }
 ?>
@@ -173,15 +180,15 @@ if (isset($_GET['ajax'])) {
     <div class="container">
         <h1>Team: <?= htmlspecialchars($team['team_name']) ?></h1>
         <div class="level-info">
-            Huidig Level: <?= $team['current_level'] ?><br>
-            Ranking: #<?= $rank ?><br>
+            Huidig Level: <span id="display-level"><?= $team['current_level'] ?></span><br>
+            Ranking: #<span id="display-rank"><?= $rank ?></span><br>
             <div class="timer" id="live-timer">Tijd bezig: --:--:--</div>
         </div>
 
         <?php if ($assignment): ?>
             <div class="assignment-box">
-                <div class="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
-                <p><?= nl2br(htmlspecialchars($assignment['description'])) ?></p>
+                <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
+                <p id="assignment-desc"><?= nl2br(htmlspecialchars($assignment['description'])) ?></p>
             </div>
             
             <?php if ($download_count < $max_downloads): ?>
@@ -215,7 +222,7 @@ if (isset($_GET['ajax'])) {
     </div>
 
     <script>
-        const startTime = <?= $startTime ?> * 1000;
+        let startTime = <?= $startTime ?> * 1000;
         let currentLevel = <?= (int)$team['current_level'] ?>;
 
         function triggerLevelUp() {
@@ -266,6 +273,13 @@ if (isset($_GET['ajax'])) {
                     }
                     if (data.level > currentLevel) {
                         currentLevel = data.level;
+                        // Update UI onmiddellijk voor de reload
+                        document.getElementById('display-level').innerText = data.level;
+                        document.getElementById('display-rank').innerText = data.rank;
+                        document.getElementById('assignment-title').innerText = data.assignment_title;
+                        document.getElementById('assignment-desc').innerHTML = data.assignment_desc;
+                        startTime = data.start_time * 1000;
+                        
                         triggerLevelUp();
                     }
                 });
