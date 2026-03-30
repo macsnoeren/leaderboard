@@ -50,6 +50,9 @@ $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignme
 $stmt->execute([$team['id'], $team['current_level']]);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Haal het totale aantal opdrachten op voor het bepalen van het laatste level
+$total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+
 // AJAX endpoint voor live updates
 if (isset($_GET['ajax'])) {
     $msg_html = '';
@@ -69,7 +72,8 @@ if (isset($_GET['ajax'])) {
         'assignment_instruction' => $assignment ? $assignment['instruction'] : '',
         'time_limit' => $assignment ? (int)$assignment['time_limit'] : 0,
         'has_file' => !empty($assignment['artifact_file']),
-        'start_time' => $startTime
+        'start_time' => $startTime,
+        'total_assignments' => (int)$total_assignments // Voeg totaal aantal opdrachten toe
     ]);
     exit;
 }
@@ -230,13 +234,15 @@ if (isset($_GET['ajax'])) {
     </main>
 
     <div id="level-up-overlay">
-        <h1 style="font-size: 4em; margin-bottom: 20px;">🎉 GEFELICITEERD! 🎉</h1>
-        <p style="font-size: 2em; opacity: 0.9;">Jullie zijn naar het volgende level!</p>
+        <h1 id="overlay-title" style="font-size: 4em; margin-bottom: 20px;">🎉 GEFELICITEERD! 🎉</h1>
+        <p id="overlay-message" style="font-size: 2em; opacity: 0.9;">Jullie zijn naar het volgende level!</p>
+        <p id="overlay-rank" style="font-size: 1.5em; opacity: 0.8; margin-top: 10px;"></p>
     </div>
 
     <script>
         let startTime = <?= $startTime ?> * 1000;
         let currentLevel = <?= (int)$team['current_level'] ?>;
+        let totalAssignments = <?= (int)$total_assignments ?>; // Initialiseer met PHP waarde
 
         function triggerLevelUp() {
             const overlay = document.getElementById('level-up-overlay');
@@ -316,6 +322,18 @@ if (isset($_GET['ajax'])) {
                         document.getElementById('assignment-instruction').removeAttribute('data-rendered');
                       
                         const downloadBox = document.getElementById('download-box');
+
+                        // Check for final level completion
+                        if (data.level >= data.total_assignments) {
+                            document.getElementById('overlay-title').innerText = "🏆 GEFELICITEERD KAMPIONEN! 🏆";
+                            document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
+                            document.getElementById('overlay-rank').innerText = `Jullie eindigen op positie #${data.rank}! Fantastisch werk!`;
+                        } else {
+                            document.getElementById('overlay-title').innerText = "🎉 GEFELICITEERD! 🎉";
+                            document.getElementById('overlay-message').innerText = `Jullie zijn naar level ${data.level}!`;
+                            document.getElementById('overlay-rank').innerText = ''; // Leeg maken voor normale level-up
+                        }
+
                         if (downloadBox) {
                             downloadBox.style.display = data.has_file ? 'block' : 'none';
                         }
