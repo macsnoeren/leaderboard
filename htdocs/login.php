@@ -31,6 +31,12 @@ $db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AU
 $db->exec("CREATE TABLE IF NOT EXISTS team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
 $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
+// Migratie voor bestaande installaties: voeg ontbrekende kolommen toe aan 'teams'
+try { @$db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
+try { @$db->exec("ALTER TABLE teams ADD COLUMN access_token TEXT UNIQUE"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
+// Zorg dat teams zonder token er alsnog een krijgen
+$db->exec("UPDATE teams SET access_token = lower(hex(randomblob(32))) WHERE access_token IS NULL");
+
 // Controleer of er al gebruikers zijn
 $userCount = $db->query("SELECT COUNT(*) FROM teachers")->fetchColumn();
 $setup_mode = ($userCount == 0);
