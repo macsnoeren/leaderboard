@@ -39,8 +39,11 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
         .btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9em; text-decoration: none; text-align: center; }
         .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5568d3; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
         .btn-outline { background: transparent; border: 1px solid #ddd; color: #666; }
+        .btn-outline:hover { background: #f8f9fa; border-color: #ccc; }
         .btn-danger { background: #ffebee; color: #c62828; }
+        .btn-danger:hover { background: #ffcdd2; }
         
         .success { background: #e8f5e9; color: #2e7d32; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #4caf50; font-weight: 500; }
         .error-msg { background: #ffebee; color: #c62828; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #f44336; }
@@ -48,6 +51,8 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 15px; border-bottom: 2px solid #f0f2f5; color: #888; font-size: 0.85em; text-transform: uppercase; }
         td { padding: 15px; border-bottom: 1px solid #f0f2f5; }
+        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95em; transition: all 0.2s; }
+        input:focus, select:focus, textarea:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
     </style>
     <?php if (isset($extraCSS)) echo $extraCSS; ?>
 </head>

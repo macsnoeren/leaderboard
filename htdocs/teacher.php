@@ -214,19 +214,19 @@ include 'admin_header.php';
             </div>
 
             <div class="side-panel">
-                <div class="card">
+                <div class="card" style="border-top: 4px solid #667eea;">
                     <div class="card-title">➕ Add New Team</div>
                     <form method="POST">
                         <input type="hidden" name="action" value="add_team">
                         <div class="form-group">
-                            <label>Team Name:</label>
+                            <label>Team Naam</label>
                             <input type="text" name="team_name" placeholder="e.g. Code Ninjas" required>
                         </div>
                         <div class="form-group">
-                            <label>Team Email:</label>
+                            <label>E-mail adres</label>
                             <input type="email" name="email" placeholder="e.g. contact@codeninjas.com" required>
                         </div>
-                        <button type="submit" class="btn btn-primary">Create Team & Send Invite</button>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px;">Team Aanmaken & Uitnodigen</button>
                     </form>
                 </div>
             </div>

@@ -217,7 +217,7 @@ $extraJS = "
             " : "") . "
             
             fetch('messages.php?ajax=sidebar' + (" . ($selected_team_id ?: '0') . " ? '&team_id=" . ($selected_team_id ?: '0') . "' : ''))
-                .then(r => r.text()).then(html => document.getElementById('sidebar-list').innerHTML = `<div class="team-list-header">Teams</div>${html}`);
+                .then(r => r.text()).then(html => document.getElementById('sidebar-list').innerHTML = `<div class=\"team-list-header\">Teams</div>\${html}`);
         }
         setInterval(updateChat, 5000);
         scrollToBottom();
