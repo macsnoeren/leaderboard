@@ -140,6 +140,10 @@ if ($selected_team_id) {
 // AJAX endpoints voor live updates
 if (isset($_GET['ajax'])) {
     if ($_GET['ajax'] === 'chat' && $selected_team) {
+        // Markeer ook nieuwe berichten die via AJAX binnenkomen als gelezen
+        $db->prepare("UPDATE team_messages SET is_read = 1 WHERE team_id = ? AND sender = 'team' AND assignment_number = ?")
+           ->execute([$selected_team_id, $selected_team['current_level']]);
+
         foreach ($chat_messages as $m) {
             echo '<div class="message ' . $m['sender'] . '">';
             echo '<small>' . ($m['sender'] === 'team' ? 'Team' : 'Jij') . ' - ' . $m['created_at'] . '</small><br>';
@@ -173,7 +177,15 @@ if (isset($_GET['ajax'])) {
         .team-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; text-decoration: none; color: #333; display: block; }
         .team-item:hover, .team-item.active { background: #f0f4ff; }
         .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .messages { flex: 1; overflow-y: auto; margin-bottom: 20px; padding: 10px; }
+        .messages { 
+            flex: 1; 
+            max-height: 500px; 
+            overflow-y: auto; 
+            margin-bottom: 20px; 
+            padding: 10px; 
+            display: flex; 
+            flex-direction: column; 
+        }
         .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 70%; }
         .message.team { background: #e3f2fd; align-self: flex-start; }
         .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
