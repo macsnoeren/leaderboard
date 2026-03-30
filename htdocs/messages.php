@@ -149,6 +149,18 @@ $extraCSS = '
     .close-modal { position: absolute; top: 20px; right: 25px; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; transition: 0.2s; }
     .close-modal:hover { color: #333; }
     .modal-section-title { font-weight: bold; color: #667eea; border-bottom: 2px solid #f0f4ff; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
+
+    /* Markdown Styling binnen Modal */
+    .markdown-body { font-size: 1rem; line-height: 1.6; color: #4b4f56; }
+    .markdown-body h1 { font-size: 1.4em; margin: 15px 0 10px 0; color: #333; }
+    .markdown-body h2 { font-size: 1.25em; margin: 12px 0 8px 0; color: #333; }
+    .markdown-body h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #333; }
+    .markdown-body p { margin-bottom: 12px; }
+    .markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 15px; }
+    .markdown-body li { margin-bottom: 5px; }
+    .markdown-body code { background: #f0f2f5; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; }
+    .markdown-body pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 8px; overflow-x: auto; margin-bottom: 15px; }
+    .markdown-body pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
 </style>';
 
 include 'admin_header.php';
@@ -320,7 +332,7 @@ $extraJS = "
             marked.setOptions({ breaks: true });
             document.querySelectorAll('.markdown-body').forEach(el => {
                 if (el.getAttribute('data-rendered') !== 'true') {
-                    el.innerHTML = marked.parse(el.textContent);
+                    el.innerHTML = marked.parse(el.textContent.trim());
                     el.setAttribute('data-rendered', 'true');
                 }
             });
