@@ -28,6 +28,11 @@ if (!isset($_SESSION['teacher_logged_in'])) {
     exit;
 }
 
+if (isset($_SESSION['force_password_change'])) {
+    header('Location: password.php');
+    exit;
+}
+
 $db = getDB();
 
 // AJAX endpoint voor live unread count updates

@@ -49,9 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Hash nieuw wachtwoord
             $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
 
-            $stmt = $db->prepare("UPDATE teachers SET password_hash = ? WHERE id = ?");
+            $stmt = $db->prepare("UPDATE teachers SET password_hash = ?, force_password_change = 0 WHERE id = ?");
             $stmt->execute([$new_hash, $_SESSION['teacher_id']]);
 
+            unset($_SESSION['force_password_change']);
             $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'PWD_CHANGE', 'User changed their own password')")->execute([$_SESSION['teacher_id']]);
             $success = "Password updated successfully!";
         } else {
@@ -112,6 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="main-content">
         <h1 style="margin-bottom: 30px;">🔑 Wachtwoord Wijzigen</h1>
+
+        <?php if (isset($_SESSION['force_password_change'])): ?>
+            <div class="message error">
+                <strong>Wachtwoord wijzigen verplicht:</strong> 
+                Een beheerder heeft ingesteld dat je je wachtwoord moet wijzigen voordat je verder kunt gaan.
+            </div>
+        <?php endif; ?>
 
         <div class="card">
             <?php if ($error): ?>

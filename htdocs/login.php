@@ -50,6 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['teacher_id'] = $teacher['id'];
         $_SESSION['teacher_role'] = $teacher['role'] ?? 'user';
 
+        if ($teacher['force_password_change']) {
+            $_SESSION['force_password_change'] = true;
+            header('Location: password.php');
+            exit;
+        }
+
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'LOGIN', 'User logged in')")->execute([$teacher['id']]);
         header('Location: teacher.php');
         exit;

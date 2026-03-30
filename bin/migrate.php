@@ -14,6 +14,11 @@ try {
         $db->exec("ALTER TABLE teachers ADD COLUMN role TEXT DEFAULT 'user'");
     } catch (PDOException $e) {}
 
+    // 0.1 Voeg force_password_change toe aan teachers
+    try {
+        $db->exec("ALTER TABLE teachers ADD COLUMN force_password_change INTEGER DEFAULT 0");
+    } catch (PDOException $e) {}
+
     // 1. Voeg level_updated_at toe
     try {
         $db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP");

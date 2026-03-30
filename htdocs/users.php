@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $username = trim($_POST['username']);
         $password = $_POST['password']; // Wachtwoorden niet trimmen voor consistentie
         $role = $_POST['role'] === 'admin' ? 'admin' : 'user';
+        $force_change = isset($_POST['force_change']) ? 1 : 0;
 
         if (strlen($username) < 3 || strlen($password) < 4) {
             $message = "Username or password too short.";
@@ -50,8 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $message = "Username already exists.";
             } else {
                 $password_hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role) VALUES (?, ?, ?)");
-                $stmt->execute([$username, $password_hash, $role]);
+                $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$username, $password_hash, $role, $force_change]);
                 $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added new teacher: $username"]);
                 $message = "User added successfully!";
             }
@@ -76,16 +77,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // Handle Reset Password
     if ($_POST['action'] === 'reset_password' && isset($_POST['id'])) {
         $id = (int)$_POST['id'];
-        $newPass = "newpass" . rand(100,999);
-        $hash = password_hash($newPass, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("UPDATE teachers SET password_hash = ? WHERE id = ?");
-        $stmt->execute([$hash, $id]);
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_RESET_PWD', ?)")->execute([$_SESSION['teacher_id'], "Reset password for teacher ID: $id"]);
-        $message = "Password for user ID $id reset to: $newPass";
+        $new_password = $_POST['new_password'] ?? '';
+        $force_change = isset($_POST['force_change']) ? 1 : 0;
+
+        if (strlen($new_password) < 4) {
+            $message = "New password is too short.";
+        } else {
+            $hash = password_hash($new_password, PASSWORD_DEFAULT);
+            $stmt = $db->prepare("UPDATE teachers SET password_hash = ?, force_password_change = ? WHERE id = ?");
+            $stmt->execute([$hash, $force_change, $id]);
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_RESET_PWD', ?)")->execute([$_SESSION['teacher_id'], "Admin reset password for teacher ID: $id (Force change: $force_change)"]);
+            $message = "Password for user ID $id updated successfully.";
+        }
     }
 }
 
-$users = $db->query("SELECT id, username, role FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$users = $db->query("SELECT id, username, role, force_password_change FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -153,10 +160,11 @@ $users = $db->query("SELECT id, username, role FROM teachers ORDER BY id ASC")->
                 <input type="hidden" name="action" value="add_user">
                 <input type="text" name="username" placeholder="Gebruikersnaam" required>
                 <input type="password" name="password" placeholder="Wachtwoord" required>
-                <select name="role" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-right: 10px;">
+                <select name="role" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-right: 10px; vertical-align: middle;">
                     <option value="user">Docent (User)</option>
                     <option value="admin">Beheerder (Admin)</option>
                 </select>
+                <label style="display:inline; font-weight: normal;"><input type="checkbox" name="force_change" value="1"> Verplicht wijzigen</label>
                 <button type="submit" class="btn btn-primary">Docent Toevoegen</button>
             </form>
         </div>
@@ -169,6 +177,7 @@ $users = $db->query("SELECT id, username, role FROM teachers ORDER BY id ASC")->
                         <th>ID</th>
                         <th>Gebruikersnaam</th>
                         <th>Rol</th>
+                        <th>Status</th>
                         <th>Acties</th>
                     </tr>
                 </thead>
@@ -179,10 +188,19 @@ $users = $db->query("SELECT id, username, role FROM teachers ORDER BY id ASC")->
                             <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
                             <td><span class="badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= $u['role'] ?></span></td>
                             <td>
-                                <form method="POST" style="display:inline;" onsubmit="return confirm('Reset wachtwoord voor deze gebruiker?')">
+                                <?php if ($u['force_password_change']): ?>
+                                    <span class="badge" style="background:#f44336;">Wachtwoord wijzigen verplicht</span>
+                                <?php else: ?>
+                                    <span style="color: #4caf50; font-size: 0.85em;">● Actief</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <form method="POST" style="display:inline-flex; gap: 5px; align-items: center;">
                                     <input type="hidden" name="action" value="reset_password">
                                     <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                    <button type="submit" class="btn btn-primary" style="padding: 5px 10px;">Reset Wachtwoord</button>
+                                    <input type="text" name="new_password" placeholder="Nieuw wachtwoord" style="width: 140px; padding: 5px;" required>
+                                    <label style="font-size: 0.75em; font-weight: normal;"><input type="checkbox" name="force_change" value="1" checked> Forceer wijziging</label>
+                                    <button type="submit" class="btn btn-primary" style="padding: 5px 10px;">Reset</button>
                                 </form>
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Verwijder deze docent?')">
                                     <input type="hidden" name="action" value="delete_user">
