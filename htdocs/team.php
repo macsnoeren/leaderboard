@@ -184,9 +184,7 @@ if (isset($_GET['ajax'])) {
                 <div class="assignment-title" id="assignment-title">
                     <?= $assignment ? htmlspecialchars($assignment['title']) : 'Geen Opdracht' ?>
                 </div>
-                <div class="assignment-desc" id="assignment-desc">
-                    <?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?>
-                </div>
+                <div class="assignment-desc" id="assignment-desc"><?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?></div>
                 
                 <div class="assignment-meta">
                     <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "⏳ Beschikbare tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
@@ -275,6 +273,7 @@ if (isset($_GET['ajax'])) {
         }
 
         function renderMarkdown() {
+            marked.setOptions({ breaks: true });
             const fields = ['assignment-desc', 'assignment-instruction'];
             fields.forEach(id => {
                 const el = document.getElementById(id);

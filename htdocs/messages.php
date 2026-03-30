@@ -273,7 +273,8 @@ $extraJS = "
 
         function renderAdminMarkdown() {
             const desc = document.getElementById('admin-assignment-desc');
-            if (desc) desc.innerHTML = marked.parse(desc.innerText);
+            marked.setOptions({ breaks: true });
+            if (desc) desc.innerHTML = marked.parse(desc.textContent);
         }
         renderAdminMarkdown();
     </script>";
