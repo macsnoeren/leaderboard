@@ -51,6 +51,11 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 15px; border-bottom: 2px solid #f0f2f5; color: #888; font-size: 0.85em; text-transform: uppercase; }
         td { padding: 15px; border-bottom: 1px solid #f0f2f5; }
+
+        /* Progress Bar Styles */
+        .progress-wrapper { width: 100%; min-width: 100px; }
+        .progress-fill { background: #667eea; height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+
         input, select, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95em; transition: all 0.2s; }
         input:focus, select:focus, textarea:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
     </style>
