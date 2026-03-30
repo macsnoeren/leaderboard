@@ -16,6 +16,10 @@ if (!$team) {
     die("Toegang geweigerd: Ongeldige token.");
 }
 
+// Bereken de ranking op basis van dezelfde criteria als het leaderboard
+$allTeams = $db->query("SELECT id FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_COLUMN);
+$rank = array_search($team['id'], $allTeams) + 1;
+
 // Haal het huidige assignment op
 $stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
 $stmt->execute([$team['current_level']]);
@@ -92,7 +96,10 @@ $max_downloads = 10;
 <body>
     <div class="container">
         <h1>Team: <?= htmlspecialchars($team['team_name']) ?></h1>
-        <div class="level-info">Huidig Level: <?= $team['current_level'] ?></div>
+        <div class="level-info">
+            Huidig Level: <?= $team['current_level'] ?><br>
+            Ranking: #<?= $rank ?>
+        </div>
 
         <?php if ($assignment): ?>
             <div class="assignment-box">
