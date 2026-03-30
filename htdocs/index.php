@@ -16,7 +16,7 @@
 require_once '../conf/config.php';
 
 $db = getDB();
-$teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 ?>
 <!DOCTYPE html>

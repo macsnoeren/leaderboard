@@ -42,7 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $new_level = $team['current_level'] + ($_POST['action'] === 'level_up' ? 1 : 0);
             
             // Update level
-            $stmt = $db->prepare("UPDATE teams SET current_level = ? WHERE id = ?");
+            $sql = "UPDATE teams SET current_level = ?" . ($_POST['action'] === 'level_up' ? ", level_updated_at = CURRENT_TIMESTAMP" : "") . " WHERE id = ?";
+            $stmt = $db->prepare($sql);
             $stmt->execute([$new_level, $team_id]);
             
             // Send email with artifacts
@@ -69,12 +70,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     } elseif ($_POST['action'] === 'add_team') {
         $team_name = trim($_POST['team_name']);
         $email = trim($_POST['email']);
+        $access_token = bin2hex(random_bytes(32));
         
-        $stmt = $db->prepare("INSERT INTO teams (team_name, email) VALUES (?, ?)");
-        $stmt->execute([$team_name, $email]);
+        $stmt = $db->prepare("INSERT INTO teams (team_name, email, access_token, level_updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)");
+        $stmt->execute([$team_name, $email, $access_token]);
         
         $_SESSION['success'] = "Team added successfully!";
-	sendWelcomeEmail($email, $team_name);
+	sendWelcomeEmail($email, $team_name, $access_token);
 	
     } elseif ($_POST['action'] === 'delete_team' && isset($_POST['team_id'])) {
         $team_id = (int)$_POST['team_id'];
@@ -91,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     exit;
 }
 
-$teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+$teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 
 function sendLevelUpEmail($to, $team_id, $team_name, $level) {
@@ -150,7 +152,7 @@ function sendLevelUpEmail($to, $team_id, $team_name, $level) {
   }
 }
 
-function sendWelcomeEmail($to, $team_name) {
+function sendWelcomeEmail($to, $team_name, $token) {
   $mail = new PHPMailer(true);
 
   try {
@@ -172,13 +174,15 @@ function sendWelcomeEmail($to, $team_name) {
     $mail->Subject = "$team_name: Je bent aangemeld!";
 
     $leaderboard_link = BASE_URL;
+    $dashboard_link = BASE_URL . "/team.php?token=$token";
 
     $mail->Body = "
       <html>
       <body style='font-family: Arial, sans-serif;'>
       <h2>Gefeliciteerd $team_name!</h2>
 	 <p>Je bent aangemeld als recherche team!</p>
-	 <p>Dit is een test e-mail om te controleren of alles in orde is.</p>
+	 <p>Jullie hebben nu toegang tot jullie eigen dashboard waar opdrachten gedownload kunnen worden zodra jullie het juiste level bereiken.</p>
+	 <p><strong>Jullie persoonlijke dashboard:</strong> <a href='$dashboard_link' style='color: #667eea;'>$dashboard_link</a></p>
 	 <p>Weet waar je staat: <a href='$leaderboard_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Leaderboard</a></p>
 	 <p>Heel veel succes!!</p>
 	 </body>
@@ -391,6 +395,7 @@ function sendLevelUpEmail($to, $team_name, $level) {
                         <th>Team Name</th>
                         <th>Email</th>
                         <th>Current Level</th>
+                        <th>Team Link</th>
                         <th>Progress</th>
                         <th>Actions</th>
                     </tr>
@@ -401,6 +406,11 @@ function sendLevelUpEmail($to, $team_name, $level) {
                             <td><?= htmlspecialchars($team['team_name']) ?></td>
                             <td><?= htmlspecialchars($team['email']) ?></td>
                             <td><?= $team['current_level'] ?>/<?= $total_assignments ?></td>
+                            <td>
+                                <a href="team.php?token=<?= $team['access_token'] ?>" target="_blank" style="font-size: 0.8em; color: #667eea;">
+                                    View Page
+                                </a>
+                            </td>
                             <td>
                                 <?php 
                                 $progress = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0;
