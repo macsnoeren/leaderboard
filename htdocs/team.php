@@ -120,6 +120,23 @@ if (isset($_GET['ajax'])) {
         textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-family: inherit; font-size: 0.95em; }
         textarea:focus { outline: 2px solid #667eea; border-color: transparent; }
 
+        /* Level Up Overlay */
+        #level-up-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            text-align: center;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
         @media (max-width: 900px) {
             main { grid-template-columns: 1fr; overflow-y: auto; }
             .chat-section { border-left: none; border-top: 1px solid #ddd; min-height: 500px; height: auto; }
@@ -195,11 +212,19 @@ if (isset($_GET['ajax'])) {
         </section>
     </main>
 
+    <div id="level-up-overlay">
+        <h1 style="font-size: 4em; margin-bottom: 20px;">🎉 GEFELICITEERD! 🎉</h1>
+        <p style="font-size: 2em; opacity: 0.9;">Jullie zijn naar het volgende level!</p>
+    </div>
+
     <script>
         let startTime = <?= $startTime ?> * 1000;
         let currentLevel = <?= (int)$team['current_level'] ?>;
 
         function triggerLevelUp() {
+            const overlay = document.getElementById('level-up-overlay');
+            if (overlay) overlay.style.display = 'flex';
+
             confetti({
                 particleCount: 150,
                 spread: 70,
