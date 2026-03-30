@@ -115,7 +115,7 @@ if (isset($_GET['ajax'])) {
     }
     exit;
 }
-?>
+
 $pageTitle = 'Berichten';
 $extraCSS = '
 <style>
