@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($teacher && password_verify($password, $teacher['password_hash'])) {
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_id'] = $teacher['id'];
+        $_SESSION['teacher_role'] = $teacher['role'] ?? 'user';
 
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'LOGIN', 'User logged in')")->execute([$teacher['id']]);
         header('Location: teacher.php');

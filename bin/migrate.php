@@ -9,6 +9,11 @@ require_once __DIR__ . '/../conf/database.php';
 try {
     $db = getDB();
     
+    // 0. Voeg role toe aan teachers
+    try {
+        $db->exec("ALTER TABLE teachers ADD COLUMN role TEXT DEFAULT 'user'");
+    } catch (PDOException $e) {}
+
     // 1. Voeg level_updated_at toe
     try {
         $db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP");

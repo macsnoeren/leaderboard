@@ -24,6 +24,12 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $db = getDB();
 
+// Autorisatie check: Alleen admin mag hier komen
+if (($_SESSION['teacher_role'] ?? 'user') !== 'admin') {
+    header('Location: teacher.php');
+    exit;
+}
+
 // Tel ongelezen berichten voor de sidebar badge
 $unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
 $message = '';
@@ -33,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'add_user') {
         $username = trim($_POST['username']);
         $password = $_POST['password']; // Wachtwoorden niet trimmen voor consistentie
+        $role = $_POST['role'] === 'admin' ? 'admin' : 'user';
 
         if (strlen($username) < 3 || strlen($password) < 4) {
             $message = "Username or password too short.";
@@ -43,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $message = "Username already exists.";
             } else {
                 $password_hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $db->prepare("INSERT INTO teachers (username, password_hash) VALUES (?, ?)");
-                $stmt->execute([$username, $password_hash]);
+                $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role) VALUES (?, ?, ?)");
+                $stmt->execute([$username, $password_hash, $role]);
                 $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added new teacher: $username"]);
                 $message = "User added successfully!";
             }
@@ -78,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-$users = $db->query("SELECT id, username FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$users = $db->query("SELECT id, username, role FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -123,8 +130,10 @@ $users = $db->query("SELECT id, username FROM teachers ORDER BY id ASC")->fetchA
                     <?php endif; ?>
                 </span>
             </a>
+            <?php if ($_SESSION['teacher_role'] === 'admin'): ?>
             <a href="users.php" class="nav-item active">👥 Users</a>
             <a href="audit.php" class="nav-item">📋 Audit Logs</a>
+            <?php endif; ?>
             <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
             <a href="password.php" class="nav-item">🔑 Password</a>
             <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>
@@ -144,6 +153,10 @@ $users = $db->query("SELECT id, username FROM teachers ORDER BY id ASC")->fetchA
                 <input type="hidden" name="action" value="add_user">
                 <input type="text" name="username" placeholder="Gebruikersnaam" required>
                 <input type="password" name="password" placeholder="Wachtwoord" required>
+                <select name="role" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-right: 10px;">
+                    <option value="user">Docent (User)</option>
+                    <option value="admin">Beheerder (Admin)</option>
+                </select>
                 <button type="submit" class="btn btn-primary">Docent Toevoegen</button>
             </form>
         </div>
@@ -155,6 +168,7 @@ $users = $db->query("SELECT id, username FROM teachers ORDER BY id ASC")->fetchA
                     <tr>
                         <th>ID</th>
                         <th>Gebruikersnaam</th>
+                        <th>Rol</th>
                         <th>Acties</th>
                     </tr>
                 </thead>
@@ -163,6 +177,7 @@ $users = $db->query("SELECT id, username FROM teachers ORDER BY id ASC")->fetchA
                         <tr>
                             <td><?= $u['id'] ?></td>
                             <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
+                            <td><span class="badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= $u['role'] ?></span></td>
                             <td>
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Reset wachtwoord voor deze gebruiker?')">
                                     <input type="hidden" name="action" value="reset_password">

@@ -6,7 +6,7 @@ require_once '../conf/database.php';
 $db = getDB();
 
 // 1. Initialiseer de database tabellen
-$db->exec("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT)");
+$db->exec("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'user')");
 $db->exec("CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY AUTOINCREMENT, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE)");
 $db->exec("CREATE TABLE IF NOT EXISTS assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_number INTEGER, title TEXT, description TEXT, artifact_file TEXT)");
 $db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
@@ -49,12 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (!empty($username) && !empty($password)) {
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("INSERT INTO teachers (username, password_hash) VALUES (?, ?)");
+        $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role) VALUES (?, ?, 'admin')");
         $stmt->execute([$username, $password_hash]);
         
         $new_id = $db->lastInsertId();
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_id'] = $new_id;
+        $_SESSION['teacher_role'] = 'admin';
 
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'SETUP', 'First admin account created')")->execute([$new_id]);
         header('Location: teacher.php');

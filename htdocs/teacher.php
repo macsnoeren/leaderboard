@@ -330,8 +330,10 @@ function sendLevelUpEmail($to, $team_name, $level) {
                     <?php endif; ?>
                 </span>
             </a>
+            <?php if (($_SESSION['teacher_role'] ?? 'user') === 'admin'): ?>
             <a href="users.php" class="nav-item">👥 Users</a>
             <a href="audit.php" class="nav-item">📋 Audit Logs</a>
+            <?php endif; ?>
             <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
             <a href="password.php" class="nav-item">🔑 Password</a>
             <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>

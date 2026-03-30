@@ -10,6 +10,12 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $db = getDB();
 
+// Autorisatie check: Alleen admin mag hier komen
+if (($_SESSION['teacher_role'] ?? 'user') !== 'admin') {
+    header('Location: teacher.php');
+    exit;
+}
+
 // Tel ongelezen berichten voor de sidebar badge
 $unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
 
