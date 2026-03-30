@@ -14,14 +14,8 @@
 */
 session_start();
 require_once '../conf/config.php';
-require_once '../conf/database.php';
-
-require_once 'PHPMailer/src/PHPMailer.php';
-require_once 'PHPMailer/src/SMTP.php';
-require_once 'PHPMailer/src/Exception.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+require_once '../conf/database.php'; // Correct include for database
+require_once '../conf/mail_functions.php'; // New include for mail functions
 
 if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
@@ -33,14 +27,6 @@ if (isset($_SESSION['force_password_change'])) {
     exit;
 }
 
-/**
- * Verstuurt een e-mail wanneer een team een level omhoog gaat.
- */
-function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
-    $mail = new PHPMailer(true);
-    try {
-        $mail->isSMTP();
-        $mail->Timeout = 10;
         $mail->SMTPConnectTimeout = 5;
         $mail->Host = SMTP_HOST;
         $mail->SMTPAuth = true;
