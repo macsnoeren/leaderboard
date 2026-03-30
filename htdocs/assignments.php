@@ -23,8 +23,13 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $db = getDB();
 
-// Tel ongelezen berichten voor de sidebar badge
-$unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
+// Haal opdracht op als er een bewerking is gevraagd
+$edit_assignment = null;
+if (isset($_GET['edit'])) {
+    $stmt = $db->prepare("SELECT * FROM assignments WHERE id = ?");
+    $stmt->execute([(int)$_GET['edit']]);
+    $edit_assignment = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 
 // Zorg dat de uploadmap bestaat
 $uploadDir = __DIR__ . '/artifacts';
@@ -34,15 +39,23 @@ if (!is_dir($uploadDir)) {
 
 // Handle toevoegen van assignment
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    if ($_POST['action'] === 'add_assignment') {
+    if ($_POST['action'] === 'add_assignment' || $_POST['action'] === 'edit_assignment') {
         $assignment_number = (int)$_POST['assignment_number'];
         $title = trim($_POST['title']);
         $description = trim($_POST['description']);
         $instruction = trim($_POST['instruction'] ?? '');
         $criteria = trim($_POST['criteria'] ?? '');
         $time_limit = (int)($_POST['time_limit'] ?? 0);
+        $id = isset($_POST['assignment_id']) ? (int)$_POST['assignment_id'] : null;
 
-        $artifact_file = null;
+        $artifact_file = $_POST['current_artifact'] ?? null;
+
+        // Als we bewerken, halen we het huidige bestandspad op voor het geval er een nieuwe komt
+        if ($id && !$artifact_file) {
+            $stmt = $db->prepare("SELECT artifact_file FROM assignments WHERE id = ?");
+            $stmt->execute([$id]);
+            $artifact_file = $stmt->fetchColumn();
+        }
 
         // File upload
         if (!empty($_FILES['artifact_file']['name'])) {
@@ -58,6 +71,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 exit;
             }
 
+            // Verwijder oud bestand als er een nieuw bestand wordt geüpload
+            if ($artifact_file && file_exists(__DIR__ . '/' . $artifact_file)) {
+                unlink(__DIR__ . '/' . $artifact_file);
+            }
+
             // Veilig bestandsnaam genereren
             $safeName = 'assignment_' . $assignment_number . '_' . time() . '.' . $ext;
             $targetPath = $uploadDir . '/' . $safeName;
@@ -66,18 +84,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $artifact_file = 'artifacts/' . $safeName;
             } else {
                 $_SESSION['error'] = "File upload failed.";
-                header('Location: assignments.php');
+                header('Location: assignments.php' . ($id ? "?edit=$id" : ""));
                 exit;
             }
         }
 
-        // Database invoegen
-        $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, instruction, criteria, time_limit, artifact_file)
-                              VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file]);
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'ASSIGNMENT_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added assignment #$assignment_number: $title"]);
+        if ($_POST['action'] === 'edit_assignment' && $id) {
+            $stmt = $db->prepare("UPDATE assignments SET assignment_number = ?, title = ?, description = ?, instruction = ?, criteria = ?, time_limit = ?, artifact_file = ? WHERE id = ?");
+            $stmt->execute([$assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file, $id]);
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'ASSIGNMENT_UPDATE', ?)")->execute([$_SESSION['teacher_id'], "Updated assignment #$assignment_number: $title"]);
+            $_SESSION['success'] = "Opdracht succesvol bijgewerkt!";
+        } else {
+            $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, instruction, criteria, time_limit, artifact_file) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file]);
+            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'ASSIGNMENT_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added assignment #$assignment_number: $title"]);
+            $_SESSION['success'] = "Assignment added successfully!";
+        }
 
-        $_SESSION['success'] = "Assignment added successfully!";
         header('Location: assignments.php');
         exit;
     }
@@ -123,38 +146,45 @@ include 'admin_header.php';
     <div class="dashboard-grid">
         <div class="side-panel">
             <div class="card">
-                <div class="card-title">➕ Nieuwe Opdracht</div>
+                <div class="card-title"><?= $edit_assignment ? "✏️ Opdracht Bewerken" : "➕ Nieuwe Opdracht" ?></div>
                 <form method="POST" enctype="multipart/form-data">
-                    <input type="hidden" name="action" value="add_assignment">
+                    <input type="hidden" name="action" value="<?= $edit_assignment ? 'edit_assignment' : 'add_assignment' ?>">
+                    <?php if ($edit_assignment): ?>
+                        <input type="hidden" name="assignment_id" value="<?= $edit_assignment['id'] ?>">
+                    <?php endif; ?>
+
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Opdracht Nummer</label>
-                    <input type="number" name="assignment_number" required>
+                        <input type="number" name="assignment_number" value="<?= $edit_assignment['assignment_number'] ?? '' ?>" required>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Titel</label>
-                    <input type="text" name="title" required>
+                        <input type="text" name="title" value="<?= htmlspecialchars($edit_assignment['title'] ?? '') ?>" required>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beschrijving</label>
-                    <textarea name="description" rows="3"></textarea>
+                        <textarea name="description" rows="3"><?= htmlspecialchars($edit_assignment['description'] ?? '') ?></textarea>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">De Echte Opdracht (Instructie)</label>
-                        <textarea name="instruction" rows="4" placeholder="Wat moeten ze precies doen?"></textarea>
+                        <textarea name="instruction" rows="4" placeholder="Wat moeten ze precies doen?"><?= htmlspecialchars($edit_assignment['instruction'] ?? '') ?></textarea>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beoordelingscriteria</label>
-                        <textarea name="criteria" rows="3" placeholder="Waar moet het antwoord aan voldoen?"></textarea>
+                        <textarea name="criteria" rows="3" placeholder="Waar moet het antwoord aan voldoen?"><?= htmlspecialchars($edit_assignment['criteria'] ?? '') ?></textarea>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Tijdslimiet (minuten)</label>
-                        <input type="number" name="time_limit" placeholder="0 = onbeperkt">
+                        <input type="number" name="time_limit" value="<?= $edit_assignment['time_limit'] ?? '' ?>" placeholder="0 = onbeperkt">
                     </div>
                     <div style="margin-bottom: 20px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Bestand (PDF/ZIP)</label>
-                    <input type="file" name="artifact_file" accept=".pdf,.zip">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Bestand (PDF/ZIP) <?= $edit_assignment && $edit_assignment['artifact_file'] ? '<span style="color: #4caf50;">(Huidig bestand behouden indien leeg)</span>' : '' ?></label>
+                        <input type="file" name="artifact_file" accept=".pdf,.zip">
                     </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Toevoegen</button>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;"><?= $edit_assignment ? "Bijwerken" : "Toevoegen" ?></button>
+                    <?php if ($edit_assignment): ?>
+                        <a href="assignments.php" class="btn btn-outline" style="width: 100%; margin-top: 10px; display: block;">Annuleren</a>
+                    <?php endif; ?>
                 </form>
             </div>
         </div>
@@ -183,7 +213,8 @@ include 'admin_header.php';
                                         <span style="color:#ccc; font-size:0.8em;">Geen file</span>
                                     <?php endif; ?>
                                 </td>
-                                <td style="text-align: right;">
+                                <td style="text-align: right; white-space: nowrap;">
+                                    <a href="?edit=<?= $a['id'] ?>" class="btn btn-outline" style="padding: 4px 8px;" title="Bewerken">✏️</a>
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Verwijder deze opdracht?');">
                                         <input type="hidden" name="action" value="delete_assignment">
                                         <input type="hidden" name="assignment_id" value="<?= $a['id'] ?>">
