@@ -143,6 +143,12 @@ $extraCSS = '
     .message.team { background: #e3f2fd; align-self: flex-start; }
     .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
     .message.suggestion { background: #f3e5f5; border: 1px dashed #9c27b0; align-self: flex-start; color: #4a148c; }
+
+    .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); overflow-y: auto; }
+    .modal-content { background-color: white; margin: 5% auto; padding: 30px; border-radius: 15px; width: 70%; max-width: 800px; box-shadow: 0 5px 30px rgba(0,0,0,0.3); position: relative; }
+    .close-modal { position: absolute; top: 20px; right: 25px; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; transition: 0.2s; }
+    .close-modal:hover { color: #333; }
+    .modal-section-title { font-weight: bold; color: #667eea; border-bottom: 2px solid #f0f4ff; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
 </style>';
 
 include 'admin_header.php';
@@ -168,20 +174,42 @@ include 'admin_header.php';
 
         <div class="chat-area">
             <?php if ($selected_team): ?>
-                <h1 style="margin-bottom: 20px;">Chat met <?= htmlspecialchars($selected_team['team_name']) ?> (Level <?= $selected_team['current_level'] ?>)</h1>
-                
-                <?php if ($assignment): ?>
-                    <div class="assignment-info">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div>
-                                <strong>Huidige Opdracht: <?= htmlspecialchars($assignment['title']) ?></strong><br>
-                            <div id="admin-assignment-desc"><?= htmlspecialchars($assignment['description']) ?></div>
-                            </div>
-                            <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h1 style="margin-bottom: 0;">Chat met <?= htmlspecialchars($selected_team['team_name']) ?> (Level <?= $selected_team['current_level'] ?>)</h1>
+                    <div style="display: flex; gap: 10px;">
+                        <?php if ($assignment): ?>
+                            <button class="btn btn-outline" onclick="openAssignmentModal()">📄 Opdracht</button>
+                            <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');" style="margin:0;">
                                 <input type="hidden" name="action" value="level_up">
                                 <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
                                 <button type="submit" class="btn btn-success" style="margin-top: 0; padding: 8px 16px;">🚀 Level Up!</button>
                             </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <?php if ($assignment): ?>
+                    <div id="assignmentModal" class="modal">
+                        <div class="modal-content">
+                            <span class="close-modal" onclick="closeAssignmentModal()">&times;</span>
+                            <h2 style="color: #333; margin-bottom: 20px;">Opdracht Details: <?= htmlspecialchars($assignment['title']) ?></h2>
+                            
+                            <div class="modal-section-title">Beschrijving</div>
+                            <div class="markdown-body"><?= htmlspecialchars($assignment['description']) ?></div>
+                            
+                            <?php if (!empty($assignment['instruction'])): ?>
+                                <div class="modal-section-title">📍 Instructie</div>
+                                <div class="markdown-body" style="background: #f8f9fa; padding: 15px; border-radius: 8px;"><?= htmlspecialchars($assignment['instruction']) ?></div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($assignment['criteria'])): ?>
+                                <div class="modal-section-title">📋 Beoordelingscriteria</div>
+                                <div class="markdown-body" style="color: #d32f2f; background: #fff1f0; padding: 15px; border-radius: 8px;"><?= htmlspecialchars($assignment['criteria']) ?></div>
+                            <?php endif; ?>
+
+                            <div style="margin-top: 30px; text-align: right;">
+                                <button class="btn btn-primary" onclick="closeAssignmentModal()">Sluiten</button>
+                            </div>
                         </div>
                     </div>
                 <?php endif; ?>
@@ -271,11 +299,31 @@ $extraJS = "
             form.submit();
         }
 
-        function renderAdminMarkdown() {
-            const desc = document.getElementById('admin-assignment-desc');
-            marked.setOptions({ breaks: true });
-            if (desc) desc.innerHTML = marked.parse(desc.textContent);
+        function openAssignmentModal() {
+            document.getElementById('assignmentModal').style.display = 'block';
+            renderModalMarkdown();
         }
-        renderAdminMarkdown();
+
+        function closeAssignmentModal() {
+            document.getElementById('assignmentModal').style.display = 'none';
+        }
+
+        // Sluit modal als je buiten de content klikt
+        window.onclick = function(event) {
+            const modal = document.getElementById('assignmentModal');
+            if (event.target == modal) {
+                closeAssignmentModal();
+            }
+        }
+
+        function renderModalMarkdown() {
+            marked.setOptions({ breaks: true });
+            document.querySelectorAll('.markdown-body').forEach(el => {
+                if (el.getAttribute('data-rendered') !== 'true') {
+                    el.innerHTML = marked.parse(el.textContent);
+                    el.setAttribute('data-rendered', 'true');
+                }
+            });
+        }
     </script>";
 include 'admin_footer.php'; ?>
