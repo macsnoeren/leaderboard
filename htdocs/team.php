@@ -20,6 +20,9 @@ if (!$team) {
 $allTeams = $db->query("SELECT id FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_COLUMN);
 $rank = array_search($team['id'], $allTeams) + 1;
 
+// Verkrijg de timestamp van wanneer het huidige level is gestart
+$startTime = strtotime($team['level_updated_at']);
+
 // Haal het huidige assignment op
 $stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
 $stmt->execute([$team['current_level']]);
@@ -91,6 +94,12 @@ $max_downloads = 10;
             font-size: 0.9em;
             color: #666;
         }
+        .timer {
+            margin-top: 10px;
+            font-size: 1.1em;
+            color: #333;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -98,7 +107,8 @@ $max_downloads = 10;
         <h1>Team: <?= htmlspecialchars($team['team_name']) ?></h1>
         <div class="level-info">
             Huidig Level: <?= $team['current_level'] ?><br>
-            Ranking: #<?= $rank ?>
+            Ranking: #<?= $rank ?><br>
+            <div class="timer" id="live-timer">Tijd bezig: --:--:--</div>
         </div>
 
         <?php if ($assignment): ?>
@@ -117,5 +127,28 @@ $max_downloads = 10;
             <p>Geen opdracht beschikbaar voor dit level. Wacht op instructies.</p>
         <?php endif; ?>
     </div>
+
+    <script>
+        const startTime = <?= $startTime ?> * 1000;
+
+        function updateTimer() {
+            const now = new Date().getTime();
+            const diff = Math.max(0, now - startTime);
+
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            const display = 
+                (hours < 10 ? "0" + hours : hours) + ":" + 
+                (minutes < 10 ? "0" + minutes : minutes) + ":" + 
+                (seconds < 10 ? "0" + seconds : seconds);
+
+            document.getElementById('live-timer').innerText = "Tijd bezig: " + display;
+        }
+
+        setInterval(updateTimer, 1000);
+        updateTimer();
+    </script>
 </body>
 </html>
