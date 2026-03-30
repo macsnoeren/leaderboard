@@ -226,13 +226,15 @@ if (isset($_GET['ajax'])) {
                 (minutes < 10 ? "0" + minutes : minutes) + ":" + 
                 (seconds < 10 ? "0" + seconds : seconds);
 
-            document.getElementById('live-timer').innerText = "Tijd bezig: " + display;
+            document.getElementById('live-timer').innerText = "Tijd bezig met de opdracht: " + display;
         }
 
         function scrollToBottom() {
             const chatBox = document.getElementById('chat-box');
             if (chatBox) {
-                chatBox.scrollTop = chatBox.scrollHeight;
+                setTimeout(() => {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }, 50);
             }
         }
 
@@ -240,8 +242,12 @@ if (isset($_GET['ajax'])) {
             fetch(window.location.href + '&ajax=1')
                 .then(response => response.text())
                 .then(html => {
-                    document.getElementById('chat-box').innerHTML = html;
-                    scrollToBottom();
+                    const chatBox = document.getElementById('chat-box');
+                    // Alleen scrollen en updaten als er daadwerkelijk nieuwe berichten zijn
+                    if (chatBox.innerHTML !== html) {
+                        chatBox.innerHTML = html;
+                        scrollToBottom();
+                    }
                 });
         }
 

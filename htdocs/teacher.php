@@ -30,6 +30,12 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $db = getDB();
 
+// AJAX endpoint voor live unread count updates
+if (isset($_GET['ajax_unread'])) {
+    echo $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
+    exit;
+}
+
 // Handle level changes
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (($_POST['action'] === 'level_up' || $_POST['action'] === 'resend_level_mail') && isset($_POST['team_id'])) {
@@ -368,10 +374,12 @@ function sendLevelUpEmail($to, $team_name, $level) {
              <a target="_leaderboard" href="index.php" class="logout">Leaderboard</a> |
              <a href="assignments.php" class="logout">Assignments</a> |
              <a href="users.php" class="logout">Users</a> |
-             <a href="messages.php" class="logout">Messages 
-                <?php if ($unread_total > 0): ?>
-                    <span style="background:red; color:white; padding: 2px 6px; border-radius: 50%; font-size: 0.8em;"><?= $unread_total ?></span>
-                <?php endif; ?>
+             <a href="messages.php" class="logout">Messages
+                <span id="unread-badge-container">
+                    <?php if ($unread_total > 0): ?>
+                        <span style="background:red; color:white; padding: 2px 6px; border-radius: 50%; font-size: 0.8em;"><?= $unread_total ?></span>
+                    <?php endif; ?>
+                </span>
              </a> |
              <a href="audit.php" class="logout">Audit Logs</a> |
              <a href="password.php" class="logout">Change password</a> |
@@ -461,5 +469,22 @@ function sendLevelUpEmail($to, $team_name, $level) {
             </table>
         </div>
     </div>
+
+    <script>
+        // Live update voor de berichten badge
+        function updateUnreadBadge() {
+            fetch('teacher.php?ajax_unread=1')
+                .then(r => r.text())
+                .then(count => {
+                    const container = document.getElementById('unread-badge-container');
+                    if (parseInt(count) > 0) {
+                        container.innerHTML = `<span style="background:red; color:white; padding: 2px 6px; border-radius: 50%; font-size: 0.8em;">${count}</span>`;
+                    } else {
+                        container.innerHTML = '';
+                    }
+                });
+        }
+        setInterval(updateUnreadBadge, 10000); // Check elke 10 seconden
+    </script>
 </body>
 </html>
