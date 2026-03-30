@@ -107,7 +107,7 @@ if (isset($_GET['ajax'])) {
         .remaining { font-size: 0.85em; color: #888; }
 
         /* Chat Section */
-        .chat-section { background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; }
+        .chat-section { background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; }
         .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; }
         .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; min-height: 0; }
         .message { padding: 10px 15px; border-radius: 12px; max-width: 85%; font-size: 0.95em; position: relative; }
@@ -115,14 +115,14 @@ if (isset($_GET['ajax'])) {
         .message.teacher { align-self: flex-start; background: #e4e6eb; color: #050505; border-bottom-left-radius: 2px; }
         .msg-meta { font-size: 0.7em; opacity: 0.7; margin-bottom: 4px; }
         
-        .chat-input-area { padding: 20px; border-top: 1px solid #eee; }
+        .chat-input-area { padding: 20px; border-top: 1px solid #eee; flex-shrink: 0; }
         .chat-form { display: flex; flex-direction: column; gap: 10px; }
         textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-family: inherit; font-size: 0.95em; }
         textarea:focus { outline: 2px solid #667eea; border-color: transparent; }
 
         @media (max-width: 900px) {
-            main { grid-template-columns: 1fr; }
-            .chat-section { border-left: none; border-top: 1px solid #ddd; height: 500px; }
+            main { grid-template-columns: 1fr; overflow-y: auto; }
+            .chat-section { border-left: none; border-top: 1px solid #ddd; min-height: 500px; height: auto; }
         }
     </style>
 </head>
