@@ -184,7 +184,8 @@ include 'admin_header.php';
                                         </span>
                                     </td>
                                     <td style="vertical-align: middle;">
-                                        <?php $progress = ($total_assignments > 0) ? min(100, ($team['current_level'] / $total_assignments) * 100) : 0; ?>
+                                        <?php 
+                                        $progress = ($total_assignments > 0) ? (min($total_assignments, max(0, $team['current_level'] - 1)) / $total_assignments) * 100 : 0; ?>
                                         <div class="progress-wrapper">
                                             <div class="progress-bg" style="height: 6px; background: #eee;">
                                                 <div class="progress-fill" style="width: <?= $progress ?>%"></div>
@@ -198,7 +199,7 @@ include 'admin_header.php';
                                                 <input type="hidden" name="action" value="level_up">
                                                 <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
                                                 <button type="submit" class="btn btn-success" style="padding: 6px 12px; border-radius: 6px;"
-                                                    <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
+                                                    <?= $team['current_level'] > $total_assignments ? 'disabled' : '' ?>>
                                                     ⬆️
                                                 </button>
                                             </form>
