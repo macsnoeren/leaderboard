@@ -199,11 +199,10 @@ if (isset($_GET['ajax'])) {
                 <div class="assignment-desc" id="assignment-desc"><?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?></div>
                 
                 <div class="assignment-meta">
-                    <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "⏳ Beschikbare tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
+                    <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "Verwacht benodigde tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
                 </div>
 
                 <div id="instruction-wrapper" style="<?= (!$assignment || empty($assignment['instruction'])) ? 'display:none;' : '' ?>">
-                    <div class="assignment-detail-title">📍 De Opdracht</div>
                     <div class="instruction-box" id="assignment-instruction"><?= $assignment ? htmlspecialchars($assignment['instruction']) : '' ?></div>
                 </div>
 
