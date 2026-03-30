@@ -102,6 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 
+// Tel ongelezen berichten van teams
+$unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
+
 function sendLevelUpEmail($to, $team_id, $team_name, $level) {
   $mail = new PHPMailer(true);
 
@@ -365,7 +368,11 @@ function sendLevelUpEmail($to, $team_name, $level) {
              <a target="_leaderboard" href="index.php" class="logout">Leaderboard</a> |
              <a href="assignments.php" class="logout">Assignments</a> |
              <a href="users.php" class="logout">Users</a> |
-             <a href="messages.php" class="logout">Messages</a> |
+             <a href="messages.php" class="logout">Messages 
+                <?php if ($unread_total > 0): ?>
+                    <span style="background:red; color:white; padding: 2px 6px; border-radius: 50%; font-size: 0.8em;"><?= $unread_total ?></span>
+                <?php endif; ?>
+             </a> |
              <a href="audit.php" class="logout">Audit Logs</a> |
              <a href="password.php" class="logout">Change password</a> |
              <a href="logout.php" class="logout">Logout</a>

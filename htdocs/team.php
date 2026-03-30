@@ -49,6 +49,17 @@ $max_downloads = 10;
 $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? ORDER BY created_at ASC");
 $stmt->execute([$team['id'], $team['current_level']]);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// AJAX endpoint voor live updates
+if (isset($_GET['ajax'])) {
+    foreach ($messages as $m) {
+        echo '<div class="message ' . $m['sender'] . '">';
+        echo '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
+        echo '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
+        echo '</div>';
+    }
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -176,7 +187,7 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php if ($team['current_level'] > 0): ?>
             <div class="chat-container">
                 <h3>Stuur je antwoord of stel een vraag</h3>
-                <div class="messages">
+                <div class="messages" id="chat-box">
                     <?php foreach ($messages as $m): ?>
                         <div class="message <?= $m['sender'] ?>">
                             <div class="msg-meta"><?= $m['sender'] === 'team' ? 'Jullie' : 'Docent' ?> - <?= $m['created_at'] ?></div>
@@ -212,7 +223,16 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
             document.getElementById('live-timer').innerText = "Tijd bezig: " + display;
         }
 
+        function fetchMessages() {
+            fetch(window.location.href + '&ajax=1')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('chat-box').innerHTML = html;
+                });
+        }
+
         setInterval(updateTimer, 1000);
+        setInterval(fetchMessages, 5000);
         updateTimer();
     </script>
 </body>

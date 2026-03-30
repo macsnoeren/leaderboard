@@ -32,6 +32,11 @@ try {
         UNIQUE(team_id, assignment_number)
     )");
     
+    // 4. Voeg is_read toe aan team_messages
+    try {
+        $db->exec("ALTER TABLE team_messages ADD COLUMN is_read INTEGER DEFAULT 0");
+    } catch (PDOException $e) {}
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";
