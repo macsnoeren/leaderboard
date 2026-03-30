@@ -251,144 +251,97 @@ function sendLevelUpEmail($to, $team_name, $level) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <title>Teacher Dashboard - Leaderboard</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        header {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        h1 { color: #333; }
-        .logout { color: #667eea; text-decoration: none; font-weight: 600; }
-        .success {
-            background: #4caf50;
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .add-team {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .add-team h2 { margin-bottom: 20px; color: #333; }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #555;
-        }
-        input[type="text"], input[type="email"] {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
-            font-size: 1em;
-        }
-        button, .btn {
-            background: #667eea;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 600;
-        }
-        button:hover, .btn:hover {
-            background: #5568d3;
-        }
-        .teams-list {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #555;
-        }
-        .level-up-btn {
-            background: #4caf50;
-            color: white;
-            padding: 8px 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9em;
-            margin-right: 5px;
-        }
-        .level-up-btn:hover {
-            background: #45a049;
-        }
-        .level-up-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        .delete-btn {
-            background: #f44336;
-            color: white;
-            padding: 8px 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9em;
-        }
-        .delete-btn:hover {
-            background: #da190b;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; display: flex; min-height: 100vh; }
+        
+        /* Sidebar Navigation */
+        .sidebar { width: 260px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: fixed; height: 100vh; }
+        .sidebar-header { padding: 30px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; font-weight: bold; font-size: 1.2em; }
+        .sidebar-nav { flex: 1; padding: 20px 0; }
+        .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
+        .nav-item:hover { background: #f0f2f5; color: #667eea; }
+        .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
+        .badge { background: #f44336; color: white; padding: 2px 7px; border-radius: 10px; font-size: 0.75em; margin-left: auto; }
+
+        /* Main Content */
+        .main-content { margin-left: 260px; flex: 1; padding: 40px; }
+        header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 1.8em; color: #333; }
+        
+        /* Success Message */
+        .success { background: #e8f5e9; color: #2e7d32; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #4caf50; font-weight: 500; }
+
+        /* Dashboard Grid */
+        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
+        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .card-title { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+
+        /* Stats Cards */
+        .stats-overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; }
+        .stat-label { font-size: 0.8em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 1.8em; font-weight: bold; color: #667eea; margin-top: 5px; }
+
+        /* Form Styles */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 6px; font-size: 0.9em; font-weight: 600; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95em; }
+        .btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9em; }
+        .btn-primary { background: #667eea; color: white; width: 100%; }
+        .btn-primary:hover { background: #5568d3; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-success:hover { background: #45a049; }
+        .btn-outline { background: transparent; border: 1px solid #ddd; color: #666; }
+        .btn-outline:hover { background: #f8f9fa; border-color: #ccc; }
+        .btn-danger { background: #ffebee; color: #c62828; }
+        .btn-danger:hover { background: #ffcdd2; }
+
+        /* Table Styles */
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 15px; border-bottom: 2px solid #f0f2f5; color: #888; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; }
+        td { padding: 15px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+        .team-main-info { display: flex; flex-direction: column; }
+        .team-name-link { font-weight: bold; color: #333; text-decoration: none; }
+        .team-email { font-size: 0.8em; color: #888; }
+        
+        /* Progress Bar in Table */
+        .progress-wrapper { width: 120px; }
+        .progress-bg { background: #eee; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 5px; }
+        .progress-fill { background: #667eea; height: 100%; border-radius: 4px; }
+        .progress-text { font-size: 0.75em; color: #666; font-weight: 600; }
+
+        .action-btns { display: flex; gap: 8px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Dashboard</h1>
-	    <span>
-             <a target="_leaderboard" href="index.php" class="logout">Leaderboard</a> |
-             <a href="assignments.php" class="logout">Assignments</a> |
-             <a href="users.php" class="logout">Users</a> |
-             <a href="messages.php" class="logout">Messages
+    <nav class="sidebar">
+        <div class="sidebar-header">Zebrawave Admin</div>
+        <div class="sidebar-nav">
+            <a href="teacher.php" class="nav-item active">📊 Dashboard</a>
+            <a href="assignments.php" class="nav-item">📘 Assignments</a>
+            <a href="messages.php" class="nav-item">
+                ✉️ Messages
                 <span id="unread-badge-container">
                     <?php if ($unread_total > 0): ?>
-                        <span style="background:red; color:white; padding: 2px 6px; border-radius: 50%; font-size: 0.8em;"><?= $unread_total ?></span>
+                        <span class="badge"><?= $unread_total ?></span>
                     <?php endif; ?>
                 </span>
-             </a> |
-             <a href="audit.php" class="logout">Audit Logs</a> |
-             <a href="password.php" class="logout">Change password</a> |
-             <a href="logout.php" class="logout">Logout</a>
-	    </span>
+            </a>
+            <a href="users.php" class="nav-item">👥 Users</a>
+            <a href="audit.php" class="nav-item">📋 Audit Logs</a>
+            <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
+            <a href="password.php" class="nav-item">🔑 Password</a>
+            <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <header>
+            <h1>Dashboard</h1>
+            <a target="_leaderboard" href="index.php" class="btn btn-outline">View Public Leaderboard</a>
         </header>
         
         <?php if (isset($_SESSION['success'])): ?>
@@ -397,80 +350,108 @@ function sendLevelUpEmail($to, $team_name, $level) {
                 <?php unset($_SESSION['success']); ?>
             </div>
         <?php endif; ?>
-        
-        <div class="add-team">
-            <h2>Add New Team</h2>
-            <form method="POST">
-                <input type="hidden" name="action" value="add_team">
-                <div class="form-group">
-                    <label>Team Name:</label>
-                    <input type="text" name="team_name" required>
-                </div>
-                <div class="form-group">
-                    <label>Team Email:</label>
-                    <input type="email" name="email" required>
-                </div>
-                <button type="submit">Add Team</button>
-            </form>
+
+        <div class="stats-overview">
+            <div class="stat-card">
+                <div class="stat-label">Total Teams</div>
+                <div class="stat-value"><?= count($teams) ?></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Assignments</div>
+                <div class="stat-value"><?= $total_assignments ?></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Unread Messages</div>
+                <div class="stat-value" id="unread-stat"><?= $unread_total ?></div>
+            </div>
         </div>
         
-        <div class="teams-list">
-            <h2>Manage Teams</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Team Name</th>
-                        <th>Email</th>
-                        <th>Current Level</th>
-                        <th>Team Link</th>
-                        <th>Progress</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($teams as $team): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($team['team_name']) ?></td>
-                            <td><?= htmlspecialchars($team['email']) ?></td>
-                            <td><?= $team['current_level'] ?>/<?= $total_assignments ?></td>
-                            <td>
-                                <a href="team.php?token=<?= $team['access_token'] ?>" target="_blank" style="font-size: 0.8em; color: #667eea;">
-                                    View Page
-                                </a>
-                            </td>
-                            <td>
-                                <?php 
-                                $progress = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0;
-                                echo round($progress) . '%';
-                                ?>
-                            </td>
-                            <td>
-                                <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="action" value="level_up">
-                                    <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                    <button type="submit" class="level-up-btn" 
-                                        <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
-                                        Level Up
-                                    </button>
-                                </form>
-                                <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="action" value="resend_level_mail">
-                                    <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                    <button type="submit" class="level-up-btn" 
-                                        <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
-                                        Resend Mail
-                                    </button>
-                                </form>
-                                <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this team?');">
-                                    <input type="hidden" name="action" value="delete_team">
-                                    <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                    <button type="submit" class="delete-btn">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-title">🛡️ Manage Teams</div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Team</th>
+                                <th>Level</th>
+                                <th>Progress</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($teams as $team): ?>
+                                <tr>
+                                    <td>
+                                        <div class="team-main-info">
+                                            <a href="team.php?token=<?= $team['access_token'] ?>" target="_blank" class="team-name-link">
+                                                <?= htmlspecialchars($team['team_name']) ?>
+                                            </a>
+                                            <span class="team-email"><?= htmlspecialchars($team['email']) ?></span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <strong><?= $team['current_level'] ?></strong> / <?= $total_assignments ?>
+                                    </td>
+                                    <td>
+                                        <?php $progress = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0; ?>
+                                        <div class="progress-wrapper">
+                                            <div class="progress-bg">
+                                                <div class="progress-fill" style="width: <?= $progress ?>%"></div>
+                                            </div>
+                                            <div class="progress-text"><?= round($progress) ?>%</div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="action-btns">
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="action" value="level_up">
+                                                <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
+                                                <button type="submit" class="btn btn-success" style="padding: 5px 10px;"
+                                                    <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
+                                                    ⬆️
+                                                </button>
+                                            </form>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="action" value="resend_level_mail">
+                                                <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
+                                                <button type="submit" class="btn btn-outline" style="padding: 5px 10px;" title="Resend Level Mail">
+                                                    📧
+                                                </button>
+                                            </form>
+                                            <form method="POST" style="display: inline;" onsubmit="return confirm('Delete team?');">
+                                                <input type="hidden" name="action" value="delete_team">
+                                                <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
+                                                <button type="submit" class="btn btn-danger" style="padding: 5px 10px;">
+                                                    🗑️
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="side-panel">
+                <div class="card">
+                    <div class="card-title">➕ Add New Team</div>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add_team">
+                        <div class="form-group">
+                            <label>Team Name:</label>
+                            <input type="text" name="team_name" placeholder="e.g. Code Ninjas" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Team Email:</label>
+                            <input type="email" name="email" placeholder="e.g. contact@codeninjas.com" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Team & Send Invite</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -481,8 +462,12 @@ function sendLevelUpEmail($to, $team_name, $level) {
                 .then(r => r.text())
                 .then(count => {
                     const container = document.getElementById('unread-badge-container');
+                    const statDisplay = document.getElementById('unread-stat');
+                    
+                    if (statDisplay) statDisplay.innerText = count;
+
                     if (parseInt(count) > 0) {
-                        container.innerHTML = `<span style="background:red; color:white; padding: 2px 6px; border-radius: 50%; font-size: 0.8em;">${count}</span>`;
+                        container.innerHTML = `<span class="badge">${count}</span>`;
                     } else {
                         container.innerHTML = '';
                     }
