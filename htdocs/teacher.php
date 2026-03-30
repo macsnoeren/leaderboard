@@ -214,19 +214,19 @@ include 'admin_header.php';
             </div>
 
             <div class="side-panel">
-                <div class="card" style="border-top: 4px solid #667eea;">
-                    <div class="card-title">➕ Add New Team</div>
+                <div class="card" style="border-top: 5px solid #667eea; background: #fff;">
+                    <div class="card-title" style="color: #667eea; font-size: 1.4em;">➕ Nieuw Team</div>
                     <form method="POST">
                         <input type="hidden" name="action" value="add_team">
-                        <div class="form-group">
-                            <label>Team Naam</label>
-                            <input type="text" name="team_name" placeholder="e.g. Code Ninjas" required>
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label style="color: #555; font-size: 0.9em;">Team Naam</label>
+                            <input type="text" name="team_name" placeholder="Bijv. De Speurders" style="border: 1px solid #ddd; padding: 12px;" required>
                         </div>
-                        <div class="form-group">
-                            <label>E-mail adres</label>
-                            <input type="email" name="email" placeholder="e.g. contact@codeninjas.com" required>
+                        <div class="form-group" style="margin-bottom: 25px;">
+                            <label style="color: #555; font-size: 0.9em;">E-mail adres</label>
+                            <input type="email" name="email" placeholder="begeleider@school.nl" style="border: 1px solid #ddd; padding: 12px;" required>
                         </div>
-                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px;">Team Aanmaken & Uitnodigen</button>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 1em; text-transform: uppercase; letter-spacing: 1px;">🚀 Team Toevoegen</button>
                     </form>
                 </div>
             </div>
