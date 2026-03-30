@@ -101,9 +101,21 @@ if (isset($_GET['ajax'])) {
         .stat-value { font-weight: bold; }
 
         .assignment-meta { display: flex; gap: 20px; margin-top: 15px; font-size: 0.9em; color: #667eea; font-weight: bold; }
-        .assignment-detail-title { font-weight: bold; color: #333; margin-top: 20px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-        .instruction-box { background: #ffffff; padding: 25px; border-radius: 12px; margin-top: 10px; border: 2px solid #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); position: relative; }
-        .instruction-box::before { content: "OPDRACHT"; position: absolute; top: -10px; left: 20px; background: #667eea; color: white; font-size: 0.65em; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+        .assignment-detail-title { font-weight: bold; color: #333; margin-top: 25px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .instruction-box { background: #ffffff; padding: 20px 25px; border-radius: 12px; margin-top: 10px; border: 2px solid #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); position: relative; }
+        .instruction-box::before { content: "INSTRUCTIE"; position: absolute; top: -10px; left: 20px; background: #667eea; color: white; font-size: 0.65em; padding: 2px 8px; border-radius: 4px; font-weight: bold; letter-spacing: 1px; }
+
+        /* Markdown Styling Fixes */
+        .assignment-desc, .instruction-box { font-size: 1rem; line-height: 1.6; color: #4b4f56; }
+        .assignment-desc h1, .instruction-box h1 { font-size: 1.4em; margin: 15px 0 10px 0; color: #333; }
+        .assignment-desc h2, .instruction-box h2 { font-size: 1.25em; margin: 12px 0 8px 0; color: #333; }
+        .assignment-desc h3, .instruction-box h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #333; }
+        .assignment-desc p, .instruction-box p { margin-bottom: 12px; }
+        .assignment-desc ul, .instruction-box ul, .assignment-desc ol, .instruction-box ol { margin-left: 20px; margin-bottom: 15px; }
+        .assignment-desc li, .instruction-box li { margin-bottom: 5px; }
+        .assignment-desc code, .instruction-box code { background: #f0f2f5; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; }
+        .assignment-desc pre, .instruction-box pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 8px; overflow-x: auto; margin-bottom: 15px; }
+        .assignment-desc pre code, .instruction-box pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
 
         /* Main Content Layout */
         main { display: grid; grid-template-columns: 1fr 400px; flex: 1; overflow: hidden; gap: 0; }
@@ -278,7 +290,7 @@ if (isset($_GET['ajax'])) {
             fields.forEach(id => {
                 const el = document.getElementById(id);
                 if (el && el.getAttribute('data-rendered') !== 'true') {
-                    const raw = el.innerText;
+                    const raw = el.textContent;
                     el.innerHTML = marked.parse(raw);
                     el.setAttribute('data-rendered', 'true');
                 }
@@ -310,14 +322,14 @@ if (isset($_GET['ajax'])) {
                         document.getElementById('display-level').innerText = data.level;
                         document.getElementById('display-rank').innerText = data.rank;
                         document.getElementById('assignment-title').innerText = data.assignment_title;
-                        document.getElementById('assignment-desc').innerText = data.assignment_desc;
+                        document.getElementById('assignment-desc').textContent = data.assignment_desc;
                         document.getElementById('assignment-desc').removeAttribute('data-rendered');
 
                         document.getElementById('display-time-limit').innerText = data.time_limit > 0 ? "⏳ Beschikbare tijd: " + data.time_limit + " min" : "";
                         
                         const instrWrapper = document.getElementById('instruction-wrapper');
                         instrWrapper.style.display = data.assignment_instruction ? 'block' : 'none';
-                        document.getElementById('assignment-instruction').innerText = data.assignment_instruction;
+                        document.getElementById('assignment-instruction').textContent = data.assignment_instruction;
                         document.getElementById('assignment-instruction').removeAttribute('data-rendered');
                       
                         const downloadBox = document.getElementById('download-box');
