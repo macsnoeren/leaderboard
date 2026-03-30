@@ -92,3 +92,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         </div>
     </nav>
     <div class="main-content">
+        <?php if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false): ?>
+            <div style="background: #fff3e0; color: #e65100; padding: 10px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #ff9800; font-size: 0.9em; display: flex; align-items: center; gap: 10px;">
+                <span>⚠️</span>
+                <span><strong>Test Modus:</strong> E-mail verzending staat uitgeschakeld in de configuratie. Er worden geen uitnodigingen of level-up berichten verstuurd.</span>
+            </div>
+        <?php endif; ?>

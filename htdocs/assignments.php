@@ -104,85 +104,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // Ophalen van alle assignments
 $assignments = $db->query("SELECT * FROM assignments ORDER BY assignment_number ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+$pageTitle = 'Assignments';
+include 'admin_header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Assignments - Zebrawave</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; display: flex; min-height: 100vh; }
-        .sidebar { width: 260px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: fixed; height: 100vh; }
-        .sidebar-header { padding: 30px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; font-weight: bold; font-size: 1.2em; }
-        .sidebar-nav { flex: 1; padding: 20px 0; }
-        .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
-        .nav-item:hover { background: #f0f2f5; color: #667eea; }
-        .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
-        .badge { background: #f44336; color: white; padding: 2px 7px; border-radius: 10px; font-size: 0.75em; margin-left: auto; }
-        .main-content { margin-left: 260px; flex: 1; padding: 40px; }
-        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
-        .card-title { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 30px; }
-        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; }
-        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn-primary { background: #667eea; color: white; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 15px; border-bottom: 2px solid #f0f2f5; color: #888; font-size: 0.85em; text-transform: uppercase; }
-        td { padding: 15px; border-bottom: 1px solid #f0f2f5; }
-    </style>
-</head>
-<body>
-    <nav class="sidebar">
-        <div class="sidebar-header">Zebrawave Admin</div>
-        <div class="sidebar-nav">
-            <a href="teacher.php" class="nav-item">📊 Dashboard</a>
-            <a href="assignments.php" class="nav-item active">📘 Assignments</a>
-            <a href="messages.php" class="nav-item">
-                ✉️ Messages
-                <span id="unread-badge-container">
-                    <?php if ($unread_total > 0): ?>
-                        <span class="badge"><?= $unread_total ?></span>
-                    <?php endif; ?>
-                </span>
-            </a>
-            <a href="users.php" class="nav-item">👥 Users</a>
-            <a href="audit.php" class="nav-item">📋 Audit Logs</a>
-            <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
-            <a href="password.php" class="nav-item">🔑 Password</a>
-            <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>
-        </div>
-    </nav>
+    <h1 style="margin-bottom: 30px;">📘 Opdrachten Beheer</h1>
 
-    <div class="main-content">
-        <h1 style="margin-bottom: 30px;">📘 Opdrachten Beheer</h1>
+    <?php if (isset($_SESSION['success'])): ?>
+        <div class="success"><?= $_SESSION['success']; unset($_SESSION['success']); ?></div>
+    <?php endif; ?>
+    <?php if (isset($_SESSION['error'])): ?>
+        <div class="error-msg"><?= $_SESSION['error']; unset($_SESSION['error']); ?></div>
+    <?php endif; ?>
 
-        <div class="grid">
+    <div class="dashboard-grid">
+        <div class="side-panel">
             <div class="card">
-                <div class="card-title">Nieuwe Opdracht</div>
+                <div class="card-title">➕ Nieuwe Opdracht</div>
                 <form method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="action" value="add_assignment">
-                    <label>Opdracht Nummer:</label>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Opdracht Nummer</label>
                     <input type="number" name="assignment_number" required>
-                    <label>Titel:</label>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Titel</label>
                     <input type="text" name="title" required>
-                    <label>Beschrijving:</label>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beschrijving</label>
                     <textarea name="description" rows="3"></textarea>
-                    <label>Bestand (PDF/ZIP):</label>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Bestand (PDF/ZIP)</label>
                     <input type="file" name="artifact_file" accept=".pdf,.zip">
+                    </div>
                     <button type="submit" class="btn btn-primary" style="width: 100%;">Toevoegen</button>
                 </form>
             </div>
+        </div>
 
+        <div class="main-panel">
             <div class="card">
-                <div class="card-title">Bestaande Opdrachten</div>
+                <div class="card-title">📂 Bestaande Opdrachten</div>
                 <table>
                     <thead>
                         <tr>
                             <th>#</th>
                             <th>Titel</th>
-                            <th>Bestand</th>
+                            <th style="width: 100px;">Bestand</th>
                             <th>Acties</th>
                         </tr>
                     </thead>
@@ -193,16 +163,16 @@ $assignments = $db->query("SELECT * FROM assignments ORDER BY assignment_number 
                                 <td><strong><?= htmlspecialchars($a['title']) ?></strong></td>
                                 <td>
                                     <?php if ($a['artifact_file']): ?>
-                                        <a href="<?= htmlspecialchars($a['artifact_file']) ?>" target="_blank">PDF</a>
+                                        <a href="<?= htmlspecialchars($a['artifact_file']) ?>" target="_blank" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8em;">Inzien</a>
                                     <?php else: ?>
-                                        -
+                                        <span style="color:#ccc; font-size:0.8em;">Geen file</span>
                                     <?php endif; ?>
                                 </td>
-                                <td>
+                                <td style="text-align: right;">
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Verwijder deze opdracht?');">
                                         <input type="hidden" name="action" value="delete_assignment">
                                         <input type="hidden" name="assignment_id" value="<?= $a['id'] ?>">
-                                        <button type="submit" style="background:none; border:none; color:red; cursor:pointer;">🗑️</button>
+                                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px;">🗑️</button>
                                     </form>
                                 </td>
                             </tr>
@@ -212,5 +182,4 @@ $assignments = $db->query("SELECT * FROM assignments ORDER BY assignment_number 
             </div>
         </div>
     </div>
-</body>
-</html>
+<?php include 'admin_footer.php'; ?>

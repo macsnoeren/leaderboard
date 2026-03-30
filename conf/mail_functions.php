@@ -14,11 +14,15 @@ use PHPMailer\PHPMailer\Exception;
  * Verstuurt een e-mail wanneer een team een level omhoog gaat.
  */
 function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
+    // Controleer of e-mail is ingeschakeld
+    if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false) {
+        return true;
+    }
+
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
         $mail->Timeout = 10;
-        $mail->SMTPConnectTimeout = 5;
         $mail->Host = SMTP_HOST;
         $mail->SMTPAuth = true;
         $mail->Username = SMTP_USER;
@@ -65,11 +69,15 @@ function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
  * Verstuurt een welkomstmail naar een nieuw aangemaakt team.
  */
 function sendWelcomeEmail($to, $team_name, $token) {
+    // Controleer of e-mail is ingeschakeld
+    if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false) {
+        return true;
+    }
+
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
         $mail->Timeout = 10;
-        $mail->SMTPConnectTimeout = 5;
         $mail->Host = SMTP_HOST;
         $mail->SMTPAuth = true;
         $mail->Username = SMTP_USER;
