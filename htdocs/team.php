@@ -244,7 +244,7 @@ if (isset($_GET['ajax'])) {
         let currentLevel = <?= (int)$team['current_level'] ?>;
         let totalAssignments = <?= (int)$total_assignments ?>; // Initialiseer met PHP waarde
 
-        function triggerLevelUp() {
+        function triggerLevelUp(isFinal = false) {
             const overlay = document.getElementById('level-up-overlay');
             if (overlay) overlay.style.display = 'flex';
 
@@ -253,9 +253,12 @@ if (isset($_GET['ajax'])) {
                 spread: 70,
                 origin: { y: 0.6 }
             });
-            setTimeout(() => {
-                location.reload();
-            }, 3000);
+            
+            if (!isFinal) {
+                setTimeout(() => {
+                    location.reload();
+                }, 3000);
+            }
         }
 
         function updateTimer() {
@@ -340,7 +343,8 @@ if (isset($_GET['ajax'])) {
 
                         startTime = data.start_time * 1000;
                         
-                        triggerLevelUp();
+                        const isFinal = data.level > data.total_assignments;
+                        triggerLevelUp(isFinal);
                     }
                     renderMarkdown();
                 });
@@ -351,6 +355,17 @@ if (isset($_GET['ajax'])) {
         updateTimer();
         renderMarkdown();
         scrollToBottom();
+
+        // Als het team al op het eindlevel zit bij het laden van de pagina, toon de overlay direct
+        if (currentLevel > totalAssignments) {
+            const rank = document.getElementById('display-rank').innerText;
+            document.getElementById('overlay-title').innerText = "🏆 KAMPIOENEN! 🏆";
+            document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
+            document.getElementById('overlay-rank').innerText = `Eindpositie: #${rank}`;
+            
+            // Kleine vertraging voor de visuele impact
+            setTimeout(() => triggerLevelUp(true), 500);
+        }
     </script>
 </body>
 </html>
