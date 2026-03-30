@@ -14,11 +14,6 @@
 */
 require_once '../conf/config.php';
 
-if (isset($_SESSION['teacher_logged_in'])) {
-    header('Location: teacher.php');
-    exit;
-}
-
 $error = '';
 
 $db = getDB();
@@ -42,6 +37,12 @@ try {
 // Controleer of er al gebruikers zijn
 $userCount = $db->query("SELECT COUNT(*) FROM teachers")->fetchColumn();
 $setup_mode = ($userCount == 0);
+
+// Alleen doorsturen naar dashboard als we niet in setup-modus zijn en al zijn ingelogd
+if (!$setup_mode && isset($_SESSION['teacher_logged_in'])) {
+    header('Location: teacher.php');
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
