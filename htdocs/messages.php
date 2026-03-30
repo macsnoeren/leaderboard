@@ -154,10 +154,20 @@ if (isset($_GET['ajax'])) {
     </div>
 
     <script>
+        function scrollToBottom() {
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
         function updateChat() {
             <?php if ($selected_team_id): ?>
             fetch('messages.php?team_id=<?= $selected_team_id ?>&ajax=chat')
-                .then(r => r.text()).then(html => document.getElementById('chat-box').innerHTML = html);
+                .then(r => r.text()).then(html => {
+                    document.getElementById('chat-box').innerHTML = html;
+                    scrollToBottom();
+                });
             <?php endif; ?>
             
             fetch('messages.php?ajax=sidebar' + (<?= $selected_team_id ?: '0' ?> ? '&team_id=<?= $selected_team_id ?>' : ''))
@@ -165,6 +175,7 @@ if (isset($_GET['ajax'])) {
         }
 
         setInterval(updateChat, 5000);
+        scrollToBottom();
     </script>
 </body>
 </html>

@@ -157,6 +157,12 @@ if (isset($_GET['ajax'])) {
             border: 1px solid #ddd;
             margin-top: 10px;
         }
+        .messages {
+            max-height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
     </style>
 </head>
 <body>
@@ -223,17 +229,26 @@ if (isset($_GET['ajax'])) {
             document.getElementById('live-timer').innerText = "Tijd bezig: " + display;
         }
 
+        function scrollToBottom() {
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
         function fetchMessages() {
             fetch(window.location.href + '&ajax=1')
                 .then(response => response.text())
                 .then(html => {
                     document.getElementById('chat-box').innerHTML = html;
+                    scrollToBottom();
                 });
         }
 
         setInterval(updateTimer, 1000);
         setInterval(fetchMessages, 5000);
         updateTimer();
+        scrollToBottom();
     </script>
 </body>
 </html>
