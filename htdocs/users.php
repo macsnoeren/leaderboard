@@ -139,76 +139,94 @@ include 'admin_header.php';
             <div class="message"><?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
 
-        <div class="card">
-            <div class="card-title">Nieuwe Docent Toevoegen</div>
-            <form method="POST">
-                <input type="hidden" name="action" value="add_user">
-                <input type="text" name="username" placeholder="Gebruikersnaam" required>
-                <input type="password" name="password" placeholder="Wachtwoord" required>
-                <select name="role" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-right: 10px; vertical-align: middle;">
-                    <option value="user">Docent (User)</option>
-                    <option value="admin">Beheerder (Admin)</option>
-                </select>
-                <label style="display:inline; font-weight: normal;"><input type="checkbox" name="force_change" value="1"> Verplicht wijzigen</label>
-                <button type="submit" class="btn btn-primary">Docent Toevoegen</button>
-            </form>
-        </div>
+        <div class="dashboard-grid">
+            <div class="main-panel">
+                <div class="card">
+                    <div class="card-title">🛡️ Bestaande Docenten</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Gebruikersnaam</th>
+                                <th>Rol</th>
+                                <th>Status</th>
+                                <th style="text-align: right;">Acties</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($users as $u): ?>
+                                <tr>
+                                    <td><?= $u['id'] ?></td>
+                                    <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
+                                    <td><span class="badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= $u['role'] ?></span></td>
+                                    <td>
+                                        <?php if ($u['is_active']): ?>
+                                            <?php if ($u['force_password_change']): ?>
+                                                <span class="badge" style="background:#fbc02d;">⚠️ Wijzigen verplicht</span>
+                                            <?php else: ?>
+                                                <span style="color: #4caf50; font-size: 0.85em;">● Actief</span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="badge" style="background:#f44336;">● Gedeactiveerd</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="text-align: right;">
+                                        <form method="POST" style="display:inline-flex; gap: 5px; align-items: center; justify-content: flex-end;">
+                                            <input type="hidden" name="action" value="reset_password">
+                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                            <input type="text" name="new_password" placeholder="Nieuw wachtwoord" style="width: 130px; padding: 6px;" minlength="6" required>
+                                            <button type="submit" class="btn btn-primary" style="padding: 6px 12px;">Reset</button>
+                                        </form>
+                                        <form method="POST" style="display:inline;">
+                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                            <?php if ($u['is_active']): ?>
+                                                <button type="submit" class="btn btn-outline" style="padding: 6px 12px;" name="action" value="disable_user" title="Deactiveren">🚫</button>
+                                            <?php else: ?>
+                                                <button type="submit" class="btn btn-outline" style="padding: 6px 12px;" name="action" value="enable_user" title="Activeren">✅</button>
+                                            <?php endif; ?>
+                                        </form>
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Permanent verwijderen?');">
+                                            <input type="hidden" name="action" value="delete_user">
+                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                            <button type="submit" class="btn btn-danger" style="padding: 6px 12px;">🗑️</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-        <div class="card">
-            <div class="card-title">Bestaande Docenten</div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Gebruikersnaam</th>
-                        <th>Rol</th>
-                        <th>Status</th>
-                        <th>Acties</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($users as $u): ?>
-                        <tr>
-                            <td><?= $u['id'] ?></td>
-                            <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
-                            <td><span class="badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= $u['role'] ?></span></td>
-                            <td>
-                                <?php if ($u['is_active']): ?>
-                                    <?php if ($u['force_password_change']): ?>
-                                        <span class="badge" style="background:#fbc02d;">⚠️ Wijzigen verplicht</span>
-                                    <?php else: ?>
-                                        <span style="color: #4caf50; font-size: 0.85em;">● Actief</span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span class="badge" style="background:#f44336;">● Gedeactiveerd</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <form method="POST" style="display:inline-flex; gap: 5px; align-items: center;">
-                                    <input type="hidden" name="action" value="reset_password">
-                                    <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                    <input type="text" name="new_password" placeholder="Nieuw wachtwoord" style="width: 140px; padding: 5px;" minlength="6" required>
-                                    <label style="font-size: 0.75em; font-weight: normal;"><input type="checkbox" name="force_change" value="1" checked> Forceer wijziging</label>
-                                    <button type="submit" class="btn btn-primary" style="padding: 5px 10px;">Reset</button>
-                                </form>
-                                <form method="POST" style="display:inline;" onsubmit="return confirm('Verwijder deze docent?')">
-                                    <input type="hidden" name="action" value="delete_user">
-                                    <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                    <?php if ($u['is_active']): ?>
-                                        <button type="submit" class="btn btn-danger" style="padding: 5px 10px;" name="action" value="disable_user">Deactiveren</button>
-                                    <?php else: ?>
-                                        <button type="submit" class="btn btn-primary" style="padding: 5px 10px;" name="action" value="enable_user">Activeren</button>
-                                    <?php endif; ?>
-                                </form>
-                                <form method="POST" style="display:inline;" onsubmit="return confirm('WEET JE ZEKER dat je deze docent permanent wilt verwijderen? Dit kan NIET ongedaan gemaakt worden!');">
-                                    <input type="hidden" name="action" value="delete_user">
-                                    <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                    <button type="submit" class="btn btn-danger" style="padding: 5px 10px;">Verwijderen</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <div class="side-panel">
+                <div class="card" style="border-top: 5px solid #667eea;">
+                    <div class="card-title" style="color: #667eea; font-size: 1.4em;">➕ Nieuwe Docent</div>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add_user">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display:block; margin-bottom:5px; font-size:0.9em;">Gebruikersnaam</label>
+                            <input type="text" name="username" placeholder="Bijv. m.janssen" required>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display:block; margin-bottom:5px; font-size:0.9em;">Wachtwoord</label>
+                            <input type="password" name="password" placeholder="Wachtwoord" required>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display:block; margin-bottom:5px; font-size:0.9em;">Rol</label>
+                            <select name="role">
+                                <option value="user">Docent (User)</option>
+                                <option value="admin">Beheerder (Admin)</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label style="font-weight: normal; font-size: 0.9em; display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" name="force_change" value="1" style="width: auto;"> 
+                                Wachtwoord wijzigen verplichten
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px;">🚀 Toevoegen</button>
+                    </form>
+                </div>
+            </div>
         </div>
 <?php include 'admin_footer.php'; ?>
