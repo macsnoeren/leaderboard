@@ -8,7 +8,7 @@ $db = getDB();
 // 1. Initialiseer de database tabellen
 $db->exec("CREATE TABLE IF NOT EXISTS teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT 'user', force_password_change INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1)");
 $db->exec("CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY AUTOINCREMENT, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE)");
-$db->exec("CREATE TABLE IF NOT EXISTS assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_number INTEGER, title TEXT, description TEXT, artifact_file TEXT)");
+$db->exec("CREATE TABLE IF NOT EXISTS assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT)");
 $db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
 $db->exec("CREATE TABLE IF NOT EXISTS team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
 $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
@@ -17,12 +17,15 @@ $db->exec("CREATE TABLE IF NOT EXISTS team_messages (id INTEGER PRIMARY KEY AUTO
 // 2. Voeg standaard assignments toe als deze nog niet bestaan
 $count = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 if ($count == 0) {
-    $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, artifact_file) VALUES (?, ?, ?, ?)");
+    $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, instruction, criteria, time_limit, artifact_file) VALUES (?, ?, ?, ?, ?, ?, ?)");
     for ($i = 1; $i <= 14; $i++) {
         $stmt->execute([
             $i,
             "Assignment $i",
             "Assignment $i description",
+            "Gedetailleerde instructies voor opdracht $i...",
+            "Het antwoord moet voldoen aan de gestelde eisen voor level $i.",
+            60,
             "artifacts/assignment$i.pdf"
         ]);
     }

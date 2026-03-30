@@ -35,6 +35,9 @@ try {
             'assignment_number' => $a['assignment_number'],
             'title'             => $a['title'],
             'description'       => $a['description'],
+            'instruction'       => $a['instruction'],
+            'criteria'          => $a['criteria'],
+            'time_limit'        => $a['time_limit'],
             'artifact_file'     => $a['artifact_file'] ? basename($a['artifact_file']) : null
         ];
 

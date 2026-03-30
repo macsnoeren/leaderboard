@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $assignment_number = (int)$_POST['assignment_number'];
         $title = trim($_POST['title']);
         $description = trim($_POST['description']);
+        $instruction = trim($_POST['instruction'] ?? '');
+        $criteria = trim($_POST['criteria'] ?? '');
+        $time_limit = (int)($_POST['time_limit'] ?? 0);
 
         $artifact_file = null;
 
@@ -69,9 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         // Database invoegen
-        $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, artifact_file)
-                              VALUES (?, ?, ?, ?)");
-        $stmt->execute([$assignment_number, $title, $description, $artifact_file]);
+        $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, instruction, criteria, time_limit, artifact_file)
+                              VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file]);
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'ASSIGNMENT_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added assignment #$assignment_number: $title"]);
 
         $_SESSION['success'] = "Assignment added successfully!";
@@ -134,6 +137,18 @@ include 'admin_header.php';
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beschrijving</label>
                     <textarea name="description" rows="3"></textarea>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">De Echte Opdracht (Instructie)</label>
+                        <textarea name="instruction" rows="4" placeholder="Wat moeten ze precies doen?"></textarea>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beoordelingscriteria</label>
+                        <textarea name="criteria" rows="3" placeholder="Waar moet het antwoord aan voldoen?"></textarea>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Tijdslimiet (minuten)</label>
+                        <input type="number" name="time_limit" placeholder="0 = onbeperkt">
                     </div>
                     <div style="margin-bottom: 20px;">
                         <label style="display:block; margin-bottom:5px; font-size:0.9em;">Bestand (PDF/ZIP)</label>

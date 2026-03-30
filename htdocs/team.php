@@ -66,6 +66,9 @@ if (isset($_GET['ajax'])) {
         'rank' => $rank,
         'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
         'assignment_desc' => $assignment ? nl2br(htmlspecialchars($assignment['description'])) : 'Wacht op instructies.',
+        'assignment_instruction' => $assignment ? nl2br(htmlspecialchars($assignment['instruction'])) : '',
+        'assignment_criteria' => $assignment ? nl2br(htmlspecialchars($assignment['criteria'])) : '',
+        'time_limit' => $assignment ? (int)$assignment['time_limit'] : 0,
         'has_file' => !empty($assignment['artifact_file']),
         'start_time' => $startTime
     ]);
@@ -91,6 +94,11 @@ if (isset($_GET['ajax'])) {
         .stat-item { display: flex; flex-direction: column; align-items: center; }
         .stat-label { font-size: 0.7em; text-transform: uppercase; opacity: 0.8; letter-spacing: 1px; }
         .stat-value { font-weight: bold; }
+
+        .assignment-meta { display: flex; gap: 20px; margin-top: 15px; font-size: 0.9em; color: #667eea; font-weight: bold; }
+        .assignment-detail-title { font-weight: bold; color: #333; margin-top: 20px; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .instruction-box { background: #f0f4ff; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #667eea; }
+        .criteria-box { background: #fffde7; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #fbc02d; font-size: 0.95em; }
 
         /* Main Content Layout */
         main { display: grid; grid-template-columns: 1fr 400px; flex: 1; overflow: hidden; gap: 0; }
@@ -171,6 +179,20 @@ if (isset($_GET['ajax'])) {
                 <?php if ($assignment): ?>
                     <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
                     <div class="assignment-desc" id="assignment-desc"><?= nl2br(htmlspecialchars($assignment['description'])) ?></div>
+                    
+                    <div class="assignment-meta">
+                        <span id="display-time-limit"><?= ($assignment['time_limit'] > 0) ? "⏳ Beschikbare tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
+                    </div>
+
+                    <div id="instruction-wrapper" style="<?= empty($assignment['instruction']) ? 'display:none;' : '' ?>">
+                        <div class="assignment-detail-title">De Opdracht</div>
+                        <div class="instruction-box" id="assignment-instruction"><?= nl2br(htmlspecialchars($assignment['instruction'])) ?></div>
+                    </div>
+
+                    <div id="criteria-wrapper" style="<?= empty($assignment['criteria']) ? 'display:none;' : '' ?>">
+                        <div class="assignment-detail-title">Criteria</div>
+                        <div class="criteria-box" id="assignment-criteria"><?= nl2br(htmlspecialchars($assignment['criteria'])) ?></div>
+                    </div>
                     
                     <div class="download-box" id="download-box" style="<?= empty($assignment['artifact_file']) ? 'display: none;' : '' ?>">
                         <?php if ($download_count < $max_downloads): ?>
@@ -278,6 +300,16 @@ if (isset($_GET['ajax'])) {
                         document.getElementById('display-rank').innerText = data.rank;
                         document.getElementById('assignment-title').innerText = data.assignment_title;
                         document.getElementById('assignment-desc').innerHTML = data.assignment_desc;
+
+                        document.getElementById('display-time-limit').innerText = data.time_limit > 0 ? "⏳ Beschikbare tijd: " + data.time_limit + " min" : "";
+                        
+                        const instrWrapper = document.getElementById('instruction-wrapper');
+                        instrWrapper.style.display = data.assignment_instruction ? 'block' : 'none';
+                        document.getElementById('assignment-instruction').innerHTML = data.assignment_instruction;
+
+                        const critWrapper = document.getElementById('criteria-wrapper');
+                        critWrapper.style.display = data.assignment_criteria ? 'block' : 'none';
+                        document.getElementById('assignment-criteria').innerHTML = data.assignment_criteria;
                       
                         const downloadBox = document.getElementById('download-box');
                         if (downloadBox) {

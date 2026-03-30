@@ -35,7 +35,7 @@ try {
     echo "Huidige opdrachten database opschonen...\n";
     $db->exec("DELETE FROM assignments");
     
-    $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, artifact_file) VALUES (?, ?, ?, ?)");
+    $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, instruction, criteria, time_limit, artifact_file) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
     foreach ($assignments as $a) {
         $newArtifactPath = null;
@@ -55,6 +55,9 @@ try {
             $a['assignment_number'],
             $a['title'],
             $a['description'],
+            $a['instruction'] ?? '',
+            $a['criteria'] ?? '',
+            $a['time_limit'] ?? 0,
             $newArtifactPath
         ]);
         

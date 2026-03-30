@@ -24,6 +24,13 @@ try {
         $db->exec("ALTER TABLE teachers ADD COLUMN is_active INTEGER DEFAULT 1");
     } catch (PDOException $e) {}
 
+    // 0.3 Voeg nieuwe velden toe aan assignments
+    try {
+        $db->exec("ALTER TABLE assignments ADD COLUMN instruction TEXT");
+        $db->exec("ALTER TABLE assignments ADD COLUMN criteria TEXT");
+        $db->exec("ALTER TABLE assignments ADD COLUMN time_limit INTEGER DEFAULT 0");
+    } catch (PDOException $e) {}
+
     // 1. Voeg level_updated_at toe
     try {
         $db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP");
