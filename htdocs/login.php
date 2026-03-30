@@ -35,8 +35,14 @@ try {
 } catch (PDOException $e) { /* Kolom bestaat nog niet of tabel is bezet */ }
 
 // Controleer of er al gebruikers zijn
-$userCount = $db->query("SELECT COUNT(*) FROM teachers")->fetchColumn();
-$setup_mode = ($userCount == 0);
+try {
+    $res = $db->query("SELECT id FROM teachers LIMIT 1");
+    $firstUser = $res ? $res->fetch() : false;
+    $setup_mode = ($firstUser === false);
+} catch (PDOException $e) {
+    // Als de tabel nog niet bestaat of er een fout optreedt, gaan we uit van setup-modus
+    $setup_mode = true;
+}
 
 // Alleen doorsturen naar dashboard als we niet in setup-modus zijn en al zijn ingelogd
 if (!$setup_mode && isset($_SESSION['teacher_logged_in'])) {
