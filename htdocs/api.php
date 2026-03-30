@@ -30,7 +30,7 @@ if (!$stmt->fetch()) {
 
 $action = $_GET['action'] ?? '';
 
-// Actie: Haal alle team-antwoorden op die nog geen AI suggestie hebben voor hun huidige level
+// Actie: Haal alle team-antwoorden op die nog geen AI suggestie hebben voor hun laatste bericht
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
     $query = "
         SELECT 
@@ -41,7 +41,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
         JOIN assignments a ON t.current_level = a.assignment_number
         JOIN team_messages tm ON t.id = tm.team_id AND t.current_level = tm.assignment_number
         WHERE tm.sender = 'team'
+        -- Pak alleen het allerlaatste bericht van het team voor dit level
         AND tm.id IN (SELECT MAX(id) FROM team_messages WHERE sender = 'team' GROUP BY team_id, assignment_number)
+        -- Controleer of er nog geen AI suggestie bestaat die nieuwer is dan dit teambericht
+        AND NOT EXISTS (
+            SELECT 1 FROM team_messages 
+            WHERE team_id = t.id AND assignment_number = t.current_level 
+            AND sender = 'suggestion' AND id > tm.id
+        )
         ORDER BY tm.created_at DESC
     ";
     $stmt = $db->query($query);

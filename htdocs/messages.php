@@ -25,6 +25,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
+// Handle verwijderen van suggestie
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reject_suggestion') {
+    $msg_id = (int)$_POST['message_id'];
+    $stmt = $db->prepare("DELETE FROM team_messages WHERE id = ? AND sender = 'suggestion'");
+    $stmt->execute([$msg_id]);
+    $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'MSG_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Rejected and deleted AI suggestion ID $msg_id"]);
+    header("Location: messages.php" . ($selected_team_id ? "?team_id=$selected_team_id" : ""));
+    exit;
+}
+
 // Handle level up vanuit chat
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'level_up') {
     $team_id = (int)$_POST['team_id'];
@@ -94,7 +104,10 @@ if (isset($_GET['ajax'])) {
             echo '<small>' . ($m['sender'] === 'team' ? 'Team' : 'Jij') . ' - ' . $m['created_at'] . '</small><br>';
             echo '<div class="msg-body">' . nl2br(htmlspecialchars($m['message'])) . '</div>';
             if ($m['sender'] === 'suggestion') {
-                echo '<button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em; margin-top: 8px;" onclick="useSuggestion(this)">Overnemen</button>';
+                echo '<div style="display:flex; gap:5px; margin-top:8px;">';
+                echo '<button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em;" onclick="useSuggestion(this)">Overnemen</button>';
+                echo '<button class="btn btn-danger" style="padding: 2px 8px; font-size: 0.75em; background:#fff1f0;" onclick="rejectSuggestion(' . $m['id'] . ')">Verwerpen</button>';
+                echo '</div>';
             }
             echo '</div>';
         }
@@ -180,7 +193,10 @@ include 'admin_header.php';
                                 <small><?= $m['sender'] === 'team' ? 'Team' : 'Jij' ?> - <?= $m['created_at'] ?></small><br>
                                 <div class="msg-body"><?= nl2br(htmlspecialchars($m['message'])) ?></div>
                                 <?php if ($m['sender'] === 'suggestion'): ?>
-                                    <button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em; margin-top: 8px;" onclick="useSuggestion(this)">Overnemen</button>
+                                    <div style="display:flex; gap:5px; margin-top:8px;">
+                                        <button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em;" onclick="useSuggestion(this)">Overnemen</button>
+                                        <button class="btn btn-danger" style="padding: 2px 8px; font-size: 0.75em; background:#fff1f0;" onclick="rejectSuggestion(<?= $m['id'] ?>)">Verwerpen</button>
+                                    </div>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
@@ -241,6 +257,18 @@ $extraJS = "
                 textarea.value = msgBody;
                 textarea.focus();
             }
+        }
+
+        function rejectSuggestion(id) {
+            if (!confirm('Weet je zeker dat je deze AI suggestie wilt verwijderen?')) return;
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.innerHTML = `
+                <input type=\"hidden\" name=\"action\" value=\"reject_suggestion\">
+                <input type=\"hidden\" name=\"message_id\" value=\"\${id}\">
+            `;
+            document.body.appendChild(form);
+            form.submit();
         }
 
         function renderAdminMarkdown() {
