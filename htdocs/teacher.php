@@ -244,46 +244,55 @@ include 'admin_header.php';
         
         <div class="dashboard-grid">
             <div class="card">
-                <div class="card-title">🛡️ Manage Teams</div>
+                <div class="card-title">🛡️ Geregistreerde Teams</div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th>Team</th>
-                                <th>Level</th>
+                                <th style="width: 50px;">#</th>
+                                <th>Team Details</th>
+                                <th style="text-align: center;">Level</th>
                                 <th>Progress</th>
-                                <th>Actions</th>
+                                <th style="text-align: right;">Acties</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($teams as $team): ?>
+                            <?php foreach ($teams as $index => $team): ?>
                                 <tr>
+                                    <td style="font-weight: bold; color: #667eea; vertical-align: middle;">
+                                        <?= $index + 1 ?>
+                                    </td>
                                     <td>
                                         <div class="team-main-info">
                                             <a href="team.php?token=<?= $team['access_token'] ?>" target="_blank" class="team-name-link">
                                                 <?= htmlspecialchars($team['team_name']) ?>
                                             </a>
-                                            <span class="team-email"><?= htmlspecialchars($team['email']) ?></span>
+                                            <div style="display: flex; gap: 10px; align-items: center; margin-top: 4px;">
+                                                <span class="team-email" style="font-size: 0.85em; color: #666;">📧 <?= htmlspecialchars($team['email']) ?></span>
+                                                <span style="font-size: 0.75em; color: #aaa;">🕒 <?= date('H:i', strtotime($team['level_updated_at'])) ?></span>
+                                            </div>
                                         </div>
                                     </td>
-                                    <td>
-                                        <strong><?= $team['current_level'] ?></strong> / <?= $total_assignments ?>
+                                    <td style="text-align: center; vertical-align: middle;">
+                                        <span style="background: #f0f4ff; color: #667eea; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 1.1em;">
+                                            <?= $team['current_level'] ?>
+                                        </span>
                                     </td>
-                                    <td>
+                                    <td style="vertical-align: middle;">
                                         <?php $progress = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0; ?>
                                         <div class="progress-wrapper">
-                                            <div class="progress-bg">
+                                            <div class="progress-bg" style="height: 6px; background: #eee;">
                                                 <div class="progress-fill" style="width: <?= $progress ?>%"></div>
                                             </div>
-                                            <div class="progress-text"><?= round($progress) ?>%</div>
+                                            <div class="progress-text" style="font-size: 0.75em; font-weight: 600; color: #888;"><?= round($progress) ?>% voltooid</div>
                                         </div>
                                     </td>
-                                    <td>
-                                        <div class="action-btns">
+                                    <td style="text-align: right; vertical-align: middle;">
+                                        <div class="action-btns" style="justify-content: flex-end;">
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="action" value="level_up">
                                                 <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                                <button type="submit" class="btn btn-success" style="padding: 5px 10px;"
+                                                <button type="submit" class="btn btn-success" style="padding: 6px 12px; border-radius: 6px;"
                                                     <?= $team['current_level'] >= $total_assignments ? 'disabled' : '' ?>>
                                                     ⬆️
                                                 </button>
@@ -291,14 +300,14 @@ include 'admin_header.php';
                                             <form method="POST" style="display: inline;">
                                                 <input type="hidden" name="action" value="resend_level_mail">
                                                 <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                                <button type="submit" class="btn btn-outline" style="padding: 5px 10px;" title="Resend Level Mail">
+                                                <button type="submit" class="btn btn-outline" style="padding: 6px 12px; border-radius: 6px;" title="Resend Level Mail">
                                                     📧
                                                 </button>
                                             </form>
                                             <form method="POST" style="display: inline;" onsubmit="return confirm('Delete team?');">
                                                 <input type="hidden" name="action" value="delete_team">
                                                 <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                                <button type="submit" class="btn btn-danger" style="padding: 5px 10px;">
+                                                <button type="submit" class="btn btn-danger" style="padding: 6px 12px; border-radius: 6px;">
                                                     🗑️
                                                 </button>
                                             </form>
