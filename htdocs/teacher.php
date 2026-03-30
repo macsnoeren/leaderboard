@@ -80,6 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $team_name = trim($_POST['team_name']);
         $email = trim($_POST['email']);
         $access_token = bin2hex(random_bytes(32));
+
+        // Controleer op unieke teamnaam
+        $stmt = $db->prepare("SELECT COUNT(*) FROM teams WHERE team_name = ?");
+        $stmt->execute([$team_name]);
+        if ($stmt->fetchColumn() > 0) {
+            $_SESSION['error'] = "Fout: Een team met deze naam bestaat al. Kies een andere naam.";
+            header('Location: teacher.php');
+            exit;
+        }
         
         $stmt = $db->prepare("INSERT INTO teams (team_name, email, access_token, level_updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)");
         $stmt->execute([$team_name, $email, $access_token]);
