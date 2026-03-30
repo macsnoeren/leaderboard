@@ -16,6 +16,17 @@ if (!$team) {
     die("Toegang geweigerd: Ongeldige token.");
 }
 
+// Handle bericht versturen
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'send_message') {
+    $msg = trim($_POST['message'] ?? '');
+    if (!empty($msg)) {
+        $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'team', ?)");
+        $stmt->execute([$team['id'], $team['current_level'], $msg]);
+        header("Location: team.php?token=" . $token);
+        exit;
+    }
+}
+
 // Bereken de ranking op basis van dezelfde criteria als het leaderboard
 $allTeams = $db->query("SELECT id FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_COLUMN);
 $rank = array_search($team['id'], $allTeams) + 1;
@@ -33,6 +44,11 @@ $stmt = $db->prepare("SELECT download_count FROM team_downloads WHERE team_id = 
 $stmt->execute([$team['id'], $team['current_level']]);
 $download_count = $stmt->fetchColumn() ?: 0;
 $max_downloads = 10;
+
+// Haal chatberichten op voor dit level
+$stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? ORDER BY created_at ASC");
+$stmt->execute([$team['id'], $team['current_level']]);
+$messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -100,6 +116,36 @@ $max_downloads = 10;
             color: #333;
             font-family: monospace;
         }
+        .chat-container {
+            margin-top: 40px;
+            text-align: left;
+            border-top: 2px solid #eee;
+            padding-top: 20px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .message.team {
+            background: #e3f2fd;
+            margin-left: auto;
+            border: 1px solid #bbdefb;
+        }
+        .message.teacher {
+            background: #f1f8e9;
+            margin-right: auto;
+            border: 1px solid #dcedc8;
+        }
+        .msg-meta { font-size: 0.75em; color: #888; margin-bottom: 4px; }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -125,6 +171,25 @@ $max_downloads = 10;
             <div class="remaining">Downloads gebruikt: <?= $download_count ?> / <?= $max_downloads ?></div>
         <?php else: ?>
             <p>Geen opdracht beschikbaar voor dit level. Wacht op instructies.</p>
+        <?php endif; ?>
+
+        <?php if ($team['current_level'] > 0): ?>
+            <div class="chat-container">
+                <h3>Stuur je antwoord of stel een vraag</h3>
+                <div class="messages">
+                    <?php foreach ($messages as $m): ?>
+                        <div class="message <?= $m['sender'] ?>">
+                            <div class="msg-meta"><?= $m['sender'] === 'team' ? 'Jullie' : 'Docent' ?> - <?= $m['created_at'] ?></div>
+                            <div><?= nl2br(htmlspecialchars($m['message'])) ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <form method="POST">
+                    <input type="hidden" name="action" value="send_message">
+                    <textarea name="message" rows="3" placeholder="Typ hier je antwoord..." required></textarea>
+                    <button type="submit" class="download-btn" style="width:100%; margin-top:10px; border:none;">Bericht versturen</button>
+                </form>
+            </div>
         <?php endif; ?>
     </div>
 

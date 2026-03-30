@@ -365,6 +365,7 @@ function sendLevelUpEmail($to, $team_name, $level) {
              <a target="_leaderboard" href="index.php" class="logout">Leaderboard</a> |
              <a href="assignments.php" class="logout">Assignments</a> |
              <a href="users.php" class="logout">Users</a> |
+             <a href="messages.php" class="logout">Messages</a> |
              <a href="audit.php" class="logout">Audit Logs</a> |
              <a href="password.php" class="logout">Change password</a> |
              <a href="logout.php" class="logout">Logout</a>
