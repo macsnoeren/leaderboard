@@ -52,12 +52,15 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // AJAX endpoint voor live updates
 if (isset($_GET['ajax'])) {
+    $html = '';
     foreach ($messages as $m) {
-        echo '<div class="message ' . $m['sender'] . '">';
-        echo '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
-        echo '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
-        echo '</div>';
+        $html .= '<div class="message ' . $m['sender'] . '">';
+        $html .= '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
+        $html .= '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
+        $html .= '</div>';
     }
+    header('Content-Type: application/json');
+    echo json_encode(['html' => $html, 'level' => (int)$team['current_level']]);
     exit;
 }
 ?>
@@ -67,6 +70,7 @@ if (isset($_GET['ajax'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Team Dashboard - <?= htmlspecialchars($team['team_name']) ?></title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -212,6 +216,18 @@ if (isset($_GET['ajax'])) {
 
     <script>
         const startTime = <?= $startTime ?> * 1000;
+        let currentLevel = <?= (int)$team['current_level'] ?>;
+
+        function triggerLevelUp() {
+            confetti({
+                particleCount: 150,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        }
 
         function updateTimer() {
             const now = new Date().getTime();
@@ -240,13 +256,17 @@ if (isset($_GET['ajax'])) {
 
         function fetchMessages() {
             fetch(window.location.href + '&ajax=1')
-                .then(response => response.text())
-                .then(html => {
+                .then(response => response.json())
+                .then(data => {
                     const chatBox = document.getElementById('chat-box');
                     // Alleen scrollen en updaten als er daadwerkelijk nieuwe berichten zijn
-                    if (chatBox.innerHTML !== html) {
-                        chatBox.innerHTML = html;
+                    if (chatBox && chatBox.innerHTML !== data.html) {
+                        chatBox.innerHTML = data.html;
                         scrollToBottom();
+                    }
+                    if (data.level > currentLevel) {
+                        currentLevel = data.level;
+                        triggerLevelUp();
                     }
                 });
         }

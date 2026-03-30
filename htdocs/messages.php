@@ -3,12 +3,65 @@ session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php';
 
+require_once 'PHPMailer/src/PHPMailer.php';
+require_once 'PHPMailer/src/SMTP.php';
+require_once 'PHPMailer/src/Exception.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
     exit;
 }
 
 $db = getDB();
+
+function sendLevelUpEmail($to, $team_id, $team_name, $level) {
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = SMTP_HOST;
+        $mail->SMTPAuth = true;
+        $mail->Username = SMTP_USER;
+        $mail->Password = SMTP_PASS;
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = SMTP_PORT;
+
+        $mail->setFrom(FROM_EMAIL, FROM_NAME);
+        $mail->addAddress($to, $team_name);
+
+        $mail->isHTML(true);
+        $mail->Subject = "$team_name: Gefeliciteerd! Level $level is behaald!";
+
+        $token = bin2hex(random_bytes(32));
+        $expires_at = date('Y-m-d H:i:s', time() + 86400);
+
+        $stmt = getDB()->prepare("INSERT INTO download_tokens (team_id, level, token, expires_at) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$team_id, $level, $token, $expires_at]);
+
+        $download_link = BASE_URL . "/download.php?token=$token";
+        
+        $mail->Body = "
+          <html>
+          <body style='font-family: Arial, sans-serif;'>
+          <h2>Gefeliciteerd $team_name!</h2>
+             <p>Jullie hebben level $level behaald!</p>
+             <p>Klik op de onderstaande link om de documenten te krijgen voor de volgende opdracht:</p>
+             <p><a href='$download_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Download Artifacts</a></p>
+             <p>Ga vooral zo door! Goed bezig!!</p>
+             </body>
+            </html>
+        ";
+
+        $mail->AltBody = "Gefeliciteerd $team_name! Je hebt level $level behaald. Download de volgende opdracht: $download_link";
+
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        return $mail->ErrorInfo;
+    }
+}
 
 // Handle antwoord van docent
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reply') {
@@ -20,6 +73,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'teacher', ?)");
         $stmt->execute([$team_id, $lvl, $msg]);
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'MSG_REPLY', ?)")->execute([$_SESSION['teacher_id'], "Replied to team ID $team_id on level $lvl"]);
+        header("Location: messages.php?team_id=$team_id");
+        exit;
+    }
+}
+
+// Handle level up vanuit chat
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'level_up') {
+    $team_id = (int)$_POST['team_id'];
+    
+    $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
+    $stmt->execute([$team_id]);
+    $team = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($team) {
+        $new_level = $team['current_level'] + 1;
+        $db->prepare("UPDATE teams SET current_level = ?, level_updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+           ->execute([$new_level, $team_id]);
+        
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_UPDATE', ?)")
+           ->execute([$_SESSION['teacher_id'], "Team '{$team['team_name']}' level up via chat naar $new_level"]);
+        
+        sendLevelUpEmail($team['email'], $team_id, $team['team_name'], $new_level);
         header("Location: messages.php?team_id=$team_id");
         exit;
     }
@@ -126,8 +201,17 @@ if (isset($_GET['ajax'])) {
             
             <?php if ($assignment): ?>
                 <div class="assignment-info">
-                    <strong>Huidige Opdracht: <?= htmlspecialchars($assignment['title']) ?></strong><br>
-                    <?= nl2br(htmlspecialchars($assignment['description'])) ?>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <strong>Huidige Opdracht: <?= htmlspecialchars($assignment['title']) ?></strong><br>
+                            <?= nl2br(htmlspecialchars($assignment['description'])) ?>
+                        </div>
+                        <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');">
+                            <input type="hidden" name="action" value="level_up">
+                            <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
+                            <button type="submit" style="background: #4caf50; margin-top: 0;">Level Up!</button>
+                        </form>
+                    </div>
                 </div>
             <?php endif; ?>
 
