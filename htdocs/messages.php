@@ -14,59 +14,7 @@ if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
     exit;
 }
-
 $db = getDB();
-
-// Tel ongelezen berichten voor de sidebar badge
-$unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
-
-function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
-    $mail = new PHPMailer(true);
-    try {
-        $mail->isSMTP();
-        $mail->Timeout = 10;
-        $mail->SMTPConnectTimeout = 5;
-        $mail->Host = SMTP_HOST;
-        $mail->SMTPAuth = true;
-        $mail->Username = SMTP_USER;
-        $mail->Password = SMTP_PASS;
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = SMTP_PORT;
-
-        $mail->setFrom(FROM_EMAIL, FROM_NAME);
-        $mail->addAddress($to, $team_name);
-
-        $mail->isHTML(true);
-        $mail->Subject = "$team_name: Gefeliciteerd! Level $level is behaald!";
-
-        $token = bin2hex(random_bytes(32));
-        $expires_at = date('Y-m-d H:i:s', time() + 86400);
-
-        $stmt = $db->prepare("INSERT INTO download_tokens (team_id, level, token, expires_at) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$team_id, $level, $token, $expires_at]);
-
-        $download_link = BASE_URL . "/download.php?token=$token";
-        
-        $mail->Body = "
-          <html>
-          <body style='font-family: Arial, sans-serif;'>
-          <h2>Gefeliciteerd $team_name!</h2>
-             <p>Jullie hebben level $level behaald!</p>
-             <p>Klik op de onderstaande link om de documenten te krijgen voor de volgende opdracht:</p>
-             <p><a href='$download_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Download Artifacts</a></p>
-             <p>Ga vooral zo door! Goed bezig!!</p>
-             </body>
-            </html>
-        ";
-
-        $mail->AltBody = "Gefeliciteerd $team_name! Je hebt level $level behaald. Download de volgende opdracht: $download_link";
-
-        $mail->send();
-        return true;
-    } catch (Exception $e) {
-        return $mail->ErrorInfo;
-    }
-}
 
 // Handle antwoord van docent
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reply') {
@@ -168,74 +116,24 @@ if (isset($_GET['ajax'])) {
     exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Berichten Beheer</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; display: flex; min-height: 100vh; }
-        
-        /* Sidebar Navigation */
-        .sidebar-main { width: 260px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: fixed; height: 100vh; }
-        .sidebar-header { padding: 30px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; font-weight: bold; font-size: 1.2em; }
-        .sidebar-nav { flex: 1; padding: 20px 0; }
-        .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
-        .nav-item:hover { background: #f0f2f5; color: #667eea; }
-        .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
-        .badge { background: #f44336; color: white; padding: 2px 7px; border-radius: 10px; font-size: 0.75em; margin-left: auto; }
+$pageTitle = 'Berichten';
+$extraCSS = '
+<style>
+    .main-content { display: flex; height: 100vh; overflow: hidden; padding: 0; }
+    .team-list-panel { width: 300px; background: white; border-right: 1px solid #ddd; overflow-y: auto; display: flex; flex-direction: column; }
+    .team-list-header { padding: 20px; border-bottom: 1px solid #eee; font-weight: bold; }
+    .chat-area { flex: 1; padding: 40px; display: flex; flex-direction: column; overflow-y: auto; }
+    .team-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; text-decoration: none; color: #333; display: block; }
+    .team-item:hover, .team-item.active { background: #f0f4ff; }
+    .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .messages-box { flex: 1; height: 500px; overflow-y: auto; margin-bottom: 20px; padding: 10px; display: flex; flex-direction: column; min-height: 0; }
+    .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 70%; }
+    .message.team { background: #e3f2fd; align-self: flex-start; }
+    .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
+</style>';
 
-        /* Messages Layout */
-        .main-content { margin-left: 260px; flex: 1; display: flex; height: 100vh; overflow: hidden; }
-        .team-list-panel { width: 300px; background: white; border-right: 1px solid #ddd; overflow-y: auto; display: flex; flex-direction: column; }
-        .team-list-header { padding: 20px; border-bottom: 1px solid #eee; font-weight: bold; }
-        .chat-area { flex: 1; padding: 40px; display: flex; flex-direction: column; overflow-y: auto; }
-
-        .team-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; text-decoration: none; color: #333; display: block; }
-        .team-item:hover, .team-item.active { background: #f0f4ff; }
-        .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .messages-box { 
-            flex: 1; 
-            height: 500px; 
-            overflow-y: auto; 
-            margin-bottom: 20px; 
-            padding: 10px; 
-            display: flex; 
-            flex-direction: column; 
-            min-height: 0;
-        }
-        .message { margin-bottom: 10px; padding: 10px; border-radius: 5px; max-width: 70%; }
-        .message.team { background: #e3f2fd; align-self: flex-start; }
-        .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
-        textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
-        button { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 10px; }
-        .assignment-info { background: #fffde7; padding: 15px; border-radius: 10px; border-left: 5px solid #fbc02d; margin-bottom: 20px; font-size: 0.9em; }
-    </style>
-</head>
-<body>
-    <nav class="sidebar-main">
-        <div class="sidebar-header">Zebrawave Admin</div>
-        <div class="sidebar-nav">
-            <a href="teacher.php" class="nav-item">📊 Dashboard</a>
-            <a href="assignments.php" class="nav-item">📘 Assignments</a>
-            <a href="messages.php" class="nav-item active">
-                ✉️ Messages
-                <span id="unread-badge-container">
-                    <?php if ($unread_total > 0): ?>
-                        <span class="badge"><?= $unread_total ?></span>
-                    <?php endif; ?>
-                </span>
-            </a>
-            <a href="users.php" class="nav-item">👥 Users</a>
-            <a href="audit.php" class="nav-item">📋 Audit Logs</a>
-            <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
-            <a href="password.php" class="nav-item">🔑 Password</a>
-            <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>
-        </div>
-    </nav>
-
-    <div class="main-content">
+include 'admin_header.php';
+?>
         <div class="team-list-panel" id="sidebar-list">
             <div class="team-list-header">Teams</div>
             <?php foreach ($teams_with_msgs as $t): ?>
@@ -295,6 +193,8 @@ if (isset($_GET['ajax'])) {
         </div>
     </div>
 
+<?php
+$extraJS = "
     <script>
         function scrollToBottom() {
             const chatBox = document.getElementById('chat-box');
@@ -304,7 +204,6 @@ if (isset($_GET['ajax'])) {
                 }, 50);
             }
         }
-
         function updateChat() {
             <?php if ($selected_team_id): ?>
             fetch('messages.php?team_id=<?= $selected_team_id ?>&ajax=chat')
@@ -320,9 +219,7 @@ if (isset($_GET['ajax'])) {
             fetch('messages.php?ajax=sidebar' + (<?= $selected_team_id ?: '0' ?> ? '&team_id=<?= $selected_team_id ?>' : ''))
                 .then(r => r.text()).then(html => document.getElementById('sidebar-list').innerHTML = `<div class="team-list-header">Teams</div>${html}`);
         }
-
         setInterval(updateChat, 5000);
         scrollToBottom();
-    </script>
-</body>
-</html>
+    </script>";
+include 'admin_footer.php'; ?>

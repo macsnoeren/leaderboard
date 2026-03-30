@@ -49,7 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (!empty($username) && !empty($password)) {
         $password_hash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role) VALUES (?, ?, 'admin')");
+        // De eerste gebruiker wordt altijd als 'admin' aangemaakt
+        $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role, force_password_change) VALUES (?, ?, 'admin', 0)");
         $stmt->execute([$username, $password_hash]);
         
         $new_id = $db->lastInsertId();
