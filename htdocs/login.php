@@ -37,7 +37,7 @@ if (isset($_SESSION['teacher_logged_in'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = $_POST['username'] ?? '';
+    $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
     
     $stmt = $db->prepare("SELECT * FROM teachers WHERE username = ?");
