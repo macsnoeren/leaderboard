@@ -37,6 +37,7 @@ $teams_with_msgs = $db->query("
 $selected_team_id = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
 $chat_messages = [];
 $selected_team = null;
+$assignment = null;
 
 if ($selected_team_id) {
     $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
@@ -47,6 +48,11 @@ if ($selected_team_id) {
         // Markeer berichten als gelezen
         $db->prepare("UPDATE team_messages SET is_read = 1 WHERE team_id = ? AND sender = 'team' AND assignment_number = ?")
            ->execute([$selected_team_id, $selected_team['current_level']]);
+
+        // Haal assignment info op
+        $stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
+        $stmt->execute([$selected_team['current_level']]);
+        $assignment = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? ORDER BY created_at ASC");
         $stmt->execute([$selected_team_id, $selected_team['current_level']]);
@@ -96,6 +102,7 @@ if (isset($_GET['ajax'])) {
         .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
         textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
         button { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+        .assignment-info { background: #fffde7; padding: 15px; border-radius: 10px; border-left: 5px solid #fbc02d; margin-bottom: 20px; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -116,6 +123,14 @@ if (isset($_GET['ajax'])) {
     <div class="main">
         <?php if ($selected_team): ?>
             <h1>Chat met <?= htmlspecialchars($selected_team['team_name']) ?> (Level <?= $selected_team['current_level'] ?>)</h1>
+            
+            <?php if ($assignment): ?>
+                <div class="assignment-info">
+                    <strong>Huidige Opdracht: <?= htmlspecialchars($assignment['title']) ?></strong><br>
+                    <?= nl2br(htmlspecialchars($assignment['description'])) ?>
+                </div>
+            <?php endif; ?>
+
             <div class="chat-window">
                 <div class="messages" id="chat-box">
                     <?php foreach ($chat_messages as $m): ?>
