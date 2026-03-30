@@ -66,6 +66,7 @@ if (isset($_GET['ajax'])) {
         'rank' => $rank,
         'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
         'assignment_desc' => $assignment ? nl2br(htmlspecialchars($assignment['description'])) : 'Wacht op instructies.',
+        'has_file' => !empty($assignment['artifact_file']),
         'start_time' => $startTime
     ]);
     exit;
@@ -171,7 +172,7 @@ if (isset($_GET['ajax'])) {
                     <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
                     <div class="assignment-desc" id="assignment-desc"><?= nl2br(htmlspecialchars($assignment['description'])) ?></div>
                     
-                    <div class="download-box">
+                    <div class="download-box" id="download-box" style="<?= empty($assignment['artifact_file']) ? 'display: none;' : '' ?>">
                         <?php if ($download_count < $max_downloads): ?>
                             <a href="team_download.php?token=<?= $token ?>" class="download-btn">Download Bestanden</a>
                         <?php else: ?>
@@ -277,6 +278,12 @@ if (isset($_GET['ajax'])) {
                         document.getElementById('display-rank').innerText = data.rank;
                         document.getElementById('assignment-title').innerText = data.assignment_title;
                         document.getElementById('assignment-desc').innerHTML = data.assignment_desc;
+                      
+                        const downloadBox = document.getElementById('download-box');
+                        if (downloadBox) {
+                            downloadBox.style.display = data.has_file ? 'block' : 'none';
+                        }
+
                         startTime = data.start_time * 1000;
                         
                         triggerLevelUp();
