@@ -33,9 +33,11 @@ $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINC
 
 // Migratie voor bestaande installaties: voeg ontbrekende kolommen toe aan 'teams'
 try { @$db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
-try { @$db->exec("ALTER TABLE teams ADD COLUMN access_token TEXT UNIQUE"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
+try { @$db->exec("ALTER TABLE teams ADD COLUMN access_token TEXT"); } catch (PDOException $e) { /* Kolom bestaat waarschijnlijk al */ }
 // Zorg dat teams zonder token er alsnog een krijgen
-$db->exec("UPDATE teams SET access_token = lower(hex(randomblob(32))) WHERE access_token IS NULL");
+try {
+    $db->exec("UPDATE teams SET access_token = lower(hex(randomblob(32))) WHERE access_token IS NULL");
+} catch (PDOException $e) { /* Kolom bestaat nog niet of tabel is bezet */ }
 
 // Controleer of er al gebruikers zijn
 $userCount = $db->query("SELECT COUNT(*) FROM teachers")->fetchColumn();
