@@ -205,8 +205,8 @@ $extraJS = "
             }
         }
         function updateChat() {
-            <?php if ($selected_team_id): ?>
-            fetch('messages.php?team_id=<?= $selected_team_id ?>&ajax=chat')
+            " . ($selected_team_id ? "
+            fetch('messages.php?team_id=$selected_team_id&ajax=chat')
                 .then(r => r.text()).then(html => {
                     const cb = document.getElementById('chat-box');
                     if (cb.innerHTML !== html) {
@@ -214,9 +214,9 @@ $extraJS = "
                         scrollToBottom();
                     }
                 });
-            <?php endif; ?>
+            " : "") . "
             
-            fetch('messages.php?ajax=sidebar' + (<?= $selected_team_id ?: '0' ?> ? '&team_id=<?= $selected_team_id ?>' : ''))
+            fetch('messages.php?ajax=sidebar' + (" . ($selected_team_id ?: '0') . " ? '&team_id=" . ($selected_team_id ?: '0') . "' : ''))
                 .then(r => r.text()).then(html => document.getElementById('sidebar-list').innerHTML = `<div class="team-list-header">Teams</div>${html}`);
         }
         setInterval(updateChat, 5000);

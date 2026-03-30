@@ -29,6 +29,13 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         header.content-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
         h1 { font-size: 1.8em; color: #333; }
         
+        /* Dashboard Grid Layout */
+        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; align-items: start; }
+        .stats-overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; }
+        .stat-label { font-size: 0.8em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 1.8em; font-weight: bold; color: #667eea; margin-top: 5px; }
+
         .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
         .btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9em; text-decoration: none; text-align: center; }
         .btn-primary { background: #667eea; color: white; }
