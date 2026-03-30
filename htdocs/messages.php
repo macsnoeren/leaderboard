@@ -9,6 +9,7 @@ if (!isset($_SESSION['teacher_logged_in'])) {
     exit;
 }
 $db = getDB();
+$selected_team_id = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
 
 // Handle antwoord van docent
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reply') {
@@ -66,7 +67,6 @@ $teams_with_msgs = $db->query("
     ORDER BY (SELECT MAX(created_at) FROM team_messages WHERE team_id = t.id) DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-$selected_team_id = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
 $chat_messages = [];
 $selected_team = null;
 $assignment = null;
