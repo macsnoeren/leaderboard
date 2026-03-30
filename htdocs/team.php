@@ -65,9 +65,9 @@ if (isset($_GET['ajax'])) {
         'level' => (int)$team['current_level'],
         'rank' => $rank,
         'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
-        'assignment_desc' => $assignment ? nl2br(htmlspecialchars($assignment['description'])) : 'Wacht op instructies.',
-        'assignment_instruction' => $assignment ? nl2br(htmlspecialchars($assignment['instruction'])) : '',
-        'assignment_criteria' => $assignment ? nl2br(htmlspecialchars($assignment['criteria'])) : '',
+        'assignment_desc' => $assignment ? $assignment['description'] : 'Wacht op instructies.',
+        'assignment_instruction' => $assignment ? $assignment['instruction'] : '',
+        'assignment_criteria' => $assignment ? $assignment['criteria'] : '',
         'time_limit' => $assignment ? (int)$assignment['time_limit'] : 0,
         'has_file' => !empty($assignment['artifact_file']),
         'start_time' => $startTime
@@ -82,6 +82,7 @@ if (isset($_GET['ajax'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Team Dashboard - <?= htmlspecialchars($team['team_name']) ?></title>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; height: 100vh; display: flex; flex-direction: column; }
@@ -96,8 +97,9 @@ if (isset($_GET['ajax'])) {
         .stat-value { font-weight: bold; }
 
         .assignment-meta { display: flex; gap: 20px; margin-top: 15px; font-size: 0.9em; color: #667eea; font-weight: bold; }
-        .assignment-detail-title { font-weight: bold; color: #333; margin-top: 20px; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .instruction-box { background: #f0f4ff; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #667eea; }
+        .assignment-detail-title { font-weight: bold; color: #333; margin-top: 20px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .instruction-box { background: #ffffff; padding: 25px; border-radius: 12px; margin-top: 10px; border: 2px solid #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); position: relative; }
+        .instruction-box::before { content: "BELEIDSINSTRUCTIE"; position: absolute; top: -10px; left: 20px; background: #667eea; color: white; font-size: 0.65em; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
         .criteria-box { background: #fffde7; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #fbc02d; font-size: 0.95em; }
 
         /* Main Content Layout */
@@ -178,20 +180,20 @@ if (isset($_GET['ajax'])) {
             <div class="assignment-card">
                 <?php if ($assignment): ?>
                     <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
-                    <div class="assignment-desc" id="assignment-desc"><?= nl2br(htmlspecialchars($assignment['description'])) ?></div>
+                    <div class="assignment-desc" id="assignment-desc"><?= htmlspecialchars($assignment['description']) ?></div>
                     
                     <div class="assignment-meta">
                         <span id="display-time-limit"><?= ($assignment['time_limit'] > 0) ? "⏳ Beschikbare tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
                     </div>
 
                     <div id="instruction-wrapper" style="<?= empty($assignment['instruction']) ? 'display:none;' : '' ?>">
-                        <div class="assignment-detail-title">De Opdracht</div>
-                        <div class="instruction-box" id="assignment-instruction"><?= nl2br(htmlspecialchars($assignment['instruction'])) ?></div>
+                        <div class="assignment-detail-title">📍 De Opdracht</div>
+                        <div class="instruction-box" id="assignment-instruction"><?= htmlspecialchars($assignment['instruction']) ?></div>
                     </div>
 
                     <div id="criteria-wrapper" style="<?= empty($assignment['criteria']) ? 'display:none;' : '' ?>">
-                        <div class="assignment-detail-title">Criteria</div>
-                        <div class="criteria-box" id="assignment-criteria"><?= nl2br(htmlspecialchars($assignment['criteria'])) ?></div>
+                        <div class="assignment-detail-title">📋 Beoordelingscriteria</div>
+                        <div class="criteria-box" id="assignment-criteria"><?= htmlspecialchars($assignment['criteria']) ?></div>
                     </div>
                     
                     <div class="download-box" id="download-box" style="<?= empty($assignment['artifact_file']) ? 'display: none;' : '' ?>">
@@ -274,6 +276,18 @@ if (isset($_GET['ajax'])) {
             document.getElementById('live-timer').innerText = display;
         }
 
+        function renderMarkdown() {
+            const fields = ['assignment-desc', 'assignment-instruction', 'assignment-criteria'];
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.getAttribute('data-rendered') !== 'true') {
+                    const raw = el.innerText;
+                    el.innerHTML = marked.parse(raw);
+                    el.setAttribute('data-rendered', 'true');
+                }
+            });
+        }
+
         function scrollToBottom() {
             const chatBox = document.getElementById('chat-box');
             if (chatBox) {
@@ -299,17 +313,20 @@ if (isset($_GET['ajax'])) {
                         document.getElementById('display-level').innerText = data.level;
                         document.getElementById('display-rank').innerText = data.rank;
                         document.getElementById('assignment-title').innerText = data.assignment_title;
-                        document.getElementById('assignment-desc').innerHTML = data.assignment_desc;
+                        document.getElementById('assignment-desc').innerText = data.assignment_desc;
+                        document.getElementById('assignment-desc').removeAttribute('data-rendered');
 
                         document.getElementById('display-time-limit').innerText = data.time_limit > 0 ? "⏳ Beschikbare tijd: " + data.time_limit + " min" : "";
                         
                         const instrWrapper = document.getElementById('instruction-wrapper');
                         instrWrapper.style.display = data.assignment_instruction ? 'block' : 'none';
-                        document.getElementById('assignment-instruction').innerHTML = data.assignment_instruction;
+                        document.getElementById('assignment-instruction').innerText = data.assignment_instruction;
+                        document.getElementById('assignment-instruction').removeAttribute('data-rendered');
 
                         const critWrapper = document.getElementById('criteria-wrapper');
                         critWrapper.style.display = data.assignment_criteria ? 'block' : 'none';
-                        document.getElementById('assignment-criteria').innerHTML = data.assignment_criteria;
+                        document.getElementById('assignment-criteria').innerText = data.assignment_criteria;
+                        document.getElementById('assignment-criteria').removeAttribute('data-rendered');
                       
                         const downloadBox = document.getElementById('download-box');
                         if (downloadBox) {
@@ -320,12 +337,14 @@ if (isset($_GET['ajax'])) {
                         
                         triggerLevelUp();
                     }
+                    renderMarkdown();
                 });
         }
 
         setInterval(updateTimer, 1000);
         setInterval(fetchMessages, 5000);
         updateTimer();
+        renderMarkdown();
         scrollToBottom();
     </script>
 </body>

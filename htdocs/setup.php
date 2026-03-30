@@ -15,6 +15,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINC
 $db->exec("CREATE TABLE IF NOT EXISTS team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
 // 2. Voeg standaard assignments toe als deze nog niet bestaan
+/*
 $count = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 if ($count == 0) {
     $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, instruction, criteria, time_limit, artifact_file) VALUES (?, ?, ?, ?, ?, ?, ?)");
@@ -30,6 +31,7 @@ if ($count == 0) {
         ]);
     }
 }
+*/
 
 // 3. Controleer of setup nog nodig is
 try {

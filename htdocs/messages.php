@@ -158,7 +158,7 @@ include 'admin_header.php';
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
                                 <strong>Huidige Opdracht: <?= htmlspecialchars($assignment['title']) ?></strong><br>
-                                <?= nl2br(htmlspecialchars($assignment['description'])) ?>
+                            <div id="admin-assignment-desc"><?= htmlspecialchars($assignment['description']) ?></div>
                             </div>
                             <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');">
                                 <input type="hidden" name="action" value="level_up">
@@ -226,5 +226,11 @@ $extraJS = "
         }
         setInterval(updateChat, 5000);
         scrollToBottom();
+
+        function renderAdminMarkdown() {
+            const desc = document.getElementById('admin-assignment-desc');
+            if (desc) desc.innerHTML = marked.parse(desc.innerText);
+        }
+        renderAdminMarkdown();
     </script>";
 include 'admin_footer.php'; ?>
