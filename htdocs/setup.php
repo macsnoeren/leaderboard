@@ -11,14 +11,13 @@ $db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AU
 $db->exec("CREATE TABLE IF NOT EXISTS team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
 $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
-// 2. Voer migraties uit voor bestaande installaties
-try { @$db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (PDOException $e) {}
-try { @$db->exec("ALTER TABLE teams ADD COLUMN access_token TEXT"); } catch (PDOException $e) {}
-try { $db->exec("UPDATE teams SET access_token = lower(hex(randomblob(32))) WHERE access_token IS NULL"); } catch (PDOException $e) {}
-
 // 3. Controleer of setup nog nodig is
-$stmt = $db->query("SELECT COUNT(*) FROM teachers");
-$userCount = $stmt->fetchColumn();
+try {
+    $stmt = $db->query("SELECT COUNT(*) FROM teachers");
+    $userCount = $stmt->fetchColumn();
+} catch (PDOException $e) {
+    $userCount = 0;
+}
 
 if ($userCount > 0) {
     // Als er al gebruikers zijn, is setup niet meer toegankelijk

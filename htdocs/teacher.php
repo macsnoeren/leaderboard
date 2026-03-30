@@ -28,17 +28,6 @@ if (!isset($_SESSION['teacher_logged_in'])) {
 
 $db = getDB();
 
-// Zorg dat de database up-to-date is om crashes te voorkomen (Zelf-reparatie)
-try { 
-    $db->query("SELECT level_updated_at FROM teams LIMIT 1"); 
-} catch (PDOException $e) {
-    // Als de kolom ontbreekt, voer migratie uit
-    try { @$db->exec("ALTER TABLE teams ADD COLUMN level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (PDOException $ex) {}
-}
-try { @$db->exec("ALTER TABLE teams ADD COLUMN access_token TEXT"); } catch (PDOException $e) {}
-try { @$db->exec("UPDATE teams SET access_token = lower(hex(randomblob(32))) WHERE access_token IS NULL"); } catch (PDOException $e) {}
-try { @$db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"); } catch (PDOException $e) {}
-
 // Handle level changes
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (($_POST['action'] === 'level_up' || $_POST['action'] === 'resend_level_mail') && isset($_POST['team_id'])) {
