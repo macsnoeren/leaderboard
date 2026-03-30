@@ -79,131 +79,99 @@ if (isset($_GET['ajax'])) {
     <title>Team Dashboard - <?= htmlspecialchars($team['team_name']) ?></title>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .container {
-            max-width: 600px;
-            width: 100%;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 40px;
-            text-align: center;
-        }
-        h1 { color: #333; margin-bottom: 10px; }
-        .level-info {
-            font-size: 1.5em;
-            color: #667eea;
-            font-weight: bold;
-            margin-bottom: 30px;
-        }
-        .assignment-box {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            text-align: left;
-        }
-        .assignment-title { font-weight: bold; font-size: 1.2em; margin-bottom: 10px; color: #333; }
-        .download-btn {
-            display: inline-block;
-            background: #667eea;
-            color: white;
-            padding: 15px 30px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
-        .download-btn:hover { background: #5568d3; }
-        .download-btn.disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        .remaining {
-            margin-top: 15px;
-            font-size: 0.9em;
-            color: #666;
-        }
-        .timer {
-            margin-top: 10px;
-            font-size: 1.1em;
-            color: #333;
-            font-family: monospace;
-        }
-        .chat-container {
-            margin-top: 40px;
-            text-align: left;
-            border-top: 2px solid #eee;
-            padding-top: 20px;
-        }
-        .message {
-            margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 8px;
-            max-width: 80%;
-        }
-        .message.team {
-            background: #e3f2fd;
-            margin-left: auto;
-            border: 1px solid #bbdefb;
-        }
-        .message.teacher {
-            background: #f1f8e9;
-            margin-right: auto;
-            border: 1px solid #dcedc8;
-        }
-        .msg-meta { font-size: 0.75em; color: #888; margin-bottom: 4px; }
-        textarea {
-            width: 100%;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            margin-top: 10px;
-        }
-        .messages {
-            max-height: 400px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Header Styles */
+        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 100; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .team-name { font-size: 1.8em; font-weight: bold; }
+        .stats-bar { display: flex; gap: 30px; font-size: 1.1em; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 10px; }
+        .stat-item { display: flex; flex-direction: column; align-items: center; }
+        .stat-label { font-size: 0.7em; text-transform: uppercase; opacity: 0.8; letter-spacing: 1px; }
+        .stat-value { font-weight: bold; }
+
+        /* Main Content Layout */
+        main { display: grid; grid-template-columns: 1fr 400px; flex: 1; overflow: hidden; gap: 0; }
+        
+        /* Assignment Section */
+        .assignment-section { padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+        .assignment-card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .assignment-title { font-size: 1.5em; font-weight: bold; color: #333; margin-bottom: 15px; border-left: 5px solid #667eea; padding-left: 15px; }
+        .assignment-desc { font-size: 1.1em; line-height: 1.6; color: #4b4f56; margin-bottom: 25px; }
+        
+        .download-box { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; }
+        .download-btn { display: inline-block; background: #667eea; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: 0.3s; margin-bottom: 10px; border: none; cursor: pointer; }
+        .download-btn:hover:not(.disabled) { background: #5568d3; transform: translateY(-2px); }
+        .download-btn.disabled { background: #ccc; cursor: not-allowed; }
+        .remaining { font-size: 0.85em; color: #888; }
+
+        /* Chat Section */
+        .chat-section { background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; }
+        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; }
+        .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; }
+        .message { padding: 10px 15px; border-radius: 12px; max-width: 85%; font-size: 0.95em; position: relative; }
+        .message.team { align-self: flex-end; background: #667eea; color: white; border-bottom-right-radius: 2px; }
+        .message.teacher { align-self: flex-start; background: #e4e6eb; color: #050505; border-bottom-left-radius: 2px; }
+        .msg-meta { font-size: 0.7em; opacity: 0.7; margin-bottom: 4px; }
+        
+        .chat-input-area { padding: 20px; border-top: 1px solid #eee; }
+        .chat-form { display: flex; flex-direction: column; gap: 10px; }
+        textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-family: inherit; font-size: 0.95em; }
+        textarea:focus { outline: 2px solid #667eea; border-color: transparent; }
+
+        @media (max-width: 900px) {
+            main { grid-template-columns: 1fr; }
+            .chat-section { border-left: none; border-top: 1px solid #ddd; height: 500px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Team: <?= htmlspecialchars($team['team_name']) ?></h1>
-        <div class="level-info">
-            Huidig Level: <span id="display-level"><?= $team['current_level'] ?></span><br>
-            Ranking: #<span id="display-rank"><?= $rank ?></span><br>
-            <div class="timer" id="live-timer">Tijd bezig: --:--:--</div>
-        </div>
-
-        <?php if ($assignment): ?>
-            <div class="assignment-box">
-                <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
-                <p id="assignment-desc"><?= nl2br(htmlspecialchars($assignment['description'])) ?></p>
+    <header>
+        <div class="header-top">
+            <div class="team-name">Team: <?= htmlspecialchars($team['team_name']) ?></div>
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Positie</span>
+                    <span class="stat-value">#<span id="display-rank"><?= $rank ?></span></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Level</span>
+                    <span class="stat-value"><span id="display-level"><?= $team['current_level'] ?></span></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tijd Bezig</span>
+                    <span class="stat-value" id="live-timer">00:00:00</span>
+                </div>
             </div>
-            
-            <?php if ($download_count < $max_downloads): ?>
-                <a href="team_download.php?token=<?= $token ?>" class="download-btn">Download Opdracht Bestanden</a>
-            <?php else: ?>
-                <div class="download-btn disabled">Download Limiet Bereikt</div>
-            <?php endif; ?>
-            <div class="remaining">Downloads gebruikt: <?= $download_count ?> / <?= $max_downloads ?></div>
-        <?php else: ?>
-            <p>Geen opdracht beschikbaar voor dit level. Wacht op instructies.</p>
-        <?php endif; ?>
+        </div>
+    </header>
 
-        <?php if ($team['current_level'] > 0): ?>
-            <div class="chat-container">
-                <h3>Stuur je antwoord of stel een vraag</h3>
+    <main>
+        <section class="assignment-section">
+            <div class="assignment-card">
+                <?php if ($assignment): ?>
+                    <div class="assignment-title" id="assignment-title"><?= htmlspecialchars($assignment['title']) ?></div>
+                    <div class="assignment-desc" id="assignment-desc"><?= nl2br(htmlspecialchars($assignment['description'])) ?></div>
+                    
+                    <div class="download-box">
+                        <?php if ($download_count < $max_downloads): ?>
+                            <a href="team_download.php?token=<?= $token ?>" class="download-btn">Download Bestanden</a>
+                        <?php else: ?>
+                            <button class="download-btn disabled" disabled>Download Limiet Bereikt</button>
+                        <?php endif; ?>
+                        <div class="remaining">Downloads gebruikt: <?= $download_count ?> / <?= $max_downloads ?></div>
+                    </div>
+                <?php else: ?>
+                    <div class="assignment-title" id="assignment-title">Geen Opdracht</div>
+                    <div class="assignment-desc" id="assignment-desc">Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.</div>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <section class="chat-section">
+            <div class="chat-header">Berichten & Antwoorden</div>
+            <?php if ($team['current_level'] > 0): ?>
                 <div class="messages" id="chat-box">
                     <?php foreach ($messages as $m): ?>
                         <div class="message <?= $m['sender'] ?>">
@@ -212,14 +180,20 @@ if (isset($_GET['ajax'])) {
                         </div>
                     <?php endforeach; ?>
                 </div>
-                <form method="POST">
-                    <input type="hidden" name="action" value="send_message">
-                    <textarea name="message" rows="3" placeholder="Typ hier je antwoord..." required></textarea>
-                    <button type="submit" class="download-btn" style="width:100%; margin-top:10px; border:none;">Bericht versturen</button>
-                </form>
-            </div>
-        <?php endif; ?>
-    </div>
+                <div class="chat-input-area">
+                    <form method="POST" class="chat-form">
+                        <input type="hidden" name="action" value="send_message">
+                        <textarea name="message" rows="3" placeholder="Typ hier je antwoord of vraag..." required></textarea>
+                        <button type="submit" class="download-btn" style="width:100%; margin:0;">Bericht versturen</button>
+                    </form>
+                </div>
+            <?php else: ?>
+                <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #888;">
+                    De chat wordt geactiveerd zodra je aan level 1 begint.
+                </div>
+            <?php endif; ?>
+        </section>
+    </main>
 
     <script>
         let startTime = <?= $startTime ?> * 1000;
@@ -249,7 +223,7 @@ if (isset($_GET['ajax'])) {
                 (minutes < 10 ? "0" + minutes : minutes) + ":" + 
                 (seconds < 10 ? "0" + seconds : seconds);
 
-            document.getElementById('live-timer').innerText = "Tijd bezig met de opdracht: " + display;
+            document.getElementById('live-timer').innerText = display;
         }
 
         function scrollToBottom() {
