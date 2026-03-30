@@ -20,12 +20,24 @@ $db = getDB();
 
 $teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
 $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+
+// AJAX endpoint om de gegevens live op te halen zonder de pagina te verversen
+if (isset($_GET['ajax'])) {
+    header('Content-Type: application/json');
+    $data = [];
+    foreach ($teams as $index => $team) {
+        $team['rank'] = $index + 1;
+        $team['progress'] = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0;
+        $data[] = $team;
+    }
+    echo json_encode(['teams' => $data, 'total_assignments' => $total_assignments]);
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="10">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assignment Leaderboard</title>
     <style>
@@ -54,6 +66,7 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
         .subtitle { opacity: 0.9; font-size: 1.1em; }
         .leaderboard {
             padding: 30px;
+            position: relative;
         }
         .team-row {
             display: flex;
@@ -62,10 +75,9 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
             margin-bottom: 15px;
             background: #f8f9fa;
             border-radius: 10px;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
         }
         .team-row:hover {
-            transform: translateX(5px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         .rank {
@@ -133,7 +145,7 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
             <!--<p class="subtitle"></p>-->
         </header>
         
-        <div class="leaderboard">
+        <div class="leaderboard" id="leaderboard-container">
             <?php if (empty($teams)): ?>
                 <p style="text-align: center; padding: 40px; color: #999;">No teams registered yet.</p>
             <?php else: ?>
@@ -147,17 +159,17 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
                     
                     $progress = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0;
                     ?>
-                    <div class="team-row">
-                        <div class="rank <?= $rankClass ?>">#<?= $rank ?></div>
+                    <div class="team-row" data-id="<?= $team['id'] ?>">
+                        <div class="rank <?= $rankClass ?>" id="rank-<?= $team['id'] ?>">#<?= $rank ?></div>
                         <div class="team-info">
                             <div class="team-name"><?= htmlspecialchars($team['team_name']) ?></div>
                             <div class="progress-bar">
-                                <div class="progress-fill" style="width: <?= $progress ?>%">
+                                <div class="progress-fill" id="prog-<?= $team['id'] ?>" style="width: <?= $progress ?>%">
                                     <?= round($progress, 1) ?>%
                                 </div>
                             </div>
                         </div>
-                        <div class="level-badge">
+                        <div class="level-badge" id="lvl-<?= $team['id'] ?>">
                             Level <?= $team['current_level'] ?>/<?= $total_assignments ?>
                         </div>
                     </div>
@@ -165,5 +177,71 @@ $total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn
             <?php endif; ?>
         </div>
     </div>
+    <script>
+        function fetchLeaderboard() {
+            fetch('index.php?ajax=1')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('leaderboard-container');
+                    const rows = Array.from(container.querySelectorAll('.team-row'));
+                    
+                    // Sla de huidige posities op (First)
+                    const oldPositions = {};
+                    rows.forEach(row => {
+                        oldPositions[row.dataset.id] = row.getBoundingClientRect().top;
+                    });
+
+                    // Update de data en volgorde
+                    data.teams.forEach((teamData, index) => {
+                        let row = container.querySelector(`.team-row[data-id="${teamData.id}"]`);
+                        
+                        // Als team nieuw is, ververs dan de hele pagina (simpelste oplossing)
+                        if (!row) { location.reload(); return; }
+
+                        // Update rank tekst en kleuren
+                        const rankDiv = document.getElementById(`rank-${teamData.id}`);
+                        const rank = index + 1;
+                        rankDiv.innerText = `#${rank}`;
+                        rankDiv.className = 'rank ' + (rank === 1 ? 'first' : rank === 2 ? 'second' : rank === 3 ? 'third' : '');
+
+                        // Update progress bar en level badge
+                        document.getElementById(`prog-${teamData.id}`).style.width = teamData.progress + '%';
+                        document.getElementById(`prog-${teamData.id}`).innerText = Math.round(teamData.progress * 10) / 10 + '%';
+                        document.getElementById(`lvl-${teamData.id}`).innerText = `Level ${teamData.current_level}/${data.total_assignments}`;
+                        
+                        // Zet ze in de juiste volgorde in de DOM
+                        container.appendChild(row);
+                    });
+
+                    // Bereken nieuwe posities en animeer (Last, Invert, Play)
+                    requestAnimationFrame(() => {
+                        const newRows = Array.from(container.querySelectorAll('.team-row'));
+                        newRows.forEach(row => {
+                            const id = row.dataset.id;
+                            const oldTop = oldPositions[id];
+                            const newTop = row.getBoundingClientRect().top;
+                            const deltaY = oldTop - newTop;
+
+                            if (deltaY !== 0) {
+                                // Zet het element direct terug naar de oude positie (Invert)
+                                row.style.transition = 'none';
+                                row.style.transform = `translateY(${deltaY}px)`;
+                                
+                                // Forceer een reflow
+                                row.offsetHeight; 
+
+                                // Laat het element naar de nieuwe positie glijden (Play)
+                                row.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                                row.style.transform = '';
+                            }
+                        });
+                    });
+                })
+                .catch(err => console.error('Fout bij ophalen leaderboard:', err));
+        }
+
+        // Elke 10 seconden verversen, net als de oude meta-refresh
+        setInterval(fetchLeaderboard, 10000);
+    </script>
 </body>
 </html>
