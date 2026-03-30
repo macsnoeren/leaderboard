@@ -13,6 +13,7 @@
  If not, see https://www.gnu.org/licenses/.
 */
 require_once '../conf/config.php';
+require_once '../conf/database.php';
 
 require_once 'PHPMailer/src/PHPMailer.php';
 require_once 'PHPMailer/src/SMTP.php';

@@ -1,5 +1,6 @@
 <?php
 require_once '../conf/config.php';
+require_once '../conf/database.php';
 
 $db = getDB();
 
@@ -10,6 +11,20 @@ $db->exec("CREATE TABLE IF NOT EXISTS assignments (id INTEGER PRIMARY KEY AUTOIN
 $db->exec("CREATE TABLE IF NOT EXISTS download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
 $db->exec("CREATE TABLE IF NOT EXISTS team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
 $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
+// 2. Voeg standaard assignments toe als deze nog niet bestaan
+$count = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+if ($count == 0) {
+    $stmt = $db->prepare("INSERT INTO assignments (assignment_number, title, description, artifact_file) VALUES (?, ?, ?, ?)");
+    for ($i = 1; $i <= 14; $i++) {
+        $stmt->execute([
+            $i,
+            "Assignment $i",
+            "Assignment $i description",
+            "artifacts/assignment$i.pdf"
+        ]);
+    }
+}
 
 // 3. Controleer of setup nog nodig is
 try {

@@ -13,6 +13,7 @@
  If not, see https://www.gnu.org/licenses/.
 */
 require_once '../conf/config.php';
+require_once '../conf/database.php';
 
 $error = '';
 

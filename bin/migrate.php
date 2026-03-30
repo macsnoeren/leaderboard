@@ -4,6 +4,7 @@
  * Voegt de level_updated_at kolom toe voor eerlijke sortering op het leaderboard.
  */
 require_once __DIR__ . '/../conf/config.php';
+require_once __DIR__ . '/../conf/database.php';
 
 try {
     $db = getDB();

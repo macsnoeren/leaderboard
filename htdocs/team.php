@@ -1,5 +1,6 @@
 <?php
 require_once '../conf/config.php';
+require_once '../conf/database.php';
 
 $token = $_GET['token'] ?? '';
 if (empty($token)) {
