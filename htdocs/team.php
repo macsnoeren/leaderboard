@@ -327,6 +327,10 @@ if (isset($_GET['ajax'])) {
                             document.getElementById('overlay-title').innerText = "🏆 GEFELICITEERD KAMPIONEN! 🏆";
                             document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
                             document.getElementById('overlay-rank').innerText = `Jullie eindigen op positie #${data.rank}! Fantastisch werk!`;
+                        } else if (data.level === 1) {
+                            document.getElementById('overlay-title').innerText = "🕵️ OPDRACHT BINNEN! 🕵️";
+                            document.getElementById('overlay-message').innerText = "Jullie kunnen beginnen!";
+                            document.getElementById('overlay-rank').innerText = '';
                         } else {
                             document.getElementById('overlay-title').innerText = "🎉 GEFELICITEERD! 🎉";
                             document.getElementById('overlay-message').innerText = `Jullie zijn naar level ${data.level}!`; // Toont het nieuwe level
