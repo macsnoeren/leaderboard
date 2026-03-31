@@ -192,7 +192,8 @@ class AIFeedbackService:
                     if res:
                         score = res.get('score', 0)
                         # Formatteer de feedback voor een individueel model
-                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10\n\n"
+                        duration = res.get('duration', 0)
+                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10 (Tijdsduur: {duration:.2f}s)\n\n"
                         model_feedback += f"{res['feedback']}\n\n"
                         model_feedback += f"*Tip: {res['uitleg']}*"
                         
