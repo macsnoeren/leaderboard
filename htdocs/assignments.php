@@ -131,6 +131,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 // Ophalen van alle assignments
 $assignments = $db->query("SELECT * FROM assignments ORDER BY assignment_number ASC")->fetchAll(PDO::FETCH_ASSOC);
 
+$extraCSS = '
+<style>
+    .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); overflow-y: auto; }
+    .modal-content { background-color: white; margin: 5% auto; padding: 30px; border-radius: 15px; width: 70%; max-width: 800px; box-shadow: 0 5px 30px rgba(0,0,0,0.3); position: relative; }
+    .close-modal { position: absolute; top: 20px; right: 25px; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; transition: 0.2s; }
+    .close-modal:hover { color: #333; }
+    .modal-section-title { font-weight: bold; color: #667eea; border-bottom: 2px solid #f0f4ff; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
+    .markdown-body { font-size: 1rem; line-height: 1.6; color: #4b4f56; }
+    .markdown-body h1 { font-size: 1.4em; margin: 15px 0 10px 0; color: #333; }
+    .markdown-body h2 { font-size: 1.25em; margin: 12px 0 8px 0; color: #333; }
+    .markdown-body h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #333; }
+    .markdown-body p { margin-bottom: 12px; }
+    .markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 15px; }
+    .markdown-body li { margin-bottom: 5px; }
+    .markdown-body code { background: #f0f2f5; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; }
+    .markdown-body pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 8px; overflow-x: auto; margin-bottom: 15px; }
+    .markdown-body pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
+    .clickable-title { color: #667eea; cursor: pointer; text-decoration: none; transition: 0.2s; }
+    .clickable-title:hover { color: #5568d3; text-decoration: underline; }
+</style>';
+
 $pageTitle = 'Assignments';
 include 'admin_header.php';
 ?>
@@ -205,7 +226,11 @@ include 'admin_header.php';
                         <?php foreach ($assignments as $a): ?>
                             <tr>
                                 <td><?= htmlspecialchars($a['assignment_number']) ?></td>
-                                <td><strong><?= htmlspecialchars($a['title']) ?></strong></td>
+                                <td>
+                                    <a href="javascript:void(0)" class="clickable-title" onclick='openViewModal(<?= json_encode($a, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                                        <strong><?= htmlspecialchars($a['title']) ?></strong>
+                                    </a>
+                                </td>
                                 <td>
                                     <?php if ($a['artifact_file']): ?>
                                         <a href="<?= htmlspecialchars($a['artifact_file']) ?>" target="_blank" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8em;">Inzien</a>
@@ -228,4 +253,51 @@ include 'admin_header.php';
             </div>
         </div>
     </div>
-<?php include 'admin_footer.php'; ?>
+
+    <!-- Modal voor het inzien van de opdracht -->
+    <div id="viewAssignmentModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeViewModal()">&times;</span>
+            <h2 id="v-title" style="color: #333; margin-bottom: 20px;"></h2>
+            
+            <div class="modal-section-title">Beschrijving</div>
+            <div id="v-desc" class="markdown-body"></div>
+            
+            <div class="modal-section-title">📍 Instructie (De Echte Opdracht)</div>
+            <div id="v-instr" class="markdown-body" style="background: #f8f9fa; padding: 15px; border-radius: 8px;"></div>
+            
+            <div class="modal-section-title">📋 Beoordelingscriteria (Intern)</div>
+            <div id="v-crit" class="markdown-body" style="color: #d32f2f; background: #fff1f0; padding: 15px; border-radius: 8px;"></div>
+
+            <div style="margin-top: 30px; text-align: right;">
+                <button class="btn btn-primary" onclick="closeViewModal()">Sluiten</button>
+            </div>
+        </div>
+    </div>
+
+<?php
+$extraJS = "
+<script>
+    function openViewModal(assignment) {
+        document.getElementById('v-title').innerText = 'Opdracht Details: ' + assignment.title;
+        document.getElementById('v-desc').textContent = assignment.description || 'Geen beschrijving.';
+        document.getElementById('v-instr').textContent = assignment.instruction || 'Geen specifieke instructies.';
+        document.getElementById('v-crit').textContent = assignment.criteria || 'Geen criteria opgegeven.';
+        
+        document.getElementById('viewAssignmentModal').style.display = 'block';
+        
+        marked.setOptions({ breaks: true });
+        document.querySelectorAll('#viewAssignmentModal .markdown-body').forEach(el => {
+            el.innerHTML = marked.parse(el.textContent.trim());
+        });
+    }
+
+    function closeViewModal() {
+        document.getElementById('viewAssignmentModal').style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('viewAssignmentModal')) closeViewModal();
+    }
+</script>";
+include 'admin_footer.php'; ?>
