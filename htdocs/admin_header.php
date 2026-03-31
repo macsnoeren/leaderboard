@@ -10,9 +10,27 @@ if (isset($_SESSION['force_password_change']) && basename($_SERVER['PHP_SELF']) 
     exit;
 }
 
+// Beveiliging: Forceer wachtwoordwijziging op ELKE pagina als de vlag aan staat
+if (isset($_SESSION['force_password_change']) && basename($_SERVER['PHP_SELF']) !== 'password.php' && basename($_SERVER['PHP_SELF']) !== 'logout.php') {
+    header('Location: password.php');
+    exit;
+}
+
 $db = getDB();
 $unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
 $currentPage = basename($_SERVER['PHP_SELF']);
+
+// Controleer AI service status
+$ai_status_stmt = $db->query("SELECT last_heartbeat FROM ai_service_status ORDER BY id DESC LIMIT 1");
+$ai_last_heartbeat = $ai_status_stmt->fetchColumn();
+$ai_is_active = false;
+if ($ai_last_heartbeat) {
+    $last_heartbeat_timestamp = strtotime($ai_last_heartbeat);
+    // Als de laatste heartbeat minder dan 2 * POLL_INTERVAL seconden geleden was, is de service actief
+    if ((time() - $last_heartbeat_timestamp) < (2 * POLL_INTERVAL)) { // Gebruik 2x interval als marge
+        $ai_is_active = true;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -91,6 +109,14 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
             <a href="password.php" class="nav-item <?= $currentPage == 'password.php' ? 'active' : '' ?>">🔑 Password</a>
             <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>
+        </div>
+        <div style="padding: 15px 25px; border-top: 1px solid #eee; font-size: 0.8em; color: #888;">
+            AI Service: 
+            <?php if ($ai_is_active): ?>
+                <span style="color: #4caf50; font-weight: bold;">● Actief</span>
+            <?php else: ?>
+                <span style="color: #f44336; font-weight: bold;">● Inactief</span>
+            <?php endif; ?>
         </div>
     </nav>
     <div class="main-content">

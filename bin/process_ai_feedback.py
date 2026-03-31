@@ -131,6 +131,17 @@ class AIFeedbackService:
         except Exception as e:
             logger.error(f"Fout bij versturen suggestie voor team {team_id}: {e}")
             return False
+            
+    def send_heartbeat(self):
+        try:
+            resp = requests.post(
+                f"{self.base_url}?action=heartbeat&token={self.api_key}",
+                headers=self._get_headers(),
+                timeout=5
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning(f"Fout bij versturen heartbeat: {e}")
 
     def run(self):
         logger.info(f"AI Feedback Service gestart. Interval: {self.poll_interval}s")
@@ -142,25 +153,33 @@ class AIFeedbackService:
             
             for task in tasks:
                 team_name = task.get('team_name', 'Onbekend')
+                all_feedback = []
+                scores = []
+                failed = False
 
                 for model in self.models:
                     logger.info(f"Analyseren: Team '{team_name}' met {model}...")
                     res = self.get_model_feedback(task, model)
                     
                     if res:
-                        score = res.get('score', 0)
-                        # Formatteer de feedback voor een individueel model
-                        model_feedback = f"**AI Advies ({model})** - Score: {score}/10\n\n"
-                        model_feedback += f"{res['feedback']}\n\n"
-                        model_feedback += f"*Tip: {res['uitleg']}*"
-                        
-                        can_level_up = score >= 7.0
-                        
-                        if self.submit_suggestion(task['team_id'], model_feedback, can_level_up):
-                            logger.info(f"Suggestie van {model} verstuurd voor {team_name}")
+                        scores.append(res.get('score', 0))
+                        all_feedback.append(f"**{model}** ({res['score']}/10):\n{res['feedback']}\n*Tip: {res['uitleg']}*")
                     else:
                         logger.warning(f"Model {model} gaf geen resultaat.")
 
+                if not all_feedback:
+                    continue
+
+                avg_score = sum(scores) / len(scores) if scores else 0
+                can_level_up = avg_score >= 7.0
+                
+                summary = f"🤖 **AI Analyse Rapport** (Gemiddelde score: {avg_score:.1f}/10)\n\n"
+                summary += "\n\n---\n\n".join(all_feedback)
+                
+                if self.submit_suggestion(task['team_id'], summary, can_level_up):
+                    logger.info(f"Suggestie geplaatst voor {team_name} (Level up advies: {can_level_up})")
+
+            self.send_heartbeat()
             time.sleep(self.poll_interval)
 
 if __name__ == "__main__":

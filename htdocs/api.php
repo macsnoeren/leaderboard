@@ -91,6 +91,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'send_suggestion') {
     exit;
 }
 
+// Actie: Ontvang een heartbeat van de AI service
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'heartbeat') {
+    // Verwijder oude heartbeats (we houden er maar één bij)
+    $db->exec("DELETE FROM ai_service_status");
+    // Voeg nieuwe heartbeat toe
+    $db->exec("INSERT INTO ai_service_status (last_heartbeat) VALUES (CURRENT_TIMESTAMP)");
+    echo json_encode(['status' => 'success', 'message' => 'Heartbeat received']);
+    exit;
+}
+
 http_response_code(404);
 echo json_encode(['error' => 'Invalid action or method']);
 exit;
