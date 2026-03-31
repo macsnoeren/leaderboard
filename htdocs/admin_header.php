@@ -10,13 +10,11 @@ if (isset($_SESSION['force_password_change']) && basename($_SERVER['PHP_SELF']) 
     exit;
 }
 
-// Beveiliging: Forceer wachtwoordwijziging op ELKE pagina als de vlag aan staat
-if (isset($_SESSION['force_password_change']) && basename($_SERVER['PHP_SELF']) !== 'password.php' && basename($_SERVER['PHP_SELF']) !== 'logout.php') {
-    header('Location: password.php');
-    exit;
-}
-
 $db = getDB();
+
+// Zorg dat de interval bekend is voor de AI heartbeat check (moet gelijk zijn aan bin/config.py)
+if (!defined('POLL_INTERVAL')) define('POLL_INTERVAL', 30);
+
 $unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
 $currentPage = basename($_SERVER['PHP_SELF']);
 
