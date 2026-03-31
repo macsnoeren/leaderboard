@@ -40,13 +40,14 @@ class AIFeedbackService:
         if isinstance(text, dict): return text
         if not isinstance(text, str): return None
         
-        cleaned = re.sub(r'```(?:json)?\n?|```', '', text)
+        cleaned = re.sub(r'```(?:json|text)?\n?|```', '', text)
         match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if not match: return None
 
         try:
             return json.loads(match.group())
         except json.JSONDecodeError:
+            logger.debug(f"JSONDecodeError voor tekst: {text}")
             return None
 
     def fetch_pending_tasks(self) -> List[Dict]:
@@ -84,12 +85,16 @@ class AIFeedbackService:
         #    - Stap 1 (Essentie bepalen): Wat is de absolute kern die beantwoord moet worden?
         #    - Stap 2 (Semantische match): Zoek naar de intentie. Synoniemen of alternatieve
         #      verwoordingen die op hetzelfde neerkomen moeten positief gewaardeerd worden.
-        #    - Stap 3 (Logica check): Is de redenering van het team valide binnen de context?
+        #    - Stap 3 (Dekkingsanalyse): Identificeer de verschillende aspecten in de criteria 
+        #      en controleer of de meerderheid hiervan aanwezig is.
         #
-        # 4. # OUTPUT SPECIFICATIES: Stelt harde grenzen aan de lengte (max 3 zinnen) 
+        # 4. # HINT-METHODIEK: Voorkomt dat de AI het antwoord 'spoilt'. De AI wordt 
+        #    geïnstrueerd om hints te geven in plaats van oplossingen.
+        #
+        # 5. # OUTPUT SPECIFICATIES: Stelt harde grenzen aan de lengte (max 3 zinnen) 
         #    en de toon ('jullie'-vorm).
         #
-        # 5. # VERPLICHTE JSON STRUCTUUR: Cruciaal voor machine-to-machine communicatie. 
+        # 6. # VERPLICHTE JSON STRUCTUUR: Cruciaal voor machine-to-machine communicatie. 
         #    De AI wordt gedwongen om geen 'gelets' eromheen te typen, zodat Python de data kan parsen.
 
         prompt = f"""
@@ -104,24 +109,30 @@ class AIFeedbackService:
 
         # JOUW EVALUATIEPROCES (Denk stap-voor-stap)
         1. **Kern van de criteria**: Bepaal wat de intentie is van de criteria. Welke informatie of welk inzicht is essentieel?
-        2. **Semantische analyse**: Beoordeel het antwoord van het team op inhoud, niet op exacte bewoording. Accepteer synoniemen, alternatieve manieren om een conclusie te trekken of creatieve antwoorden die binnen de strekking van de criteria vallen.
-        3. **Ruimdenkendheid**: Als een team een punt maakt dat niet letterlijk in de criteria staat, maar wel logisch voortvloeit uit de opdracht of de recherche-context, waardeer dit dan positief.
-        4. **Scoretoewijzing**: Ken een score toe (0-10). Een 10 is voor een volledig antwoord (in strekking). Een 7 of hoger betekent dat de essentie is begrepen en dat ze door kunnen naar het volgende level.
+        2. **Dekkingsanalyse**: Breek de criteria op in afzonderlijke aspecten of feiten. Controleer hoeveel van deze aspecten (minimaal 60-70%) in het antwoord van het team worden geraakt.
+        3. **Semantische analyse**: Wees flexibel met de verwoording. Als een aspect niet letterlijk wordt genoemd, maar de strekking of de logische conclusie wel aanwezig is, telt dit als een match.
+        4. **Scoretoewijzing**: 
+           - Geef een 7 of hoger alleen als de meeste aspecten (de hoofdzaken) van de criteria behandeld zijn.
+           - Een 10 is voor een antwoord dat alle aspecten en de volledige context dekt.
+
+        # RICHTLIJNEN VOOR FEEDBACK (BELANGRIJK)
+        - Geef NOOIT direct het juiste antwoord of de ontbrekende feiten letterlijk prijs aan het team.
+        - Als het antwoord onvolledig is, geef dan een hint: wijs op een specifieke locatie, een persoon of een inconsistentie in hun verhaal.
+        - Gebruik prikkelende vragen (bijv: "Hebben jullie de camerabeelden van de hal wel goed bekeken?") in plaats van feitelijke correcties.
 
         # OUTPUT SPECIFICATIES
         Geef je antwoord uitsluitend in JSON-formaat met de volgende velden:
         - "score": Een numerieke waarde tussen 0 en 10.
-        - "feedback": Een constructieve, motiverende reactie direct gericht aan het team in de 'jullie'-vorm (max 3 zinnen).
-        - "uitleg": Een interne toelichting voor de docent waarin je uitlegt waarom deze score is gegeven op basis van jouw referentie-oplossing en de criteria.
+        - "feedback": Een sturende reactie met hints gericht aan het team in de 'jullie'-vorm. Verklap niets, maar wijs de weg (max 3 zinnen).
 
         # VERPLICHTE JSON STRUCTUUR
+        Geef uitsluitend een JSON object terug zoals dit voorbeeld:
         {{
-            "score": <getal>,
-            "feedback": "<tekst>",
-            "uitleg": "<tekst>"
+            "score": 7,
+            "feedback": "Goede start, maar kijk nog eens naar de tijdlijn.",
         }}
 
-        Begin nu met je analyse en output direct de JSON.
+        Begin nu met je analyse en output GEEN tekst voor of na de JSON.
         """
         
         try:
@@ -140,6 +151,7 @@ class AIFeedbackService:
             if result:
                 result['duration'] = duration
                 return result
+            logger.warning(f"Model {model} gaf geen valide JSON. Raw response: {raw_response[:100]}...")
         except Exception as e:
             logger.warning(f"Model {model} fout: {e}")
         return None
@@ -193,9 +205,8 @@ class AIFeedbackService:
                         score = res.get('score', 0)
                         # Formatteer de feedback voor een individueel model
                         duration = res.get('duration', 0)
-                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10 (Tijdsduur: {duration:.2f}s)\n\n"
-                        model_feedback += f"{res['feedback']}\n\n"
-                        model_feedback += f"*Tip: {res['uitleg']}*"
+                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10 (Tijdsduur: {duration:.2f}s)\n"
+                        model_feedback += f"{res['feedback']}"
                         
                         can_level_up = score >= 7.0
                         
