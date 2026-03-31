@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Paden configureren relatief aan dit script
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, '../conf/leaderboard.db')
+DB_PATH = os.path.join(BASE_DIR, '../database/leaderboard.db')
 HTDOCS_PATH = os.path.join(BASE_DIR, '../htdocs')
 
 def export_assignments(output_name=None):
