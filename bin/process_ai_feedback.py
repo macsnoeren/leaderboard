@@ -73,24 +73,55 @@ class AIFeedbackService:
         criteria = str(task.get('criteria') or "")
         answer = str(task.get('last_team_message') or "")
 
+        # DOCUMENTATIE VAN DE PROMPT-OPBOUW:
+        # 1. # CONTEXT: Gebruikt 'Persona Prompting'. Door de AI een expertrol te geven, 
+        #    wordt de woordkeuze en diepgang van de analyse professioneler.
+        #
+        # 2. # INPUT DATA: Scheidt instructies strikt van de data van de gebruiker. 
+        #    Dit voorkomt 'prompt injection' waarbij de team-tekst de AI probeert te foppen.
+        #
+        # 3. # JOUW EVALUATIEPROCES: Implementeert 'Chain-of-Thought'. 
+        #    - Stap 1 (Essentie bepalen): Wat is de absolute kern die beantwoord moet worden?
+        #    - Stap 2 (Semantische match): Zoek naar de intentie. Synoniemen of alternatieve
+        #      verwoordingen die op hetzelfde neerkomen moeten positief gewaardeerd worden.
+        #    - Stap 3 (Logica check): Is de redenering van het team valide binnen de context?
+        #
+        # 4. # OUTPUT SPECIFICATIES: Stelt harde grenzen aan de lengte (max 3 zinnen) 
+        #    en de toon ('jullie'-vorm).
+        #
+        # 5. # VERPLICHTE JSON STRUCTUUR: Cruciaal voor machine-to-machine communicatie. 
+        #    De AI wordt gedwongen om geen 'gelets' eromheen te typen, zodat Python de data kan parsen.
+
         prompt = f"""
-        Negeer eerdere context. Je bent een automatische beoordelaar voor een recherche-spel.
-        
-        OPDRACHT VOOR TEAM: {instruction}
-        BEOORDELINGSCRITERIA: {criteria}
-        ANTWOORD VAN HET TEAM: {answer}
+        # CONTEXT
+        Je bent een deskundige beoordelaar en recherche-instructeur voor een educatief spel. 
+        Je taak is om het ingezonden werk van een team te analyseren en van feedback te voorzien.
 
-        TAAK:
-        1. Geef een score van 0 tot 10.
-        2. Geef korte feedback in de 'jullie'-vorm.
-        3. Geef een korte uitleg wat er beter kan.
+        # INPUT DATA
+        - **Opdracht voor het team**: {instruction}
+        - **Beoordelingscriteria**: {criteria}
+        - **Ingezonden antwoord van het team**: {answer}
 
-        OUTPUT MOET EXACT DEZE JSON ZIJN:
+        # JOUW EVALUATIEPROCES (Denk stap-voor-stap)
+        1. **Kern van de criteria**: Bepaal wat de intentie is van de criteria. Welke informatie of welk inzicht is essentieel?
+        2. **Semantische analyse**: Beoordeel het antwoord van het team op inhoud, niet op exacte bewoording. Accepteer synoniemen, alternatieve manieren om een conclusie te trekken of creatieve antwoorden die binnen de strekking van de criteria vallen.
+        3. **Ruimdenkendheid**: Als een team een punt maakt dat niet letterlijk in de criteria staat, maar wel logisch voortvloeit uit de opdracht of de recherche-context, waardeer dit dan positief.
+        4. **Scoretoewijzing**: Ken een score toe (0-10). Een 10 is voor een volledig antwoord (in strekking). Een 7 of hoger betekent dat de essentie is begrepen en dat ze door kunnen naar het volgende level.
+
+        # OUTPUT SPECIFICATIES
+        Geef je antwoord uitsluitend in JSON-formaat met de volgende velden:
+        - "score": Een numerieke waarde tussen 0 en 10.
+        - "feedback": Een constructieve, motiverende reactie direct gericht aan het team in de 'jullie'-vorm (max 3 zinnen).
+        - "uitleg": Een interne toelichting voor de docent waarin je uitlegt waarom deze score is gegeven op basis van jouw referentie-oplossing en de criteria.
+
+        # VERPLICHTE JSON STRUCTUUR
         {{
             "score": <getal>,
             "feedback": "<tekst>",
             "uitleg": "<tekst>"
         }}
+
+        Begin nu met je analyse en output direct de JSON.
         """
         
         try:
@@ -153,31 +184,25 @@ class AIFeedbackService:
             
             for task in tasks:
                 team_name = task.get('team_name', 'Onbekend')
-                all_feedback = []
-                scores = []
-                failed = False
 
                 for model in self.models:
                     logger.info(f"Analyseren: Team '{team_name}' met {model}...")
                     res = self.get_model_feedback(task, model)
                     
                     if res:
-                        scores.append(res.get('score', 0))
-                        all_feedback.append(f"**{model}** ({res['score']}/10):\n{res['feedback']}\n*Tip: {res['uitleg']}*")
+                        score = res.get('score', 0)
+                        # Formatteer de feedback voor een individueel model
+                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10\n\n"
+                        model_feedback += f"{res['feedback']}\n\n"
+                        model_feedback += f"*Tip: {res['uitleg']}*"
+                        
+                        can_level_up = score >= 7.0
+                        
+                        # Stuur de suggestie direct per model door naar de API
+                        if self.submit_suggestion(task['team_id'], model_feedback, can_level_up):
+                            logger.info(f"Suggestie van {model} verstuurd voor {team_name}")
                     else:
                         logger.warning(f"Model {model} gaf geen resultaat.")
-
-                if not all_feedback:
-                    continue
-
-                avg_score = sum(scores) / len(scores) if scores else 0
-                can_level_up = avg_score >= 7.0
-                
-                summary = f"🤖 **AI Analyse Rapport** (Gemiddelde score: {avg_score:.1f}/10)\n\n"
-                summary += "\n\n---\n\n".join(all_feedback)
-                
-                if self.submit_suggestion(task['team_id'], summary, can_level_up):
-                    logger.info(f"Suggestie geplaatst voor {team_name} (Level up advies: {can_level_up})")
 
             self.send_heartbeat()
             time.sleep(self.poll_interval)
