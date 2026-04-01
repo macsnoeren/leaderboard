@@ -3,6 +3,7 @@ import tarfile
 import json
 import os
 import sys
+import re
 import shutil
 import time
 
@@ -43,8 +44,16 @@ def import_assignments(archive_path):
                 new_file_path = None
                 
                 if a['artifact_file']:
+                    # Extract the original base filename from the manifest entry.
+                    # This handles cases where an exported archive (with safed names) is re-imported,
+                    # preventing double prefixes like 'assignment_X_TS_assignment_Y_TS_file.zip'.
+                    original_filename_match = re.match(r'assignment_\d+_\d+_(.*)', a['artifact_file'])
+                    if original_filename_match:
+                        base_filename = original_filename_match.group(1)
+                    else:
+                        base_filename = a['artifact_file']
                     # Genereer unieke bestandsnaam (conform PHP logica)
-                    safe_name = f"assignment_{a['assignment_number']}_{int(time.time())}_{a['artifact_file']}"
+                    safe_name = f"assignment_{a['assignment_number']}_{int(time.time())}_{base_filename}"
                     
                     try:
                         # Extraheer bestand direct uit de tar naar de doellocatie
