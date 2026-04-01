@@ -12,7 +12,6 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 # Lijst met LLM-modellen die gebruikt worden voor de beoordeling
 LLM_MODELS = [
     "qwen3:4b",
-    "gemma3:1b",
     "gpt-oss:120b-cloud",
 ]
 
