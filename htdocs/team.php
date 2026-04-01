@@ -96,6 +96,9 @@ if (isset($_GET['ajax'])) {
         .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .team-name { font-size: 1.8em; font-weight: bold; }
         .stats-bar { display: flex; gap: 30px; font-size: 1.1em; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 10px; }
+        .header-actions { display: flex; align-items: center; gap: 20px; }
+        .header-link { color: white; text-decoration: none; font-size: 0.85em; padding: 8px 15px; border: 1px solid rgba(255,255,255,0.4); border-radius: 8px; transition: 0.2s; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .header-link:hover { background: rgba(255,255,255,0.2); border-color: white; }
         .stat-item { display: flex; flex-direction: column; align-items: center; }
         .stat-label { font-size: 0.7em; text-transform: uppercase; opacity: 0.8; letter-spacing: 1px; }
         .stat-value { font-weight: bold; }
@@ -173,18 +176,21 @@ if (isset($_GET['ajax'])) {
     <header>
         <div class="header-top">
             <div class="team-name">Team: <?= htmlspecialchars($team['team_name']) ?></div>
-            <div class="stats-bar">
-                <div class="stat-item">
-                    <span class="stat-label">Positie</span>
-                    <span class="stat-value">#<span id="display-rank"><?= $rank ?></span></span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Level</span>
-                    <span class="stat-value"><span id="display-level"><?= $team['current_level'] ?></span></span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Tijd Bezig</span>
-                    <span class="stat-value" id="live-timer">00:00:00</span>
+            <div class="header-actions">
+                <a href="index.php" target="_leaderboard" class="header-link">View Public Leaderboard</a>
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <span class="stat-label">Positie</span>
+                        <span class="stat-value">#<span id="display-rank"><?= $rank ?></span></span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Level</span>
+                        <span class="stat-value"><span id="display-level"><?= $team['current_level'] ?></span></span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Tijd Bezig</span>
+                        <span class="stat-value" id="live-timer">00:00:00</span>
+                    </div>
                 </div>
             </div>
         </div>
