@@ -299,8 +299,8 @@ $extraJS = "
 
             const fullText = msgBodyDiv.innerText;
             // Split op de dubbele newline om de header (score/model) te scheiden van de feedback
-            const parts = fullText.split('\n\n');
-            const feedback = parts.length > 1 ? parts.slice(1).join('\n\n').trim() : fullText;
+            const parts = fullText.split('\\n');
+            const feedback = parts.length > 1 ? parts.slice(1).join('\\n').trim() : fullText;
 
             const textarea = document.getElementById('teacher-reply-box');
             if (textarea) {
