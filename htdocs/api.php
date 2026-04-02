@@ -60,10 +60,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
             WHERE team_id = t.id AND assignment_number = t.current_level 
             AND sender IN ('suggestion', 'teacher') AND id > tm.id
         )
+        -- Filter teams die momenteel door een andere agent worden verwerkt (met 5 min timeout)
+        AND (t.ai_processing_at IS NULL OR t.ai_processing_at < datetime('now', '-5 minutes'))
         ORDER BY tm.created_at DESC
     ";
     $stmt = $db->query($query);
     echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    exit;
+}
+
+// Actie: Claim een taak voor een specifieke agent
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'claim_task') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $team_id = (int)($input['team_id'] ?? 0);
+    $agent_id = trim($input['agent_id'] ?? 'unknown');
+
+    // Atomische update: claim alleen als er geen actieve lock is
+    $stmt = $db->prepare("
+        UPDATE teams 
+        SET ai_processing_by = ?, ai_processing_at = CURRENT_TIMESTAMP 
+        WHERE id = ? 
+        AND (ai_processing_at IS NULL OR ai_processing_at < datetime('now', '-5 minutes'))
+    ");
+    $stmt->execute([$agent_id, $team_id]);
+
+    if ($stmt->rowCount() > 0) {
+        echo json_encode(['status' => 'success', 'message' => 'Task claimed']);
+    } else {
+        http_response_code(409);
+        echo json_encode(['error' => 'Task already claimed or not found']);
+    }
     exit;
 }
 
@@ -97,6 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'send_suggestion') {
     // Sla de suggestie op (is_read = 0 zorgt voor de rode badge bij de docent)
     $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message, is_read) VALUES (?, ?, 'suggestion', ?, 0)");
     $stmt->execute([$team_id, $current_level, $full_message]);
+
+    // Unlock het team
+    $db->prepare("UPDATE teams SET ai_processing_by = NULL, ai_processing_at = NULL WHERE id = ?")->execute([$team_id]);
 
     echo json_encode(['status' => 'success', 'message' => 'Suggestion added to database']);
     exit;

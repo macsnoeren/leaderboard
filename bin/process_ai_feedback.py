@@ -10,6 +10,7 @@ import json
 import time
 import re
 import logging
+import uuid
 from typing import List, Dict, Optional, Any
 import re
 from config import API_KEY, BASE_URL, OLLAMA_URL, LLM_MODELS, POLL_INTERVAL
@@ -29,6 +30,7 @@ class AIFeedbackService:
         self.ollama_url = OLLAMA_URL
         self.models = LLM_MODELS
         self.poll_interval = POLL_INTERVAL
+        self.agent_id = f"agent-{uuid.uuid4().hex[:8]}"
 
     def _get_headers(self) -> Dict[str, str]:
         return {
@@ -156,6 +158,19 @@ class AIFeedbackService:
             logger.warning(f"Model {model} fout: {e}")
         return None
 
+    def claim_task(self, team_id: int) -> bool:
+        try:
+            resp = requests.post(
+                f"{self.base_url}?action=claim_task&token={self.api_key}",
+                headers=self._get_headers(),
+                json={"team_id": team_id, "agent_id": self.agent_id},
+                timeout=10
+            )
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Fout bij claimen taak {team_id}: {e}")
+            return False
+
     def submit_suggestion(self, team_id: int, message: str, level_up: bool):
         try:
             payload = {
@@ -187,7 +202,7 @@ class AIFeedbackService:
             logger.warning(f"Fout bij versturen heartbeat: {e}")
 
     def run(self):
-        logger.info(f"AI Feedback Service gestart. Interval: {self.poll_interval}s")
+        logger.info(f"AI Feedback Service gestart (ID: {self.agent_id}). Interval: {self.poll_interval}s")
         
         while True:
             tasks = self.fetch_pending_tasks()
@@ -196,6 +211,12 @@ class AIFeedbackService:
             
             for task in tasks:
                 team_name = task.get('team_name', 'Onbekend')
+                team_id = task['team_id']
+
+                # Probeer de taak te claimen voordat we beginnen
+                if not self.claim_task(team_id):
+                    logger.info(f"Overslaan: Team '{team_name}' wordt al verwerkt door een andere agent.")
+                    continue
 
                 for model in self.models:
                     logger.info(f"Analyseren: Team '{team_name}' met {model}...")

@@ -45,6 +45,12 @@ try {
         // Kolom bestaat al of update mislukt
     }
 
+    // 2.1 Voeg AI locking velden toe
+    try {
+        $db->exec("ALTER TABLE teams ADD COLUMN ai_processing_by TEXT");
+        $db->exec("ALTER TABLE teams ADD COLUMN ai_processing_at DATETIME");
+    } catch (PDOException $e) {}
+
     // 3. Maak tabel voor het bijhouden van download limieten
     $db->exec("CREATE TABLE IF NOT EXISTS team_downloads (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
