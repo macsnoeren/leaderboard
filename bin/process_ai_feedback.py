@@ -164,7 +164,7 @@ class AIFeedbackService:
                 f"{self.base_url}?action=claim_task&token={self.api_key}",
                 headers=self._get_headers(),
                 json={"team_id": team_id, "agent_id": self.agent_id},
-                timeout=10
+                timeout=15
             )
             return resp.status_code == 200
         except Exception as e:
@@ -196,7 +196,7 @@ class AIFeedbackService:
                 f"{self.base_url}?action=heartbeat&token={self.api_key}",
                 headers=self._get_headers(),
                 json={"agent_id": self.agent_id},
-                timeout=5
+                timeout=10
             )
             resp.raise_for_status()
         except Exception as e:
@@ -206,6 +206,9 @@ class AIFeedbackService:
         logger.info(f"AI Feedback Service gestart (ID: {self.agent_id}). Interval: {self.poll_interval}s")
         
         while True:
+            # Stuur direct een heartbeat bij de start van elke cyclus
+            self.send_heartbeat()
+
             tasks = self.fetch_pending_tasks()
             if tasks:
                 logger.info(f"{len(tasks)} antwoorden gevonden om te verwerken.")
@@ -218,6 +221,9 @@ class AIFeedbackService:
                 if not self.claim_task(team_id):
                     logger.info(f"Overslaan: Team '{team_name}' wordt al verwerkt door een andere agent.")
                     continue
+
+                # Stuur een extra heartbeat vlak voordat we aan de zware LLM analyse beginnen
+                self.send_heartbeat()
 
                 for model in self.models:
                     logger.info(f"Analyseren: Team '{team_name}' met {model}...")
@@ -238,7 +244,6 @@ class AIFeedbackService:
                     else:
                         logger.warning(f"Model {model} gaf geen resultaat.")
 
-            self.send_heartbeat()
             time.sleep(self.poll_interval)
 
 if __name__ == "__main__":
