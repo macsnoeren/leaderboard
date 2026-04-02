@@ -72,7 +72,7 @@ class AIFeedbackService:
     def get_model_feedback(self, task: Dict, model: str) -> Optional[Dict]:
         instruction = str(task.get('instruction') or "")
         criteria = str(task.get('criteria') or "")
-        answer = str(task.get('last_team_message') or "")
+        answer = str(task.get('chat_history') or "")
 
         # DOCUMENTATIE VAN DE PROMPT-OPBOUW:
         # 1. # CONTEXT: Gebruikt 'Persona Prompting'. Door de AI een expertrol te geven, 
@@ -105,7 +105,7 @@ class AIFeedbackService:
         # INPUT DATA
         - **Opdracht voor het team**: {instruction}
         - **Beoordelingscriteria**: {criteria}
-        - **Ingezonden antwoord van het team**: {answer}
+        - **Chatgeschiedenis (Team & Docent)**: {answer}
 
         # JOUW EVALUATIEPROCES (Denk stap-voor-stap)
         1. **Kern van de criteria**: Bepaal wat de intentie is van de criteria. Welke informatie of welk inzicht is essentieel?

@@ -36,7 +36,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
         SELECT 
             t.id as team_id, t.team_name, t.current_level,
             a.title as assignment_title, a.description, a.instruction, a.criteria, a.time_limit,
-            tm.message as last_team_message, tm.created_at as message_time
+            tm.created_at as message_time,
+            (
+                SELECT GROUP_CONCAT(msg, CHAR(10))
+                FROM (
+                    SELECT (CASE WHEN sender = 'team' THEN 'Team: ' ELSE 'Docent: ' END) || message as msg
+                    FROM team_messages 
+                    WHERE team_id = t.id 
+                    AND assignment_number = t.current_level 
+                    AND sender IN ('team', 'teacher')
+                    ORDER BY created_at ASC
+                )
+            ) as chat_history
         FROM teams t
         JOIN assignments a ON t.current_level = a.assignment_number
         JOIN team_messages tm ON t.id = tm.team_id AND t.current_level = tm.assignment_number
