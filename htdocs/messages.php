@@ -296,10 +296,20 @@ $extraJS = "
         scrollToBottom();
 
         function useSuggestion(btn) {
-            const msgBody = btn.parentElement.querySelector('.msg-body').innerText;
+            const messageDiv = btn.closest('.message');
+            if (!messageDiv) return;
+            
+            const msgBodyDiv = messageDiv.querySelector('.msg-body');
+            if (!msgBodyDiv) return;
+
+            const fullText = msgBodyDiv.innerText;
+            // Split op de dubbele newline om de header (score/model) te scheiden van de feedback
+            const parts = fullText.split('\\n');
+            const feedback = parts.length > 1 ? parts.slice(1).join('\\n').trim() : fullText;
+
             const textarea = document.getElementById('teacher-reply-box');
             if (textarea) {
-                textarea.value = msgBody;
+                textarea.value = feedback;
                 textarea.focus();
             }
         }

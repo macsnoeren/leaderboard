@@ -205,7 +205,7 @@ class AIFeedbackService:
                         score = res.get('score', 0)
                         # Formatteer de feedback voor een individueel model
                         duration = res.get('duration', 0)
-                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10 (Tijdsduur: {duration:.2f}s)\n"
+                        model_feedback = f"🤖 **AI Advies ({model})** - Score: {score}/10 (Tijdsduur: {duration:.2f}s)\n\n"
                         model_feedback += f"{res['feedback']}"
                         
                         can_level_up = score >= 7.0

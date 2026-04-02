@@ -4,7 +4,6 @@ import json
 import os
 import sys
 import shutil
-import time
 
 # Paden configureren
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,8 +42,9 @@ def import_assignments(archive_path):
                 new_file_path = None
                 
                 if a['artifact_file']:
-                    # Genereer unieke bestandsnaam (conform PHP logica)
-                    safe_name = f"assignment_{a['assignment_number']}_{int(time.time())}_{a['artifact_file']}"
+                    # Gebruik de bestandsnaam uit het manifest direct.
+                    # Bij import is hernoemen niet nodig omdat de naam al uniek is vanuit de export.
+                    safe_name = a['artifact_file']
                     
                     try:
                         # Extraheer bestand direct uit de tar naar de doellocatie
