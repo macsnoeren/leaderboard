@@ -87,6 +87,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             <?php if (($_SESSION['teacher_role'] ?? 'user') === 'admin'): ?>
             <a href="users.php" class="nav-item <?= $currentPage == 'users.php' ? 'active' : '' ?>">👥 Users</a>
             <a href="api_keys.php" class="nav-item <?= $currentPage == 'api_keys.php' ? 'active' : '' ?>">🔑 API Keys</a>
+            <a href="archive.php" class="nav-item <?= $currentPage == 'archive.php' ? 'active' : '' ?>">📦 Archief</a>
             <a href="audit.php" class="nav-item <?= $currentPage == 'audit.php' ? 'active' : '' ?>">📋 Audit Logs</a>
             <?php endif; ?>
             <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
