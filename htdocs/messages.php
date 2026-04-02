@@ -20,6 +20,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if (!empty($msg)) {
         $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'teacher', ?)");
         $stmt->execute([$team_id, $lvl, $msg]);
+        
+        // Verwijder AI suggesties zodra de docent zelf antwoordt
+        $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'")
+           ->execute([$team_id, $lvl]);
+
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'MSG_REPLY', ?)")->execute([$_SESSION['teacher_id'], "Replied to team ID $team_id on level $lvl"]);
         header("Location: messages.php?team_id=$team_id");
         exit;

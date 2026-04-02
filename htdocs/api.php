@@ -54,11 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
         WHERE tm.sender = 'team'
         -- Pak alleen het allerlaatste bericht van het team voor dit level
         AND tm.id IN (SELECT MAX(id) FROM team_messages WHERE sender = 'team' GROUP BY team_id, assignment_number)
-        -- Controleer of er nog geen AI suggestie bestaat die nieuwer is dan dit teambericht
+        -- Controleer of er nog geen AI suggestie of docent-reactie bestaat die nieuwer is dan dit teambericht
         AND NOT EXISTS (
             SELECT 1 FROM team_messages 
             WHERE team_id = t.id AND assignment_number = t.current_level 
-            AND sender = 'suggestion' AND id > tm.id
+            AND sender IN ('suggestion', 'teacher') AND id > tm.id
         )
         ORDER BY tm.created_at DESC
     ";
