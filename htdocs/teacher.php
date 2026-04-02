@@ -69,6 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
                 $db->prepare("INSERT INTO completed_assignments (team_id, assignment_number, chat_history) VALUES (?, ?, ?)")
                    ->execute([$team_id, $team['current_level'], implode("\n", $history)]);
+
+                // Verwijder de chatberichten van het voltooide level (inclusief AI suggesties)
+                $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ?")
+                   ->execute([$team_id, $team['current_level']]);
             }
             
             // Update level
