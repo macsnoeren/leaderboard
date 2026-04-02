@@ -100,13 +100,16 @@ $currentPage = basename($_SERVER['PHP_SELF']);
     </nav>
     <script>
     function updateAIStatus() {
-        fetch('teacher.php?ajax_ai_status=1')
+        // Voeg een timestamp toe om caching te voorkomen
+        fetch('teacher.php?ajax_ai_status=1&t=' + new Date().getTime())
             .then(r => r.text())
             .then(status => {
                 const el = document.getElementById('ai-agent-status');
-                if (!el) return;
+                if (!el || !status) return;
+                
                 el.innerText = status.charAt(0).toUpperCase() + status.slice(1);
-                el.style.color = status.includes('active') ? '#2e7d32' : '#c62828';
+                // Gebruik startsWith om verwarring met 'inactive' te voorkomen
+                el.style.color = status.startsWith('active') ? '#2e7d32' : '#c62828';
             });
     }
     updateAIStatus();

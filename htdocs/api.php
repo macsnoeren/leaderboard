@@ -136,7 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'heartbeat') {
     $input = json_decode(file_get_contents('php://input'), true);
     $agent_id = trim($input['agent_id'] ?? 'unknown');
 
-    $stmt = $db->prepare("INSERT INTO ai_service_status (agent_id, last_heartbeat) VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(agent_id) DO UPDATE SET last_heartbeat=CURRENT_TIMESTAMP");
+    // Gebruik REPLACE INTO voor betere SQLite compatibiliteit en sla tijd op als Unix timestamp
+    $stmt = $db->prepare("REPLACE INTO ai_service_status (agent_id, last_heartbeat) VALUES (?, strftime('%s', 'now'))");
     $stmt->execute([$agent_id]);
 
     echo json_encode(['status' => 'success', 'message' => 'Heartbeat received']);
