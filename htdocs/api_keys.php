@@ -40,6 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'API_KEY_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Deleted API key ID: $id"]);
         $message = "API Key verwijderd.";
     }
+
+    if ($_POST['action'] === 'reset_ai') {
+        $db->exec("DELETE FROM ai_service_status");
+        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'AI_RESET', 'Handmatig de AI agent status gereset')")->execute([$_SESSION['teacher_id']]);
+        $message = "AI Agent status gereset. De teller in de sidebar zal binnen 10 seconden bijwerken.";
+    }
 }
 
 $keys = $db->query("SELECT * FROM api_keys ORDER BY created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
@@ -59,6 +65,15 @@ include 'admin_header.php';
             <input type="hidden" name="action" value="add_key">
             <input type="text" name="key_name" placeholder="Naam applicatie (bijv. Python AI Bot)" required style="flex: 1;">
             <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Key Genereren</button>
+        </form>
+    </div>
+
+    <div class="card" style="border-left: 5px solid #f44336;">
+        <div class="card-title" style="color: #f44336;">AI Agent Status Beheer</div>
+        <p style="margin-bottom: 15px; color: #666; font-size: 0.9em;">Indien de teller in de sidebar onjuiste (oude) agents blijft tonen door onvoorziene crashes, kun je de status hier handmatig opschonen. Actieve agents zullen bij hun volgende heartbeat weer automatisch verschijnen.</p>
+        <form method="POST" onsubmit="return confirm('Weet je zeker dat je alle AI agent sessies uit de database wilt verwijderen?')">
+            <input type="hidden" name="action" value="reset_ai">
+            <button type="submit" class="btn btn-danger">Reset AI Agent Status</button>
         </form>
     </div>
 
