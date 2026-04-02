@@ -64,6 +64,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         if ($team) {
             $new_level = $team['current_level'] + ($_POST['action'] === 'level_up' ? 1 : 0);
+
+            // Archiveer de chatgeschiedenis als het een echte level up is
+            if ($_POST['action'] === 'level_up') {
+                $stmtMsgs = $db->prepare("SELECT sender, message FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
+                $stmtMsgs->execute([$team_id, $team['current_level']]);
+                $history = [];
+                foreach ($stmtMsgs->fetchAll(PDO::FETCH_ASSOC) as $m) {
+                    $history[] = ($m['sender'] === 'team' ? 'Team: ' : 'Docent: ') . $m['message'];
+                }
+                $db->prepare("INSERT INTO completed_assignments (team_id, assignment_number, chat_history) VALUES (?, ?, ?)")
+                   ->execute([$team_id, $team['current_level'], implode("\n", $history)]);
+            }
             
             // Update level
             $sql = "UPDATE teams SET current_level = ?" . ($_POST['action'] === 'level_up' ? ", level_updated_at = CURRENT_TIMESTAMP" : "") . " WHERE id = ?";
