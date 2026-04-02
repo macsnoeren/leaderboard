@@ -98,6 +98,20 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             AI Agent: <span id="ai-agent-status" style="font-weight: bold; color: #888;">Controleren...</span>
         </div>
     </nav>
+    <script>
+    function updateAIStatus() {
+        fetch('teacher.php?ajax_ai_status=1')
+            .then(r => r.text())
+            .then(status => {
+                const el = document.getElementById('ai-agent-status');
+                if (!el) return;
+                el.innerText = status.charAt(0).toUpperCase() + status.slice(1);
+                el.style.color = status.includes('active') ? '#2e7d32' : '#c62828';
+            });
+    }
+    updateAIStatus();
+    setInterval(updateAIStatus, 10000);
+    </script>
     <div class="main-content">
         <?php if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false): ?>
             <div style="background: #fff3e0; color: #e65100; padding: 10px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #ff9800; font-size: 0.9em; display: flex; align-items: center; gap: 10px;">

@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
             AND sender IN ('suggestion', 'teacher') AND id > tm.id
         )
         -- Filter teams die momenteel door een andere agent worden verwerkt (met 5 min timeout)
-        AND (t.ai_processing_at IS NULL OR t.ai_processing_at < datetime('now', '-5 minutes'))
+        AND (t.ai_processing_at IS NULL OR t.ai_processing_at <= datetime('now', '-5 minutes'))
         ORDER BY tm.created_at DESC
     ";
     $stmt = $db->query($query);
@@ -80,9 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'claim_task') {
         UPDATE teams 
         SET ai_processing_by = ?, ai_processing_at = CURRENT_TIMESTAMP 
         WHERE id = ? 
-        AND (ai_processing_at IS NULL OR ai_processing_at < datetime('now', '-5 minutes'))
+        AND (ai_processing_at IS NULL OR ai_processing_at <= datetime('now', '-5 minutes') OR ai_processing_by = ?)
     ");
-    $stmt->execute([$agent_id, $team_id]);
+    $stmt->execute([$agent_id, $team_id, $agent_id]);
 
     if ($stmt->rowCount() > 0) {
         echo json_encode(['status' => 'success', 'message' => 'Task claimed']);
@@ -133,10 +133,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'send_suggestion') {
 
 // Actie: Ontvang een heartbeat van de AI service
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'heartbeat') {
-    // Verwijder oude heartbeats (we houden er maar één bij)
-    $db->exec("DELETE FROM ai_service_status");
-    // Voeg nieuwe heartbeat toe
-    $db->exec("INSERT INTO ai_service_status (last_heartbeat) VALUES (CURRENT_TIMESTAMP)");
+    $input = json_decode(file_get_contents('php://input'), true);
+    $agent_id = trim($input['agent_id'] ?? 'unknown');
+
+    $stmt = $db->prepare("INSERT INTO ai_service_status (agent_id, last_heartbeat) VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT(agent_id) DO UPDATE SET last_heartbeat=CURRENT_TIMESTAMP");
+    $stmt->execute([$agent_id]);
+
     echo json_encode(['status' => 'success', 'message' => 'Heartbeat received']);
     exit;
 }

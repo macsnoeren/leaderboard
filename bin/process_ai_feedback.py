@@ -195,6 +195,7 @@ class AIFeedbackService:
             resp = requests.post(
                 f"{self.base_url}?action=heartbeat&token={self.api_key}",
                 headers=self._get_headers(),
+                json={"agent_id": self.agent_id},
                 timeout=5
             )
             resp.raise_for_status()

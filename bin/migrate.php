@@ -69,7 +69,11 @@ try {
     $db->exec("CREATE TABLE IF NOT EXISTS api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, key_name TEXT, api_key TEXT UNIQUE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
     // 6. Maak tabel voor AI service status
-    $db->exec("CREATE TABLE IF NOT EXISTS ai_service_status (id INTEGER PRIMARY KEY AUTOINCREMENT, last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE IF NOT EXISTS ai_service_status (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT UNIQUE, last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    try {
+        $db->exec("ALTER TABLE ai_service_status ADD COLUMN agent_id TEXT");
+        $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_id ON ai_service_status(agent_id)");
+    } catch (PDOException $e) {}
 
     // 7. Maak tabel voor gearchiveerde chats van voltooide opdrachten
     $db->exec("CREATE TABLE IF NOT EXISTS completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");

@@ -38,17 +38,11 @@ if (isset($_GET['ajax_unread'])) {
 // AJAX endpoint voor AI Agent status heartbeat check
 if (isset($_GET['ajax_ai_status'])) {
     if (!defined('POLL_INTERVAL')) define('POLL_INTERVAL', 30);
-    $ai_status_stmt = $db->query("SELECT last_heartbeat FROM ai_service_status ORDER BY id DESC LIMIT 1");
-    $ai_last_heartbeat = $ai_status_stmt->fetchColumn();
-    $active = false;
-    if ($ai_last_heartbeat) {
-        $last_heartbeat_timestamp = strtotime($ai_last_heartbeat);
-        // Gebruik 2x interval als marge
-        if ((time() - $last_heartbeat_timestamp) < (2 * POLL_INTERVAL)) {
-            $active = true;
-        }
-    }
-    echo $active ? 'active' : 'inactive';
+    // Tel unieke agents die in de afgelopen minuut een teken van leven gaven
+    $stmt = $db->query("SELECT COUNT(*) FROM ai_service_status WHERE last_heartbeat > datetime('now', '-60 seconds')");
+    $count = (int)$stmt->fetchColumn();
+    
+    echo $count > 0 ? "active ($count)" : "inactive";
     exit;
 }
 
