@@ -65,6 +65,9 @@ try {
     // 6. Maak tabel voor AI service status
     $db->exec("CREATE TABLE IF NOT EXISTS ai_service_status (id INTEGER PRIMARY KEY AUTOINCREMENT, last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
+    // 7. Maak tabel voor gearchiveerde chats van voltooide opdrachten
+    $db->exec("CREATE TABLE IF NOT EXISTS completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";
