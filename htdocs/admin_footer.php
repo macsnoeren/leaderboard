@@ -18,24 +18,9 @@
                 });
         }
 
-        function updateAIStatus() {
-            fetch('teacher.php?ajax_ai_status=1')
-                .then(r => r.text())
-                .then(status => {
-                    const el = document.getElementById('ai-agent-status');
-                    if (!el) return;
-                    if (status === 'active') {
-                        el.style.color = '#4caf50';
-                        el.innerText = '● Actief';
-                    } else {
-                        el.style.color = '#f44336';
-                        el.innerText = '● Inactief';
-                    }
-                });
-        }
-
-        setInterval(() => { updateUnreadBadge(); updateAIStatus(); }, 10000);
-        updateAIStatus(); // Directe check bij laden
+        // De AI Status wordt al afgehandeld in admin_header.php
+        setInterval(() => { updateUnreadBadge(); }, 10000);
+        updateUnreadBadge();
     </script>
     <?php if (isset($extraJS)) echo $extraJS; ?>
 </body>

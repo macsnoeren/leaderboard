@@ -140,7 +140,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'heartbeat') {
     $stmt = $db->prepare("REPLACE INTO ai_service_status (agent_id, last_heartbeat) VALUES (?, strftime('%s', 'now'))");
     $stmt->execute([$agent_id]);
 
+    // Verwijder hartslagen ouder dan 10 minuten om de tabel schoon te houden
+    $db->exec("DELETE FROM ai_service_status WHERE last_heartbeat < (strftime('%s', 'now') - 600)");
+
     echo json_encode(['status' => 'success', 'message' => 'Heartbeat received']);
+    exit;
+}
+
+// Actie: Meld een AI agent af (bij afsluiten)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'unregister_agent') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $agent_id = trim($input['agent_id'] ?? '');
+
+    if (!empty($agent_id)) {
+        $db->prepare("DELETE FROM ai_service_status WHERE agent_id = ?")->execute([$agent_id]);
+    }
+    echo json_encode(['status' => 'success', 'message' => 'Agent unregistered']);
     exit;
 }
 

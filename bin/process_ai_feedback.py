@@ -202,6 +202,18 @@ class AIFeedbackService:
         except Exception as e:
             logger.warning(f"Fout bij versturen heartbeat: {e}")
 
+    def unregister_agent(self):
+        try:
+            requests.post(
+                f"{self.base_url}?action=unregister_agent&token={self.api_key}",
+                headers=self._get_headers(),
+                json={"agent_id": self.agent_id},
+                timeout=5
+            )
+            logger.info("Agent succesvol afgemeld.")
+        except:
+            pass
+
     def run(self):
         logger.info(f"AI Feedback Service gestart (ID: {self.agent_id}). Interval: {self.poll_interval}s")
         
@@ -252,5 +264,7 @@ if __name__ == "__main__":
         service.run()
     except KeyboardInterrupt:
         logger.info("Service gestopt door gebruiker.")
+        service.unregister_agent()
     except Exception as e:
         logger.critical(f"Kritieke fout in service: {e}")
+        service.unregister_agent()
