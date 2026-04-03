@@ -28,7 +28,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         
         .sidebar { width: 260px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 1000; }
         .sidebar-header { padding: 30px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; font-weight: bold; font-size: 1.2em; }
-        .sidebar-nav { flex: 1; padding: 20px 0; }
+        .sidebar-nav { flex: 1; padding: 20px 0; display: flex; flex-direction: column; }
         .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
         .nav-item:hover { background: #f0f2f5; color: #667eea; }
         .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
@@ -92,7 +92,8 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             <?php endif; ?>
             <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
             <a href="password.php" class="nav-item <?= $currentPage == 'password.php' ? 'active' : '' ?>">🔑 Password</a>
-            <a href="logout.php" class="nav-item" style="margin-top: auto; color: #c62828;">🚪 Logout</a>
+            <a href="https://darkwebchat.zebrawavesecurity.info/hacker-chat.html" target="_blank" class="nav-item" style="margin-top: auto; color: #4a148c; font-weight: bold;">💀 DARKNET CHAT</a>
+            <a href="logout.php" class="nav-item" style="color: #c62828;">🚪 Logout</a>
         </div>
         <div style="padding: 15px 25px; border-top: 1px solid #eee; font-size: 0.8em; color: #888;">
             AI Agent: <span id="ai-agent-status" style="font-weight: bold; color: #888;">Controleren...</span>
