@@ -84,6 +84,9 @@ try {
         $db->exec("ALTER TABLE teams ADD COLUMN editing_at DATETIME");
     } catch (PDOException $e) {}
 
+    // 9. Tabel voor aanwezigheid van meerdere docenten
+    $db->exec("CREATE TABLE IF NOT EXISTS team_presence (team_id INTEGER, username TEXT, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (team_id, username))");
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

@@ -112,23 +112,19 @@ if ($selected_team_id) {
     }
 }
 
-// Update Presence: Geef aan dat deze docent dit team bekijkt
-if ($selected_team_id) {
-    $db->prepare("UPDATE teams SET editing_by = ?, editing_at = CURRENT_TIMESTAMP WHERE id = ?")
-       ->execute([$_SESSION['teacher_username'] ?? 'Onbekende Docent', $selected_team_id]);
-}
-
 // Check Presence: Wie kijkt er nog meer? (korter dan 15 seconden geleden)
 $other_teachers = [];
 if ($selected_team_id) {
-    $stmt = $db->prepare("
-        SELECT editing_by 
-        FROM teams 
-        WHERE id = ? 
-        AND editing_at > datetime('now', '-15 seconds') 
-        AND editing_by != ?
-    ");
-    $stmt->execute([$selected_team_id, $_SESSION['teacher_username'] ?? '']);
+    $current_teacher = $_SESSION['teacher_username'] ?? 'Onbekende Docent';
+    
+    // Opschonen oude sessies en eigen aanwezigheid registreren
+    $db->exec("DELETE FROM team_presence WHERE last_seen < datetime('now', '-30 seconds')");
+    $db->prepare("INSERT OR REPLACE INTO team_presence (team_id, username, last_seen) VALUES (?, ?, CURRENT_TIMESTAMP)")
+       ->execute([$selected_team_id, $current_teacher]);
+
+    // Zoek andere actieve docenten voor dit team
+    $stmt = $db->prepare("SELECT username FROM team_presence WHERE team_id = ? AND username != ? AND last_seen > datetime('now', '-15 seconds')");
+    $stmt->execute([$selected_team_id, $current_teacher]);
     $other_teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
