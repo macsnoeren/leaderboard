@@ -159,17 +159,24 @@ if (isset($_GET['ajax'])) {
         .remaining { font-size: 0.85em; color: #888; }
 
         /* Chat Section */
-        .chat-section { flex: 1; width: 100%; background: white; border-left: none; display: flex; flex-direction: column; overflow: hidden; }
-        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; }
+        .chat-section { flex: 1; width: 100%; background: white; border-left: none; display: flex; flex-direction: column; overflow: hidden; transition: 0.3s; }
+        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; display: flex; justify-content: space-between; align-items: center; }
         .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; min-height: 0; }
         .message { padding: 10px 15px; border-radius: 12px; max-width: 85%; font-size: 0.95em; position: relative; }
         .message.team { align-self: flex-end; background: #667eea; color: white; border-bottom-right-radius: 2px; }
         .message.teacher { align-self: flex-start; background: #e4e6eb; color: #050505; border-bottom-left-radius: 2px; }
+
+        /* Grote Chat Modus */
+        .chat-section.large-mode .message { font-size: 1.25em; padding: 15px 20px; max-width: 90%; }
+        .chat-section.large-mode textarea { font-size: 1.2em; }
+        .btn-zoom { background: white; border: 1px solid #ddd; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8em; color: #666; transition: 0.2s; }
+        .btn-zoom:hover { background: #f0f0f0; border-color: #bbb; }
+
         .msg-meta { font-size: 0.7em; opacity: 0.7; margin-bottom: 4px; }
         
         .chat-input-area { padding: 20px; border-top: 1px solid #eee; flex-shrink: 0; }
         .chat-form { display: flex; flex-direction: column; gap: 10px; }
-        textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: none; font-family: inherit; font-size: 0.95em; }
+        textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; min-height: 80px; max-height: 400px; font-family: inherit; font-size: 0.95em; }
         textarea:focus { outline: 2px solid #667eea; border-color: transparent; }
 
         /* Level Up Overlay */
@@ -250,8 +257,11 @@ if (isset($_GET['ajax'])) {
             </div>
         </section>
 
-        <section class="chat-section">
-            <div class="chat-header">Berichten & Antwoorden</div>
+        <section class="chat-section" id="chat-container">
+            <div class="chat-header">
+                <span>Berichten & Antwoorden</span>
+                <button class="btn-zoom" onclick="toggleChatSize()">🔍 Tekst vergroten</button>
+            </div>
             <?php if ($team['current_level'] > 0 && $team['current_level'] <= $total_assignments): ?>
                 <div class="messages" id="chat-box">
                     <?php foreach ($messages as $m): ?>
@@ -436,6 +446,14 @@ if (isset($_GET['ajax'])) {
         window.onclick = function(event) {
             const modal = document.getElementById('assignment-modal');
             if (event.target == modal) closeAssignmentModal();
+        }
+
+        function toggleChatSize() {
+            const chat = document.getElementById('chat-container');
+            chat.classList.toggle('large-mode');
+            const btn = document.querySelector('.btn-zoom');
+            btn.innerText = chat.classList.contains('large-mode') ? '🔍 Tekst verkleinen' : '🔍 Tekst vergroten';
+            scrollToBottom();
         }
     </script>
 </body>
