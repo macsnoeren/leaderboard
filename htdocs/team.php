@@ -419,7 +419,7 @@ if (isset($_GET['ajax'])) {
                         
                         const isFinal = data.level > data.total_assignments;
                         triggerLevelUp(isFinal);
-                        if (!isFinal) setTimeout(openAssignmentModal, 3500);
+                        if (!isFinal) setTimeout(openAssignmentModal, 1500);
                     }
                     renderMarkdown();
                 });
@@ -430,6 +430,11 @@ if (isset($_GET['ajax'])) {
         updateTimer();
         renderMarkdown();
         scrollToBottom();
+
+        // Open de opdracht popup direct bij het laden van de pagina als er een actieve opdracht is
+        if (currentLevel > 0 && currentLevel <= totalAssignments) {
+            openAssignmentModal();
+        }
 
         // Als het team al op het eindlevel zit bij het laden van de pagina, toon de overlay direct
         if (currentLevel > totalAssignments) {
