@@ -431,9 +431,11 @@ if (isset($_GET['ajax'])) {
         renderMarkdown();
         scrollToBottom();
 
-        // Open de opdracht popup direct bij het laden van de pagina als er een actieve opdracht is
-        if (currentLevel > 0 && currentLevel <= totalAssignments) {
+        // Open de opdracht popup alleen de eerste keer dat een level geladen wordt in deze browser
+        const modalKey = 'assignment_seen_lvl_' + currentLevel;
+        if (currentLevel > 0 && currentLevel <= totalAssignments && localStorage.getItem(modalKey) !== 'true') {
             openAssignmentModal();
+            localStorage.setItem(modalKey, 'true');
         }
 
         // Als het team al op het eindlevel zit bij het laden van de pagina, toon de overlay direct
