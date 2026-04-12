@@ -219,7 +219,7 @@ if (isset($_GET['ajax'])) {
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Level</span>
-                        <span class="stat-value"><span id="display-level"><?= $team['current_level'] ?></span></span>
+                        <span class="stat-value"><span id="display-level"><?= $team['current_level'] > $total_assignments ? 'Finish' : $team['current_level'] ?></span></span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Tijd Bezig</span>
@@ -381,7 +381,7 @@ if (isset($_GET['ajax'])) {
                     if (data.level > currentLevel) {
                         currentLevel = data.level;
                         // Update UI onmiddellijk voor de reload
-                        document.getElementById('display-level').innerText = data.level;
+                        document.getElementById('display-level').innerText = data.level > data.total_assignments ? 'Finish' : data.level;
                         document.getElementById('display-rank').innerText = data.rank;
                         document.getElementById('assignment-title').innerText = data.assignment_title;
                         document.getElementById('assignment-desc').textContent = data.assignment_desc;
