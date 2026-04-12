@@ -170,7 +170,7 @@ if (isset($_GET['ajax'])) {
                             </div>
                         </div>
                         <div class="level-badge" id="lvl-<?= $team['id'] ?>">
-                            Level <?= $team['current_level'] ?>/<?= $total_assignments ?>
+                            <?= $team['current_level'] > $total_assignments ? 'Finish' : 'Level ' . $team['current_level'] . '/' . $total_assignments ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -207,7 +207,7 @@ if (isset($_GET['ajax'])) {
                         // Update progress bar en level badge
                         document.getElementById(`prog-${teamData.id}`).style.width = teamData.progress + '%';
                         document.getElementById(`prog-${teamData.id}`).innerText = Math.round(teamData.progress * 10) / 10 + '%';
-                        document.getElementById(`lvl-${teamData.id}`).innerText = `Level ${teamData.current_level}/${data.total_assignments}`;
+                        document.getElementById(`lvl-${teamData.id}`).innerText = teamData.current_level > data.total_assignments ? 'Finish' : `Level ${teamData.current_level}/${data.total_assignments}`;
                         
                         // Zet ze in de juiste volgorde in de DOM
                         container.appendChild(row);

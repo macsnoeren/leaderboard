@@ -207,7 +207,7 @@ include 'admin_header.php';
                                     </td>
                                     <td style="text-align: center; vertical-align: middle;">
                                         <span style="background: #f0f4ff; color: #667eea; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 1.1em;">
-                                            <?= $team['current_level'] > $total_assignments ? '🏁 Finish' : $team['current_level'] ?>
+                                            <?= $team['current_level'] > $total_assignments ? 'Finish' : $team['current_level'] ?>
                                         </span>
                                     </td>
                                     <td style="vertical-align: middle;">
