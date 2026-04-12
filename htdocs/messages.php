@@ -266,6 +266,14 @@ include 'admin_header.php';
                                 <div class="markdown-body" style="color: #d32f2f; background: #fff1f0; padding: 15px; border-radius: 8px;"><?= htmlspecialchars($assignment['criteria']) ?></div>
                             <?php endif; ?>
 
+                            <?php if (!empty($assignment['artifact_file'])): ?>
+                                <div class="modal-section-title">📁 Bijlage</div>
+                                <div style="background: #f0f4ff; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 0.9em; color: #444;">Er is een bestand gekoppeld aan deze opdracht.</span>
+                                    <a href="<?= htmlspecialchars($assignment['artifact_file']) ?>" target="_blank" class="btn btn-outline" style="padding: 6px 15px; font-size: 0.85em; background: white; text-decoration: none;">⬇️ Download Bestand</a>
+                                </div>
+                            <?php endif; ?>
+
                             <div style="margin-top: 30px; text-align: right;">
                                 <button class="btn btn-primary" onclick="closeAssignmentModal()">Sluiten</button>
                             </div>
