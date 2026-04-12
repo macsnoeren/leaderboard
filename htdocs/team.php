@@ -145,8 +145,8 @@ if (isset($_GET['ajax'])) {
         main { display: flex; flex: 1; overflow: hidden; }
         
         /* Assignment Modal */
-        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); overflow-y: auto; align-items: center; justify-content: center; padding: 20px; }
-        .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative; animation: modalIn 0.3s ease; }
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); overflow-y: auto; align-items: flex-start; justify-content: center; padding: 40px 20px; }
+        .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative; animation: modalIn 0.3s ease; margin-bottom: 40px; }
         @keyframes modalIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .close-modal { position: absolute; top: 20px; right: 25px; font-size: 30px; font-weight: bold; color: #aaa; cursor: pointer; }
         .assignment-card { padding: 40px; }
