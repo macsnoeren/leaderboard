@@ -112,12 +112,43 @@ if ($selected_team_id) {
     }
 }
 
+// Update Presence: Geef aan dat deze docent dit team bekijkt
+if ($selected_team_id) {
+    $db->prepare("UPDATE teams SET editing_by = ?, editing_at = CURRENT_TIMESTAMP WHERE id = ?")
+       ->execute([$_SESSION['teacher_username'] ?? 'Onbekende Docent', $selected_team_id]);
+}
+
+// Check Presence: Wie kijkt er nog meer? (korter dan 15 seconden geleden)
+$other_teachers = [];
+if ($selected_team_id) {
+    $stmt = $db->prepare("
+        SELECT editing_by 
+        FROM teams 
+        WHERE id = ? 
+        AND editing_at > datetime('now', '-15 seconds') 
+        AND editing_by != ?
+    ");
+    $stmt->execute([$selected_team_id, $_SESSION['teacher_username'] ?? '']);
+    $other_teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+}
+
 // AJAX endpoints voor live updates
 if (isset($_GET['ajax'])) {
     if ($_GET['ajax'] === 'chat' && $selected_team) {
         // Markeer ook nieuwe berichten die via AJAX binnenkomen als gelezen
         $db->prepare("UPDATE team_messages SET is_read = 1 WHERE team_id = ? AND sender = 'team' AND assignment_number = ?")
            ->execute([$selected_team_id, $selected_team['current_level']]);
+
+        // Haal de berichten OPNIEUW op binnen de AJAX call voor de meest verse data
+        $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? ORDER BY created_at ASC");
+        $stmt->execute([$selected_team_id, $selected_team['current_level']]);
+        $chat_messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!empty($other_teachers)) {
+            echo '<div style="background: #fff9c4; color: #827717; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85em; border: 1px solid #fbc02d;">';
+            echo '⚠️ <strong>Let op:</strong> ' . htmlspecialchars(implode(', ', $other_teachers)) . ' bekijkt deze chat op dit moment ook.';
+            echo '</div>';
+        }
 
         foreach ($chat_messages as $m) {
             echo '<div class="message ' . $m['sender'] . '">';

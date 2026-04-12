@@ -78,6 +78,12 @@ try {
     // 7. Maak tabel voor gearchiveerde chats van voltooide opdrachten
     $db->exec("CREATE TABLE IF NOT EXISTS completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
+    // 8. Voeg aanwezigheid voor docenten toe
+    try {
+        $db->exec("ALTER TABLE teams ADD COLUMN editing_by TEXT");
+        $db->exec("ALTER TABLE teams ADD COLUMN editing_at DATETIME");
+    } catch (PDOException $e) {}
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

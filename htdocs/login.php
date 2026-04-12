@@ -57,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['teacher_logged_in'] = true;
         $_SESSION['teacher_id'] = $teacher['id'];
         $_SESSION['teacher_role'] = $teacher['role'] ?? 'user';
+        $_SESSION['teacher_username'] = $teacher['username'];
 
         if ($teacher['force_password_change']) {
             $_SESSION['force_password_change'] = true;
