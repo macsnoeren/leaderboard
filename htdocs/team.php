@@ -341,7 +341,7 @@ if (isset($_GET['ajax'])) {
 
                         // Check for final level completion
                         if (data.level > data.total_assignments) { // Aangepast: > in plaats van >=
-                            document.getElementById('overlay-title').innerText = "🏆 GEFELICITEERD KAMPIONEN! 🏆";
+                            document.getElementById('overlay-title').innerText = "🏆 GEFELICITEERD KAMPIOENEN! 🏆";
                             document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
                             document.getElementById('overlay-rank').innerText = `Jullie eindigen op positie #${data.rank}! Fantastisch werk!`;
                         } else if (data.level === 1) {
