@@ -16,8 +16,17 @@ if (!$team) {
     die("Toegang geweigerd: Ongeldige token.");
 }
 
+// Haal het totale aantal opdrachten op voor het bepalen van het laatste level
+$total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+
 // Handle bericht versturen
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'send_message') {
+    // Als het team al gewonnen heeft, negeer het bericht
+    if ($team['current_level'] > $total_assignments) {
+        header("Location: team.php?token=" . $token);
+        exit;
+    }
+
     $msg = trim($_POST['message'] ?? '');
     if (!empty($msg)) {
         $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'team', ?)");
@@ -49,9 +58,6 @@ $max_downloads = 10;
 $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
 $stmt->execute([$team['id'], $team['current_level']]);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Haal het totale aantal opdrachten op voor het bepalen van het laatste level
-$total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
 
 // AJAX endpoint voor live updates
 if (isset($_GET['ajax'])) {
@@ -221,7 +227,7 @@ if (isset($_GET['ajax'])) {
 
         <section class="chat-section">
             <div class="chat-header">Berichten & Antwoorden</div>
-            <?php if ($team['current_level'] > 0): ?>
+            <?php if ($team['current_level'] > 0 && $team['current_level'] <= $total_assignments): ?>
                 <div class="messages" id="chat-box">
                     <?php foreach ($messages as $m): ?>
                         <div class="message <?= $m['sender'] ?>">
@@ -236,6 +242,13 @@ if (isset($_GET['ajax'])) {
                         <textarea name="message" rows="3" placeholder="Typ hier je antwoord of vraag..." required></textarea>
                         <button type="submit" class="download-btn" style="width:100%; margin:0;">Bericht versturen</button>
                     </form>
+                </div>
+            <?php elseif ($team['current_level'] > $total_assignments): ?>
+                <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #2e7d32; padding: 40px;">
+                    <div>
+                        <h2 style="margin-bottom: 10px;">🏆 Gefeliciteerd!</h2>
+                        <p>Jullie hebben alle opdrachten voltooid. De chat is nu gesloten.</p>
+                    </div>
                 </div>
             <?php else: ?>
                 <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #888;">
