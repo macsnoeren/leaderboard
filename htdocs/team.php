@@ -159,7 +159,7 @@ if (isset($_GET['ajax'])) {
         .remaining { font-size: 0.85em; color: #888; }
 
         /* Chat Section */
-        .chat-section { background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; }
+        .chat-section { flex: 1; width: 100%; background: white; border-left: none; display: flex; flex-direction: column; overflow: hidden; }
         .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; }
         .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; min-height: 0; }
         .message { padding: 10px 15px; border-radius: 12px; max-width: 85%; font-size: 0.95em; position: relative; }
