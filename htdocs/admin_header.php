@@ -27,7 +27,12 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; display: flex; min-height: 100vh; }
         
         .sidebar { width: 260px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 1000; }
-        .sidebar-header { padding: 30px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; font-weight: bold; font-size: 1.2em; }
+        .sidebar-header { 
+            padding: 25px 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; text-align: center; font-weight: bold; font-size: 1.2em; 
+            display: flex; flex-direction: column; gap: 5px;
+        }
         .sidebar-nav { flex: 1; padding: 20px 0; display: flex; flex-direction: column; }
         .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
         .nav-item:hover { background: #f0f2f5; color: #667eea; }
@@ -72,7 +77,12 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 </head>
 <body>
     <nav class="sidebar">
-        <div class="sidebar-header">Zebrawave Admin</div>
+        <div class="sidebar-header">
+            <span>Zebrawave Admin</span>
+            <div style="font-size: 0.65em; font-weight: normal; opacity: 0.9; margin-top: 5px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                👤 <?= htmlspecialchars($_SESSION['teacher_username'] ?? 'Docent') ?>
+            </div>
+        </div>
         <div class="sidebar-nav">
             <a href="teacher.php" class="nav-item <?= $currentPage == 'teacher.php' ? 'active' : '' ?>">📊 Dashboard</a>
             <a href="assignments.php" class="nav-item <?= $currentPage == 'assignments.php' ? 'active' : '' ?>">📘 Assignments</a>
