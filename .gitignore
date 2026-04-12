@@ -1,3 +1,5 @@
+bin/config.py
+htdocs/artifacts
 database
 
 # Created by https://www.toptal.com/developers/gitignore/api/emacs
