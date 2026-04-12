@@ -102,10 +102,25 @@ if (isset($_GET['ajax'])) {
         .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .team-name { font-size: 1.8em; font-weight: bold; }
         .stats-bar { display: flex; gap: 30px; font-size: 1.1em; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 10px; }
-        .header-actions { display: flex; align-items: center; gap: 20px; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
         .header-link { color: white; text-decoration: none; font-size: 0.85em; padding: 8px 15px; border: 1px solid rgba(255,255,255,0.4); border-radius: 8px; transition: 0.2s; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
         .header-link:hover { background: rgba(255,255,255,0.2); border-color: white; }
-        .stat-item { display: flex; flex-direction: column; align-items: center; }
+        
+        .btn-assignment { 
+            background: #4caf50; 
+            color: white; 
+            border: none; 
+            padding: 8px 20px; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            text-transform: uppercase; 
+            font-size: 0.85em;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .btn-assignment:hover { background: #43a047; }
+
+        .stat-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
         .stat-label { font-size: 0.7em; text-transform: uppercase; opacity: 0.8; letter-spacing: 1px; }
         .stat-value { font-weight: bold; }
 
@@ -127,18 +142,20 @@ if (isset($_GET['ajax'])) {
         .assignment-desc pre code, .instruction-box pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
 
         /* Main Content Layout */
-        main { display: grid; grid-template-columns: 1fr 400px; flex: 1; overflow: hidden; gap: 0; }
+        main { display: flex; flex: 1; overflow: hidden; }
         
-        /* Assignment Section */
-        .assignment-section { padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
-        .assignment-card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        /* Assignment Modal */
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); overflow-y: auto; align-items: center; justify-content: center; padding: 20px; }
+        .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative; animation: modalIn 0.3s ease; }
+        @keyframes modalIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .close-modal { position: absolute; top: 20px; right: 25px; font-size: 30px; font-weight: bold; color: #aaa; cursor: pointer; }
+        .assignment-card { padding: 40px; }
         .assignment-title { font-size: 1.5em; font-weight: bold; color: #333; margin-bottom: 15px; border-left: 5px solid #667eea; padding-left: 15px; }
         .assignment-desc { font-size: 1.1em; line-height: 1.6; color: #4b4f56; margin-bottom: 25px; }
-        
         .download-box { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; }
         .download-btn { display: inline-block; background: #667eea; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: 0.3s; margin-bottom: 10px; border: none; cursor: pointer; }
         .download-btn:hover:not(.disabled) { background: #5568d3; transform: translateY(-2px); }
-        .download-btn.disabled { background: #ccc; cursor: not-allowed; }
+        .download-btn.disabled { background: #ccc; cursor: not-allowed; transform: none; }
         .remaining { font-size: 0.85em; color: #888; }
 
         /* Chat Section */
@@ -173,7 +190,7 @@ if (isset($_GET['ajax'])) {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         @media (max-width: 900px) {
-            main { grid-template-columns: 1fr; overflow-y: auto; }
+            main { overflow-y: auto; }
             .chat-section { border-left: none; border-top: 1px solid #ddd; min-height: 500px; height: auto; }
         }
     </style>
@@ -183,6 +200,10 @@ if (isset($_GET['ajax'])) {
         <div class="header-top">
             <div class="team-name">Team: <?= htmlspecialchars($team['team_name']) ?></div>
             <div class="header-actions">
+                <?php if ($assignment): ?>
+                    <button class="btn-assignment" onclick="openAssignmentModal()">📄 Bekijk Opdracht</button>
+                <?php endif; ?>
+                
                 <a href="index.php" target="_leaderboard" class="header-link">View Public Leaderboard</a>
                 <div class="stats-bar">
                     <div class="stat-item">
@@ -203,24 +224,28 @@ if (isset($_GET['ajax'])) {
     </header>
 
     <main>
-        <section class="assignment-section">
-            <div class="assignment-card">
-                <div class="assignment-title" id="assignment-title">
-                    <?= $assignment ? htmlspecialchars($assignment['title']) : 'Geen Opdracht' ?>
-                </div>
-                <div class="assignment-desc" id="assignment-desc"><?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?></div>
-                
-                <div class="assignment-meta">
-                    <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "Verwacht benodigde tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
-                </div>
+        <section id="assignment-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal" onclick="closeAssignmentModal()">&times;</span>
+                <div class="assignment-card">
+                    <div class="assignment-title" id="assignment-title">
+                        <?= $assignment ? htmlspecialchars($assignment['title']) : 'Geen Opdracht' ?>
+                    </div>
+                    <div class="assignment-desc" id="assignment-desc"><?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?></div>
+                    
+                    <div class="assignment-meta">
+                        <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "Verwacht benodigde tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
+                    </div>
 
-                <div id="instruction-wrapper" style="<?= (!$assignment || empty($assignment['instruction'])) ? 'display:none;' : '' ?>">
-                    <div class="instruction-box" id="assignment-instruction"><?= $assignment ? htmlspecialchars($assignment['instruction']) : '' ?></div>
-                </div>
+                    <div id="instruction-wrapper" style="<?= (!$assignment || empty($assignment['instruction'])) ? 'display:none;' : '' ?>">
+                        <div class="instruction-box" id="assignment-instruction"><?= $assignment ? htmlspecialchars($assignment['instruction']) : '' ?></div>
+                    </div>
 
-                <div class="download-box" id="download-box" style="<?= (!$assignment || empty($assignment['artifact_file'])) ? 'display: none;' : '' ?>">
-                    <a href="team_download.php?token=<?= $token ?>" class="download-btn" id="dl-link">Download Bestanden</a>
-                    <div class="remaining">Downloads gebruikt: <span id="display-dl-count"><?= $download_count ?></span> / <?= $max_downloads ?></div>
+                    <div class="download-box" id="download-box" style="<?= (!$assignment || empty($assignment['artifact_file'])) ? 'display: none;' : '' ?>">
+                        <p style="margin-bottom: 15px; font-weight: bold; color: #333;">Download de opdrachtdocumentatie:</p>
+                        <a href="team_download.php?token=<?= $token ?>" class="download-btn" id="dl-link">📄 Bestanden Downloaden (PDF/ZIP)</a>
+                        <div class="remaining">Downloads gebruikt: <span id="display-dl-count"><?= $download_count ?></span> / <?= $max_downloads ?></div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -315,6 +340,15 @@ if (isset($_GET['ajax'])) {
             });
         }
 
+        function openAssignmentModal() {
+            document.getElementById('assignment-modal').style.display = 'flex';
+            renderMarkdown();
+        }
+
+        function closeAssignmentModal() {
+            document.getElementById('assignment-modal').style.display = 'none';
+        }
+
         function scrollToBottom() {
             const chatBox = document.getElementById('chat-box');
             if (chatBox) {
@@ -375,6 +409,7 @@ if (isset($_GET['ajax'])) {
                         
                         const isFinal = data.level > data.total_assignments;
                         triggerLevelUp(isFinal);
+                        if (!isFinal) setTimeout(openAssignmentModal, 3500);
                     }
                     renderMarkdown();
                 });
@@ -395,6 +430,12 @@ if (isset($_GET['ajax'])) {
             
             // Kleine vertraging voor de visuele impact
             setTimeout(() => triggerLevelUp(true), 500);
+        }
+
+        // Sluit modal als je buiten de box klikt
+        window.onclick = function(event) {
+            const modal = document.getElementById('assignment-modal');
+            if (event.target == modal) closeAssignmentModal();
         }
     </script>
 </body>
