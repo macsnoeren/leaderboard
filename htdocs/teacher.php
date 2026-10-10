@@ -16,18 +16,10 @@ session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php'; // Correct include for database
 require_once '../conf/mail_functions.php'; // New include for mail functions
-
-if (!isset($_SESSION['teacher_logged_in'])) {
-    header('Location: login.php');
-    exit;
-}
-
-if (isset($_SESSION['force_password_change'])) {
-    header('Location: password.php');
-    exit;
-}
+require_once '../conf/auth.php';
 
 $db = getDB();
+requireTeacher($db);
 
 // AJAX endpoint voor live unread count updates
 if (isset($_GET['ajax_unread'])) {

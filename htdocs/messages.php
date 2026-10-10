@@ -3,12 +3,10 @@ session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php';
 require_once '../conf/mail_functions.php';
+require_once '../conf/auth.php';
 
-if (!isset($_SESSION['teacher_logged_in'])) {
-    header('Location: login.php');
-    exit;
-}
 $db = getDB();
+requireTeacher($db);
 $selected_team_id = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
 
 // Handle antwoord van docent

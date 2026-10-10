@@ -15,8 +15,10 @@
 session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php';
+require_once '../conf/auth.php';
 
 $error = '';
+$notice = '';
 
 $db = getDB();
 
@@ -37,45 +39,72 @@ if (isset($_SESSION['teacher_logged_in'])) {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-    
-    $stmt = $db->prepare("SELECT * FROM teachers WHERE username = ?");
-    $stmt->execute([$username]);
-    $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($teacher && password_verify($password, $teacher['password_hash'])) {
-        if ($teacher['is_active'] == 0) {
-            $error = 'Jouw account is gedeactiveerd. Neem contact op met de beheerder.';
-            goto end_post_request;
-        }
-
-        // Beveiliging: Voorkom Session Fixation
-        session_regenerate_id(true);
-
-        $_SESSION['teacher_logged_in'] = true;
-        $_SESSION['teacher_id'] = $teacher['id'];
-        $_SESSION['teacher_role'] = $teacher['role'] ?? 'user';
-        $_SESSION['teacher_username'] = $teacher['username'];
-
-        if ($teacher['force_password_change']) {
-            $_SESSION['force_password_change'] = true;
-            header('Location: password.php');
-            exit;
-        }
-
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'LOGIN', 'User logged in')")->execute([$teacher['id']]);
-        header('Location: teacher.php');
-        exit;
-    } else {
-        $error = 'Invalid username or password';
+// Meldingen na een redirect
+$notices = [
+    'expired' => 'Je sessie is verlopen of je account is gewijzigd. Log opnieuw in.',
+    'activated' => 'Je account is geactiveerd. Je kunt nu inloggen.',
+    'reset' => 'Je wachtwoord is gewijzigd. Je kunt nu inloggen met je nieuwe wachtwoord.',
+    'email_confirmed' => 'Je nieuwe e-mailadres is bevestigd.',
+];
+foreach ($notices as $param => $text) {
+    if (isset($_GET[$param])) {
+        $notice = $text;
     }
 }
-end_post_request:
+if (isset($_SESSION['login_error'])) {
+    $error = $_SESSION['login_error'];
+    unset($_SESSION['login_error']);
+}
+
+$identifier = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $identifier = trim($_POST['username'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    if (!verifyCsrf()) {
+        $error = CSRF_ERROR;
+    } else {
+        // Inloggen met gebruikersnaam of e-mailadres; een exacte gebruikersnaam gaat voor
+        $email = normalizeEmail($identifier) ?? '';
+        $stmt = $db->prepare("SELECT * FROM teachers WHERE username = ? OR (email = ? AND email != '') ORDER BY (username = ?) DESC LIMIT 1");
+        $stmt->execute([$identifier, $email, $identifier]);
+        $teacher = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        // Pogingen tellen per account (of per ingevoerde naam als die niet bestaat) en per IP
+        $attemptKey = $teacher ? 'user:' . $teacher['id'] : strtolower($identifier);
+
+        if (isThrottled($db, 'login', $attemptKey, 5, 15) || isIpThrottled($db, 'login', 20, 15)) {
+            $error = THROTTLE_ERROR;
+        } else {
+            // Ook zonder account een hash controleren, zodat de responstijd niets verraadt
+            $hash = $teacher['password_hash'] ?? null;
+            $passwordOk = password_verify($password, $hash ?: DUMMY_PASSWORD_HASH);
+
+            // Gedeactiveerd of nog niet geactiveerd geeft dezelfde melding als een fout wachtwoord
+            if (!$teacher || !$hash || !$passwordOk || (int)$teacher['is_active'] !== 1) {
+                recordAttempt($db, 'login', $attemptKey);
+                logAudit($db, $teacher ? (int)$teacher['id'] : null, 'LOGIN_FAILED', 'Mislukte inlogpoging voor: ' . substr($identifier, 0, 100));
+                $error = LOGIN_ERROR;
+            } else {
+                clearAttempts($db, 'login', $attemptKey);
+                if ((int)$teacher['totp_enabled'] === 1) {
+                    // Tweede stap: nog niet ingelogd tot de code klopt
+                    session_regenerate_id(true);
+                    $_SESSION['pending_2fa_user_id'] = (int)$teacher['id'];
+                    $_SESSION['pending_2fa_at'] = time();
+                    header('Location: login_2fa.php');
+                    exit;
+                }
+                completeLogin($db, $teacher);
+                header('Location: ' . loginRedirect($teacher));
+                exit;
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -141,6 +170,22 @@ end_post_request:
             border-radius: 5px;
             margin-bottom: 20px;
         }
+        .notice {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .forgot-link {
+            text-align: right;
+            margin: -10px 0 20px;
+            font-size: 0.9em;
+        }
+        .forgot-link a {
+            color: #667eea;
+            text-decoration: none;
+        }
         .back-link {
             text-align: center;
             margin-top: 20px;
@@ -154,22 +199,27 @@ end_post_request:
 <body>
     <div class="login-box">
         <h1>Login</h1>
+        <?php if ($notice): ?>
+            <div class="notice"><?= htmlspecialchars($notice) ?></div>
+        <?php endif; ?>
         <?php if ($error): ?>
-            <div class="error"><?= $error ?></div>
+            <div class="error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         <form method="POST">
+            <?= csrfField() ?>
             <div class="form-group">
-                <label>Username:</label>
-                <input type="text" name="username" required>
+                <label>Gebruikersnaam of e-mailadres:</label>
+                <input type="text" name="username" value="<?= htmlspecialchars($identifier) ?>" autocomplete="username" required autofocus>
             </div>
             <div class="form-group">
-                <label>Password:</label>
-                <input type="password" name="password" required>
+                <label>Wachtwoord:</label>
+                <input type="password" name="password" autocomplete="current-password" required>
             </div>
-            <button type="submit">Login</button>
+            <div class="forgot-link"><a href="forgot_password.php">Wachtwoord vergeten?</a></div>
+            <button type="submit">Inloggen</button>
         </form>
         <div class="back-link">
-            <a href="index.php">← Back to Leaderboard</a>
+            <a href="index.php">← Terug naar het leaderboard</a>
         </div>
     </div>
 </body>

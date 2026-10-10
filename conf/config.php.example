@@ -1,3 +1,4 @@
+<?php
 /*
  Copyright (C) 2025 Maurice Snoeren
 
@@ -11,12 +12,11 @@
  You should have received a copy of the GNU General Public License along with this program.
  If not, see https://www.gnu.org/licenses/.
 */
-<?php
 
 // NOTE: Please change the values and save the file as config.php
 
-// Database configuration
-define('DB_FILE', __DIR__ . '/database/leaderboard.db');
+// Database configuration (zelfde pad als bin/setup.sh en de Python-scripts)
+define('DB_FILE', __DIR__ . '/../database/leaderboard.db');
 
 // Email configuration
 define('ENABLE_EMAIL', True); // Gebruik voor het testen False!
@@ -24,10 +24,16 @@ define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 587);
 define('SMTP_USER', '<your-email@gmail.com>');
 define('SMTP_PASS', '<your-app-password>');
+define('SMTP_SECURE', 'tls'); // 'tls' (STARTTLS), 'ssl' of '' (geen versleuteling, bijv. Mailpit)
+define('SMTP_AUTH', true);    // false: niet inloggen bij de SMTP-server (bijv. Mailpit)
 define('FROM_EMAIL', '<your-email@gmail.com>');
 define('FROM_NAME', 'Assignment System');
 
-// Base URL
+// Base URL: het publieke adres van htdocs/, zonder '/' aan het eind.
+// Wordt gebruikt voor de links in mails: downloads, uitnodigingen en wachtwoordherstel.
 define('BASE_URL', 'https://localhost/leaderboard');
+
+// Beheerders moeten tweestapsverificatie (2FA) instellen voordat ze verder kunnen
+define('REQUIRE_2FA_ADMIN', false);
 
 ?>

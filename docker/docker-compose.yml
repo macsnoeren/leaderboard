@@ -17,8 +17,12 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
+      # Leeg = geen versleuteling (Mailpit); zonder waarde in .env blijft het 'tls'
+      SMTP_SECURE: ${SMTP_SECURE-tls}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
       FROM_EMAIL: ${FROM_EMAIL:-}
       FROM_NAME: ${FROM_NAME:-Assignment System}
+      REQUIRE_2FA_ADMIN: ${REQUIRE_2FA_ADMIN:-false}
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
       AI_MODELS: ${AI_MODELS:-qwen2.5:1.5b}
       AI_POLL_INTERVAL: ${AI_POLL_INTERVAL:-30}
@@ -28,6 +32,12 @@ services:
       - artifacts:/var/www/leaderboard/htdocs/artifacts
       # Live wijzigingen in de PHP-pagina's zonder rebuild:
       # - ../htdocs:/var/www/leaderboard/htdocs
+
+  # Vangt alle uitgaande mail op: SMTP op localhost:1025, webinterface op http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.27.0
+    network_mode: host
+    restart: unless-stopped
 
 volumes:
   database:

@@ -16,217 +16,306 @@ session_start();
 
 require_once '../conf/config.php';
 require_once '../conf/database.php';
-
-if (!isset($_SESSION['teacher_logged_in'])) {
-    header('Location: login.php');
-    exit;
-}
+require_once '../conf/mail_functions.php';
+require_once '../conf/auth.php';
 
 $db = getDB();
-
 // Autorisatie check: Alleen admin mag hier komen
-if (($_SESSION['teacher_role'] ?? 'user') !== 'admin') {
-    header('Location: teacher.php');
-    exit;
+$admin = requireAdmin($db);
+$adminId = (int)$admin['id'];
+
+/**
+ * Flash-melding na het versturen van een mail met een link. In testmodus of als de mail
+ * mislukt, krijgt de beheerder de link te zien zodat hij hem zelf kan doorgeven.
+ */
+function flashMailResult($result, string $sentMessage, string $createdMessage, string $link): void {
+    if (!isEmailEnabled()) {
+        flash('success', "$createdMessage Testmodus: er is geen mail verstuurd. Geef deze link zelf door:", $link);
+    } elseif ($result !== true) {
+        flash('error', "$createdMessage De mail kon niet worden verstuurd ($result). Geef deze link zelf door:", $link);
+    } else {
+        flash('success', $sentMessage);
+    }
 }
 
-$message = '';
+function sendInviteFor(PDO $db, array $admin, array $user, string $auditType): void {
+    $token = createUserToken($db, (int)$user['id'], 'invite', INVITE_TTL_MINUTES, (int)$admin['id']);
+    $link = BASE_URL . '/activate.php?token=' . $token;
+    $result = sendInviteEmail($user['email'], $link, teacherLabel($admin));
+    logAudit($db, (int)$admin['id'], $auditType, "Uitnodiging voor {$user['email']} (rol: {$user['role']})" . ($result === true ? '' : ' - mail niet verstuurd'));
+    flashMailResult($result, "Uitnodiging verstuurd naar {$user['email']}.", "Uitnodiging voor {$user['email']} aangemaakt (72 uur geldig).", $link);
+}
 
-// Handle Add User
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    if ($_POST['action'] === 'add_user') {
-        $username = trim($_POST['username']);
-        $password = $_POST['password']; // Wachtwoorden niet trimmen voor consistentie
-        $role = $_POST['role'] === 'admin' ? 'admin' : 'user';
-        $force_change = isset($_POST['force_change']) ? 1 : 0;
+    $action = $_POST['action'];
 
-        if (strlen($username) < 3 || strlen($password) < 4) {
-            $message = "Username or password too short.";
+    if (!verifyCsrf()) {
+        flash('error', CSRF_ERROR);
+        redirect('users.php');
+    }
+
+    // Uitnodigen: gebruiker zonder wachtwoord en gebruikersnaam, met een invite-token
+    if ($action === 'invite') {
+        $email = normalizeEmail($_POST['email'] ?? '');
+        $name = substr(trim($_POST['display_name'] ?? ''), 0, 100);
+        $role = ($_POST['role'] ?? '') === 'admin' ? 'admin' : 'user';
+
+        if ($email === null) {
+            flash('error', 'Vul een geldig e-mailadres in.');
+        } elseif (emailTaken($db, $email)) {
+            flash('error', 'E-mailadres is al in gebruik');
         } else {
-            $stmt = $db->prepare("SELECT COUNT(*) FROM teachers WHERE username = ?");
-            $stmt->execute([$username]);
-            if ($stmt->fetchColumn() > 0) {
-                $message = "Username already exists.";
+            $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, email, display_name, role, force_password_change, is_active, session_version, totp_enabled, created_at)
+                                  VALUES (NULL, NULL, ?, ?, ?, 0, 1, 0, 0, datetime('now'))");
+            $stmt->execute([$email, $name !== '' ? $name : null, $role]);
+            sendInviteFor($db, $admin, findTeacher($db, (int)$db->lastInsertId()), 'USER_INVITE');
+        }
+        redirect('users.php');
+    }
+
+    $user = findTeacher($db, (int)($_POST['id'] ?? 0));
+    if (!$user) {
+        flash('error', 'Gebruiker niet gevonden');
+        redirect('users.php');
+    }
+    $id = (int)$user['id'];
+    $label = teacherLabel($user);
+    $isSelf = $id === $adminId;
+    $isInvited = empty($user['password_hash']);
+
+    switch ($action) {
+        case 'resend_invite':
+            if (!$isInvited || !(int)$user['is_active'] || !$user['email']) {
+                flash('error', 'Deze gebruiker heeft geen openstaande uitnodiging.');
             } else {
-                $password_hash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $db->prepare("INSERT INTO teachers (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$username, $password_hash, $role, $force_change]);
-                $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added new teacher: $username"]);
-                $message = "User added successfully!";
+                sendInviteFor($db, $admin, $user, 'USER_INVITE_RESEND');
             }
-        }
-    }
+            break;
 
-    // Handle Delete User
-    if ($_POST['action'] === 'delete_user' && isset($_POST['id'])) {
-        $id = (int)$_POST['id'];
-
-        // Prevent deleting yourself
-        if ($id === $_SESSION['teacher_id']) {
-            $message = "You cannot delete your own account.";
-        } else {
-            $stmt = $db->prepare("DELETE FROM teachers WHERE id = ?");
-            $stmt->execute([$id]);
-            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Deleted teacher ID: $id"]);
-            $message = "User deleted successfully.";
-        }
-    }
-
-    // Handle Reset Password
-    if ($_POST['action'] === 'reset_password' && isset($_POST['id'])) {
-        $id = (int)$_POST['id'];
-        $new_password = $_POST['new_password'] ?? '';
-        $force_change = isset($_POST['force_change']) ? 1 : 0;
-
-        if (strlen($new_password) < 4) {
-            $message = "New password is too short.";
-        } else {
-            $hash = password_hash($new_password, PASSWORD_DEFAULT);
-            $stmt = $db->prepare("UPDATE teachers SET password_hash = ?, force_password_change = ? WHERE id = ?");
-            $stmt->execute([$hash, $force_change, $id]);
-            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_RESET_PWD', ?)")->execute([$_SESSION['teacher_id'], "Admin reset password for teacher ID: $id (Force change: $force_change)"]);
-            $message = "Password for user ID $id updated successfully.";
-        }
-    }
-
-    // Handle Enable User
-    if ($_POST['action'] === 'enable_user' && isset($_POST['id'])) {
-        $id = (int)$_POST['id'];
-        
-        // Voorkom dat je jezelf deactiveert/activeert (voor de veiligheid)
-        if ($id === $_SESSION['teacher_id']) {
-            $message = "Je kunt je eigen account status niet wijzigen.";
-        } else {
-            $stmt = $db->prepare("UPDATE teachers SET is_active = 1 WHERE id = ?");
-            $stmt->execute([$id]);
-            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_ENABLE', ?)")->execute([$_SESSION['teacher_id'], "Admin heeft docent ID: $id geactiveerd."]);
-            $message = "Docent is geactiveerd.";
-        }
-    }
-
-    // Handle Disable User
-    if ($_POST['action'] === 'disable_user' && isset($_POST['id'])) {
-        $id = (int)$_POST['id'];
-
-        if ($id === $_SESSION['teacher_id']) {
-            $message = "Je kunt je eigen account niet deactiveren.";
-        } else {
-            // Controleer of er ten minste één actieve admin overblijft
-            $stmt = $db->prepare("SELECT role FROM teachers WHERE id = ?");
-            $stmt->execute([$id]);
-            $user_role = $stmt->fetchColumn();
-            
-            if ($user_role === 'admin' && $db->query("SELECT COUNT(*) FROM teachers WHERE role = 'admin' AND is_active = 1")->fetchColumn() <= 1) {
-                $message = "Fout: Je kunt de laatste actieve beheerder niet deactiveren.";
+        case 'revoke_invite':
+            if (!$isInvited) {
+                flash('error', 'Deze gebruiker is al geactiveerd. Gebruik deactiveren of verwijderen.');
             } else {
-                $stmt = $db->prepare("UPDATE teachers SET is_active = 0 WHERE id = ?");
-                $stmt->execute([$id]);
-                $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'USER_DISABLE', ?)")->execute([$_SESSION['teacher_id'], "Admin heeft docent ID: $id gedeactiveerd."]);
-                $message = "Docent is gedeactiveerd.";
+                $db->prepare("DELETE FROM user_tokens WHERE user_id = ?")->execute([$id]);
+                $db->prepare("DELETE FROM teachers WHERE id = ?")->execute([$id]);
+                logAudit($db, $adminId, 'USER_INVITE_REVOKE', "Uitnodiging ingetrokken voor {$user['email']}");
+                flash('success', "Uitnodiging voor {$user['email']} is ingetrokken.");
             }
-        }
+            break;
+
+        case 'force_pwd':
+        case 'unforce_pwd':
+            if ($isInvited) {
+                flash('error', 'Deze gebruiker heeft nog geen wachtwoord.');
+                break;
+            }
+            $force = $action === 'force_pwd' ? 1 : 0;
+            $db->prepare("UPDATE teachers SET force_password_change = ? WHERE id = ?")->execute([$force, $id]);
+            if ($force) {
+                logAudit($db, $adminId, 'USER_FORCE_PWD', "Wachtwoordwijziging verplicht voor $label (ID $id)");
+                flash('success', "$label moet bij de volgende klik een nieuw wachtwoord kiezen.");
+            } else {
+                logAudit($db, $adminId, 'USER_UNFORCE_PWD', "Verplichte wachtwoordwijziging opgeheven voor $label (ID $id)");
+                flash('success', "Verplichte wachtwoordwijziging voor $label is opgeheven.");
+            }
+            break;
+
+        case 'send_reset':
+            if ($isInvited || !(int)$user['is_active'] || !$user['email']) {
+                flash('error', 'Een reset-link kan alleen naar een actieve gebruiker met een e-mailadres.');
+                break;
+            }
+            $token = createUserToken($db, $id, 'reset', RESET_TTL_MINUTES, $adminId);
+            $link = BASE_URL . '/reset_password.php?token=' . $token;
+            $result = sendPasswordResetEmail($user['email'], $link);
+            logAudit($db, $adminId, 'USER_SEND_RESET', "Reset-link gestuurd naar $label (ID $id)" . ($result === true ? '' : ' - mail niet verstuurd'));
+            flashMailResult($result, "Reset-link verstuurd naar {$user['email']}.", "Reset-link voor $label aangemaakt (60 minuten geldig).", $link);
+            break;
+
+        case 'enable_user':
+            // Voorkom dat je jezelf deactiveert/activeert (voor de veiligheid)
+            if ($isSelf) {
+                flash('error', 'Je kunt je eigen account status niet wijzigen.');
+            } else {
+                $db->prepare("UPDATE teachers SET is_active = 1 WHERE id = ?")->execute([$id]);
+                logAudit($db, $adminId, 'USER_ENABLE', "Admin heeft docent $label (ID $id) geactiveerd.");
+                flash('success', "$label is geactiveerd.");
+            }
+            break;
+
+        case 'disable_user':
+            if ($isSelf) {
+                flash('error', 'Je kunt je eigen account niet deactiveren.');
+            } elseif (isLastActiveAdmin($db, $user)) {
+                flash('error', 'Je kunt de laatste actieve beheerder niet deactiveren.');
+            } else {
+                $db->prepare("UPDATE teachers SET is_active = 0 WHERE id = ?")->execute([$id]);
+                bumpSessionVersion($db, $id);
+                logAudit($db, $adminId, 'USER_DISABLE', "Admin heeft docent $label (ID $id) gedeactiveerd.");
+                flash('success', "$label is gedeactiveerd en uitgelogd.");
+            }
+            break;
+
+        case 'delete_user':
+            if ($isSelf) {
+                flash('error', 'Je kunt je eigen account niet verwijderen');
+            } elseif (isLastActiveAdmin($db, $user)) {
+                flash('error', 'Je kunt de laatste actieve beheerder niet verwijderen.');
+            } else {
+                $db->prepare("DELETE FROM user_tokens WHERE user_id = ?")->execute([$id]);
+                $db->prepare("DELETE FROM user_recovery_codes WHERE user_id = ?")->execute([$id]);
+                $db->prepare("DELETE FROM teachers WHERE id = ?")->execute([$id]);
+                logAudit($db, $adminId, 'USER_DELETE', "Docent $label (ID $id) verwijderd");
+                flash('success', "$label is verwijderd.");
+            }
+            break;
+
+        default:
+            flash('error', 'Onbekende actie.');
     }
+    redirect('users.php');
 }
 
-$users = $db->query("SELECT id, username, role, force_password_change, is_active FROM teachers ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$users = $db->query("SELECT t.id, t.username, t.email, t.display_name, t.role, t.force_password_change, t.is_active,
+        t.totp_enabled, t.last_login_at, (t.password_hash IS NULL OR t.password_hash = '') AS is_invited,
+        (SELECT COUNT(*) FROM user_tokens ut WHERE ut.user_id = t.id AND ut.type = 'invite'
+            AND ut.used_at IS NULL AND ut.expires_at > datetime('now')) AS open_invites
+    FROM teachers t ORDER BY t.id ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+// Status volgens het ontwerp: Gedeactiveerd, Uitgenodigd, Uitnodiging verlopen of Actief
+function userStatus(array $u): array {
+    if (!(int)$u['is_active']) {
+        return ['Gedeactiveerd', '#f44336'];
+    }
+    if ((int)$u['is_invited']) {
+        return (int)$u['open_invites'] > 0 ? ['Uitgenodigd', '#2196f3'] : ['Uitnodiging verlopen', '#ff9800'];
+    }
+    return ['Actief', '#4caf50'];
+}
+
+// Knop in een eigen POST-formulier met CSRF-token
+function actionButton(string $action, int $id, string $label, string $class = 'btn-outline', ?string $confirm = null, ?string $title = null): string {
+    $onsubmit = $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '';
+    return '<form method="POST" style="display:inline;"' . $onsubmit . '>' . csrfField()
+        . '<input type="hidden" name="action" value="' . htmlspecialchars($action) . '">'
+        . '<input type="hidden" name="id" value="' . $id . '">'
+        . '<button type="submit" class="btn btn-sm ' . $class . '"' . ($title ? ' title="' . htmlspecialchars($title) . '"' : '') . '>' . $label . '</button>'
+        . '</form>';
+}
 
 $pageTitle = 'Gebruikersbeheer';
+$extraCSS = '<style>
+    .btn-sm { padding: 6px 10px; font-size: 0.8em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; }
+    .status-badge { display: inline-block; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; white-space: nowrap; }
+    .muted { color: #999; font-size: 0.85em; }
+    .invite-form { display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 10px; align-items: end; }
+    .invite-form label { display: block; margin-bottom: 5px; font-size: 0.9em; }
+    td { vertical-align: middle; font-size: 0.9em; }
+</style>';
 include 'admin_header.php';
 ?>
     <h1 style="margin-bottom: 30px;">👥 Gebruikersbeheer</h1>
 
-        <?php if ($message): ?>
-            <div class="message"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
+        <?= renderFlash() ?>
 
-        <div class="dashboard-grid">
-            <div class="main-panel">
-                <div class="card">
-                    <div class="card-title">🛡️ Bestaande Docenten</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Gebruikersnaam</th>
-                                <th>Rol</th>
-                                <th>Status</th>
-                                <th style="text-align: right;">Acties</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($users as $u): ?>
-                                <tr>
-                                    <td><?= $u['id'] ?></td>
-                                    <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
-                                    <td><span class="badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= $u['role'] ?></span></td>
-                                    <td>
-                                        <?php if ($u['is_active']): ?>
-                                            <?php if ($u['force_password_change']): ?>
-                                                <span class="badge" style="background:#fbc02d;">⚠️ Wijzigen verplicht</span>
-                                            <?php else: ?>
-                                                <span style="color: #4caf50; font-size: 0.85em;">● Actief</span>
-                                            <?php endif; ?>
-                                        <?php else: ?>
-                                            <span class="badge" style="background:#f44336;">● Gedeactiveerd</span>
+        <div class="card" style="border-top: 5px solid #667eea;">
+            <div class="card-title" style="color: #667eea; font-size: 1.2em; margin-bottom: 15px;">✉️ Docent uitnodigen</div>
+            <form method="POST" class="invite-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="action" value="invite">
+                <div>
+                    <label>E-mailadres</label>
+                    <input type="email" name="email" placeholder="m.janssen@school.nl" required>
+                </div>
+                <div>
+                    <label>Naam (optioneel)</label>
+                    <input type="text" name="display_name" placeholder="Bijv. M. Janssen" maxlength="100">
+                </div>
+                <div>
+                    <label>Rol</label>
+                    <select name="role">
+                        <option value="user">Docent (User)</option>
+                        <option value="admin">Beheerder (Admin)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="padding: 12px 20px;">🚀 Uitnodigen</button>
+            </form>
+            <p class="muted" style="margin-top: 10px;">De docent krijgt een link (72 uur geldig) om zelf een gebruikersnaam en wachtwoord te kiezen.</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title" style="margin-bottom: 10px;">🛡️ Docenten en beheerders</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Naam</th>
+                        <th>Gebruikersnaam</th>
+                        <th>E-mail</th>
+                        <th>Rol</th>
+                        <th>Status</th>
+                        <th>Laatst ingelogd</th>
+                        <th style="text-align: right;">Acties</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($users as $u):
+                        $uid = (int)$u['id'];
+                        [$statusLabel, $statusColor] = userStatus($u);
+                        $invited = (int)$u['is_invited'] === 1;
+                        $active = (int)$u['is_active'] === 1;
+                    ?>
+                        <tr>
+                            <td>
+                                <?= $u['display_name'] !== null && $u['display_name'] !== '' ? htmlspecialchars($u['display_name']) : '<span class="muted">—</span>' ?>
+                                <?php if ($uid === $adminId): ?><span class="muted">(jij)</span><?php endif; ?>
+                            </td>
+                            <td><?= $u['username'] !== null ? '<strong>' . htmlspecialchars($u['username']) . '</strong>' : '<span class="muted">nog niet gekozen</span>' ?></td>
+                            <td><?= $u['email'] !== null ? htmlspecialchars($u['email']) : '<span class="muted">—</span>' ?></td>
+                            <td><span class="status-badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= htmlspecialchars($u['role']) ?></span></td>
+                            <td>
+                                <span class="status-badge" style="background:<?= $statusColor ?>;">● <?= $statusLabel ?></span>
+                                <?php if ((int)$u['force_password_change']): ?>
+                                    <span class="status-badge" style="background:#fbc02d;">⚠️ Wijzigen verplicht</span>
+                                <?php endif; ?>
+                                <?php if ((int)$u['totp_enabled']): ?>
+                                    <span class="status-badge" style="background:#00897b;">🔐 2FA</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= formatDateTime($u['last_login_at']) ?></td>
+                            <td>
+                                <div class="actions">
+                                    <a href="user_edit.php?id=<?= $uid ?>" class="btn btn-sm btn-outline">✏️ Bewerken</a>
+                                    <?php if ($invited): ?>
+                                        <?php if ($active): ?>
+                                            <?= actionButton('resend_invite', $uid, '📨 Opnieuw versturen') ?>
                                         <?php endif; ?>
-                                    </td>
-                                    <td style="text-align: right;">
-                                        <form method="POST" style="display:inline-flex; gap: 5px; align-items: center; justify-content: flex-end;">
-                                            <input type="hidden" name="action" value="reset_password">
-                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                            <input type="text" name="new_password" placeholder="Nieuw wachtwoord" style="width: 130px; padding: 6px;" minlength="6" required>
-                                            <button type="submit" class="btn btn-primary" style="padding: 6px 12px;">Reset</button>
-                                        </form>
-                                        <form method="POST" style="display:inline;">
-                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                            <?php if ($u['is_active']): ?>
-                                                <button type="submit" class="btn btn-outline" style="padding: 6px 12px;" name="action" value="disable_user" title="Deactiveren">🚫</button>
-                                            <?php else: ?>
-                                                <button type="submit" class="btn btn-outline" style="padding: 6px 12px;" name="action" value="enable_user" title="Activeren">✅</button>
-                                            <?php endif; ?>
-                                        </form>
-                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Permanent verwijderen?');">
-                                            <input type="hidden" name="action" value="delete_user">
-                                            <input type="hidden" name="id" value="<?= $u['id'] ?>">
-                                            <button type="submit" class="btn btn-danger" style="padding: 6px 12px;">🗑️</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="side-panel">
-                <div class="card" style="border-top: 5px solid #667eea;">
-                    <div class="card-title" style="color: #667eea; font-size: 1.4em;">➕ Nieuwe Docent</div>
-                    <form method="POST">
-                        <input type="hidden" name="action" value="add_user">
-                        <div style="margin-bottom: 15px;">
-                            <label style="display:block; margin-bottom:5px; font-size:0.9em;">Gebruikersnaam</label>
-                            <input type="text" name="username" placeholder="Bijv. m.janssen" required>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <label style="display:block; margin-bottom:5px; font-size:0.9em;">Wachtwoord</label>
-                            <input type="password" name="password" placeholder="Wachtwoord" required>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <label style="display:block; margin-bottom:5px; font-size:0.9em;">Rol</label>
-                            <select name="role">
-                                <option value="user">Docent (User)</option>
-                                <option value="admin">Beheerder (Admin)</option>
-                            </select>
-                        </div>
-                        <div style="margin-bottom: 20px;">
-                            <label style="font-weight: normal; font-size: 0.9em; display: flex; align-items: center; gap: 8px;">
-                                <input type="checkbox" name="force_change" value="1" style="width: auto;"> 
-                                Wachtwoord wijzigen verplichten
-                            </label>
-                        </div>
-                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px;">🚀 Toevoegen</button>
-                    </form>
-                </div>
-            </div>
+                                        <?= actionButton('revoke_invite', $uid, 'Intrekken', 'btn-danger', 'Uitnodiging intrekken? De gebruiker wordt verwijderd.') ?>
+                                    <?php else: ?>
+                                        <?php if ((int)$u['force_password_change']): ?>
+                                            <?= actionButton('unforce_pwd', $uid, 'Opheffen', 'btn-outline', null, 'Verplichte wachtwoordwijziging opheffen') ?>
+                                        <?php else: ?>
+                                            <?= actionButton('force_pwd', $uid, 'Wachtwoord wijzigen verplichten') ?>
+                                        <?php endif; ?>
+                                        <?php if ($active && $u['email']): ?>
+                                            <?= actionButton('send_reset', $uid, 'Reset-link sturen') ?>
+                                        <?php elseif ($active): ?>
+                                            <span title="Geen e-mailadres bekend. Vul eerst een e-mailadres in via Bewerken."><button type="button" class="btn btn-sm btn-outline" disabled style="opacity: 0.5; pointer-events: none;">Reset-link sturen</button></span>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    <?php if ($active): ?>
+                                        <?= actionButton('disable_user', $uid, '🚫', 'btn-outline', null, 'Deactiveren') ?>
+                                    <?php else: ?>
+                                        <?= actionButton('enable_user', $uid, '✅', 'btn-outline', null, 'Activeren') ?>
+                                    <?php endif; ?>
+                                    <?php if (!$invited): ?>
+                                        <?= actionButton('delete_user', $uid, '🗑️', 'btn-danger', 'Permanent verwijderen?', 'Verwijderen') ?>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
 <?php include 'admin_footer.php'; ?>

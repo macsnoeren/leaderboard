@@ -1,12 +1,8 @@
 <?php
+// De pagina heeft requireTeacher()/requireAdmin() al aangeroepen; dit is alleen een vangnet.
+// Daar zit ook de controle op "wachtwoord wijzigen verplicht".
 if (!isset($_SESSION['teacher_logged_in'])) {
     header('Location: login.php');
-    exit;
-}
-
-// Beveiliging: Forceer wachtwoordwijziging op ELKE pagina als de vlag aan staat
-if (isset($_SESSION['force_password_change']) && basename($_SERVER['PHP_SELF']) !== 'password.php' && basename($_SERVER['PHP_SELF']) !== 'logout.php') {
-    header('Location: password.php');
     exit;
 }
 
@@ -20,8 +16,10 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $pageTitle ?? 'Teacher Dashboard' ?> - Zebrawave</title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Teacher Dashboard') ?> - Zebrawave</title>
+    <?php if ($loadMarked ?? true): // profile.php zet dit uit: de 2FA-pagina laadt alleen scripts van cdnjs ?>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <?php endif; ?>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; display: flex; min-height: 100vh; }
@@ -80,7 +78,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         <div class="sidebar-header">
             <span>Zebrawave Admin</span>
             <div style="font-size: 0.65em; font-weight: normal; opacity: 0.9; margin-top: 5px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-                👤 <?= htmlspecialchars($_SESSION['teacher_username'] ?? 'Docent') ?>
+                👤 <?= htmlspecialchars($_SESSION['teacher_display_name'] ?? $_SESSION['teacher_username'] ?? 'Docent') ?>
             </div>
         </div>
         <div class="sidebar-nav">
@@ -95,13 +93,13 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                 </span>
             </a>
             <?php if (($_SESSION['teacher_role'] ?? 'user') === 'admin'): ?>
-            <a href="users.php" class="nav-item <?= $currentPage == 'users.php' ? 'active' : '' ?>">👥 Users</a>
+            <a href="users.php" class="nav-item <?= in_array($currentPage, ['users.php', 'user_edit.php']) ? 'active' : '' ?>">👥 Users</a>
             <a href="api_keys.php" class="nav-item <?= $currentPage == 'api_keys.php' ? 'active' : '' ?>">🔑 API Keys</a>
             <a href="archive.php" class="nav-item <?= $currentPage == 'archive.php' ? 'active' : '' ?>">📦 Archief</a>
             <a href="audit.php" class="nav-item <?= $currentPage == 'audit.php' ? 'active' : '' ?>">📋 Audit Logs</a>
             <?php endif; ?>
             <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
-            <a href="password.php" class="nav-item <?= $currentPage == 'password.php' ? 'active' : '' ?>">🔑 Password</a>
+            <a href="profile.php" class="nav-item <?= in_array($currentPage, ['profile.php', 'password.php']) ? 'active' : '' ?>">👤 Profiel</a>
             <a href="https://darkwebchat.zebrawavesecurity.info/hacker-chat.html" target="_blank" class="nav-item" style="margin-top: auto; color: #4a148c; font-weight: bold;">💀 DARKNET CHAT</a>
             <a href="logout.php" class="nav-item" style="color: #c62828;">🚪 Logout</a>
         </div>

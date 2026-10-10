@@ -2,19 +2,11 @@
 session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php';
-
-if (!isset($_SESSION['teacher_logged_in'])) {
-    header('Location: login.php');
-    exit;
-}
+require_once '../conf/auth.php';
 
 $db = getDB();
-
 // Autorisatie check: Alleen admin mag hier komen
-if (($_SESSION['teacher_role'] ?? 'user') !== 'admin') {
-    header('Location: teacher.php');
-    exit;
-}
+requireAdmin($db);
 
 // Haal gearchiveerde opdrachten op
 $stmt = $db->query("

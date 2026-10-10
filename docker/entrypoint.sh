@@ -19,9 +19,12 @@ define('SMTP_HOST', '${SMTP_HOST:-}');
 define('SMTP_PORT', ${SMTP_PORT:-587});
 define('SMTP_USER', '${SMTP_USER:-}');
 define('SMTP_PASS', '${SMTP_PASS:-}');
+define('SMTP_SECURE', '${SMTP_SECURE-tls}');
+define('SMTP_AUTH', ${SMTP_AUTH:-true});
 define('FROM_EMAIL', '${FROM_EMAIL:-}');
 define('FROM_NAME', '${FROM_NAME:-Assignment System}');
 define('BASE_URL', '$BASE_URL');
+define('REQUIRE_2FA_ADMIN', ${REQUIRE_2FA_ADMIN:-false});
 EOF
 
 # Database en artifact store (volumes)
