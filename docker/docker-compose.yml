@@ -1,0 +1,34 @@
+name: leaderboard
+
+services:
+  leaderboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    # Host-netwerk: de AI-agent bereikt Ollama op localhost:11434 van de host
+    network_mode: host
+    init: true
+    restart: unless-stopped
+    environment:
+      APP_PORT: ${APP_PORT:-8088}
+      BASE_URL: ${BASE_URL:-}
+      ENABLE_EMAIL: ${ENABLE_EMAIL:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-}
+      FROM_NAME: ${FROM_NAME:-Assignment System}
+      AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
+      AI_MODELS: ${AI_MODELS:-qwen2.5:1.5b}
+      AI_POLL_INTERVAL: ${AI_POLL_INTERVAL:-30}
+      OLLAMA_URL: ${OLLAMA_URL:-http://localhost:11434/api/generate}
+    volumes:
+      - database:/var/www/leaderboard/database
+      - artifacts:/var/www/leaderboard/htdocs/artifacts
+      # Live wijzigingen in de PHP-pagina's zonder rebuild:
+      # - ../htdocs:/var/www/leaderboard/htdocs
+
+volumes:
+  database:
+  artifacts:

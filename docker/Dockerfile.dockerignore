@@ -1,0 +1,8 @@
+.git
+database
+htdocs/artifacts
+conf/config.php*
+**/config.py
+**/__pycache__
+docker/*
+!docker/entrypoint.sh
