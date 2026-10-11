@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/../conf/config.php';
 require_once __DIR__ . '/../conf/database.php';
+require_once __DIR__ . '/../conf/game.php';
 
 try {
     $db = getDB();
@@ -121,6 +122,57 @@ try {
     // 12. Herstelcodes voor 2FA en mislukte inlogpogingen
     $db->exec("CREATE TABLE IF NOT EXISTS user_recovery_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, code_hash TEXT NOT NULL, used_at DATETIME)");
     $db->exec("CREATE TABLE IF NOT EXISTS login_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL, identifier TEXT, ip TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
+    // 13. Spellen en de docenten die een spel besturen
+    $db->exec("CREATE TABLE IF NOT EXISTS games (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', join_code TEXT UNIQUE, registration_open INTEGER DEFAULT 0, logo_file TEXT, status_message TEXT, started_at DATETIME, ends_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_by INTEGER)");
+    $db->exec("CREATE TABLE IF NOT EXISTS game_teachers (game_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL, PRIMARY KEY (game_id, teacher_id))");
+
+    // 14. Teams, opdrachten en archief horen bij een spel; het archief bewaart de teamnaam
+    foreach (['teams ADD COLUMN game_id INTEGER', 'assignments ADD COLUMN game_id INTEGER',
+              'completed_assignments ADD COLUMN game_id INTEGER', 'completed_assignments ADD COLUMN team_name TEXT'] as $column) {
+        try {
+            $db->exec("ALTER TABLE $column");
+        } catch (PDOException $e) {}
+    }
+
+    // 15. Standaardspel voor de bestaande gegevens: alle teams, opdrachten, archiefregels en docenten
+    if ((int)$db->query("SELECT COUNT(*) FROM games")->fetchColumn() === 0) {
+        $started = $db->query("SELECT MIN(level_updated_at) FROM teams WHERE current_level > 0")->fetchColumn();
+        $stmt = $db->prepare("INSERT INTO games (name, status, join_code, registration_open, logo_file, started_at, created_at)
+                              VALUES ('Operation Gameplay', ?, ?, 0, 'images/logo-operation-gameplay.png', ?, datetime('now'))");
+        $stmt->execute([$started ? 'running' : 'draft', generateJoinCode($db), $started ?: null]);
+        $defaultGame = (int)$db->lastInsertId();
+        if ($started) {
+            // In een lopend spel begint elk team op level 1
+            $db->exec("UPDATE teams SET current_level = 1, level_updated_at = datetime('now') WHERE current_level = 0");
+        }
+        $db->prepare("INSERT OR IGNORE INTO game_teachers (game_id, teacher_id) SELECT ?, id FROM teachers")->execute([$defaultGame]);
+        echo "Standaardspel 'Operation Gameplay' (#$defaultGame) aangemaakt.\n";
+    }
+    // Rijen zonder spel (bijv. van een oud script) horen bij het oudste spel
+    $defaultGame = (int)$db->query("SELECT MIN(id) FROM games")->fetchColumn();
+    foreach (['teams', 'assignments', 'completed_assignments'] as $table) {
+        $db->prepare("UPDATE $table SET game_id = ? WHERE game_id IS NULL")->execute([$defaultGame]);
+    }
+    $db->exec("UPDATE completed_assignments SET team_name = (SELECT team_name FROM teams WHERE teams.id = completed_assignments.team_id) WHERE team_name IS NULL");
+
+    // 16. Teamnaam en opdrachtnummer uniek per spel. Dubbele bestaande rijen blokkeren dit:
+    //     meld het, zodat ze met de hand opgelost kunnen worden.
+    foreach (['idx_teams_game_name ON teams(game_id, team_name)', 'idx_assignments_game_number ON assignments(game_id, assignment_number)'] as $index) {
+        try {
+            $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS $index");
+        } catch (PDOException $e) {
+            echo "Waarschuwing: unieke index $index niet aangemaakt (dubbele waarden?): " . $e->getMessage() . "\n";
+        }
+    }
+
+    // 17. Spelcode voor spellen die er nog geen hebben
+    foreach ($db->query("SELECT id FROM games WHERE join_code IS NULL OR join_code = ''")->fetchAll(PDO::FETCH_COLUMN) as $gameId) {
+        $db->prepare("UPDATE games SET join_code = ? WHERE id = ?")->execute([generateJoinCode($db), $gameId]);
+    }
+
+    // 18. Centrale mededelingen (team_id NULL = alle teams van het spel)
+    $db->exec("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {

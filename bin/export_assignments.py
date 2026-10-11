@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 import tarfile
 import json
@@ -11,9 +12,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, '../database/leaderboard.db')
 HTDOCS_PATH = os.path.join(BASE_DIR, '../htdocs')
 
-def export_assignments(output_name=None):
+def export_assignments(game_id, output_name=None):
     if not output_name:
-        output_name = f"assignments_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
+        output_name = f"assignments_game{game_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tar.gz"
 
     if not os.path.exists(DB_PATH):
         print(f"Fout: Database niet gevonden op {DB_PATH}")
@@ -25,11 +26,17 @@ def export_assignments(output_name=None):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        cursor.execute("SELECT * FROM assignments ORDER BY assignment_number ASC")
+        cursor.execute("SELECT name FROM games WHERE id = ?", (game_id,))
+        game = cursor.fetchone()
+        if not game:
+            print(f"Fout: spel {game_id} bestaat niet.")
+            return
+
+        cursor.execute("SELECT * FROM assignments WHERE game_id = ? ORDER BY assignment_number ASC", (game_id,))
         rows = cursor.fetchall()
         
         if not rows:
-            print("Geen opdrachten gevonden om te exporteren.")
+            print(f"Geen opdrachten gevonden in spel {game_id} ({game['name']}).")
             return
 
         # 2. Bouw het manifest en verzamel bestanden
@@ -73,6 +80,8 @@ def export_assignments(output_name=None):
             conn.close()
 
 if __name__ == "__main__":
-    # Gebruik argument als bestandsnaam indien opgegeven
-    target_file = sys.argv[1] if len(sys.argv) > 1 else None
-    export_assignments(target_file)
+    parser = argparse.ArgumentParser(description="Exporteer de opdrachten van één spel naar een tar.gz met manifest.json.")
+    parser.add_argument("--game", type=int, required=True, help="id van het spel (zie 🎮 Spellen)")
+    parser.add_argument("output", nargs="?", help="bestandsnaam van het archief (optioneel)")
+    args = parser.parse_args()
+    export_assignments(args.game, args.output)

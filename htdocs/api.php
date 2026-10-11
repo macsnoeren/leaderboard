@@ -4,6 +4,7 @@
  */
 require_once '../conf/config.php';
 require_once '../conf/database.php';
+require_once '../conf/game.php';
 
 header('Content-Type: application/json');
 
@@ -49,9 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
                 )
             ) as chat_history
         FROM teams t
-        JOIN assignments a ON t.current_level = a.assignment_number
+        JOIN games g ON g.id = t.game_id
+        JOIN assignments a ON a.game_id = t.game_id AND a.assignment_number = t.current_level
         JOIN team_messages tm ON t.id = tm.team_id AND t.current_level = tm.assignment_number
         WHERE tm.sender = 'team'
+        -- Alleen spellen die bezig of gepauzeerd zijn (niet concept of afgelopen)
+        AND " . effectiveStatusSql('g') . " IN ('running', 'paused')
         -- Pak alleen het allerlaatste bericht van het team voor dit level
         AND tm.id IN (SELECT MAX(id) FROM team_messages WHERE sender = 'team' GROUP BY team_id, assignment_number)
         -- Controleer of er nog geen AI suggestie of docent-reactie bestaat die nieuwer is dan dit teambericht

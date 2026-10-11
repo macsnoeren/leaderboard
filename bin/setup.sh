@@ -7,6 +7,10 @@ echo "Create the artifact store"
 mkdir artifacts
 chmod 777 artifacts
 
+echo "Create the upload folder (game logos)"
+mkdir uploads
+chmod 777 uploads
+
 cd ../
 echo "Create the database"
 mkdir database

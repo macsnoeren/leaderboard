@@ -15,31 +15,67 @@
 
 require_once '../conf/config.php';
 require_once '../conf/database.php';
+require_once '../conf/game.php';
 
 $db = getDB();
 
-$teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+// ?game=<spelcode>; zonder parameter het enige lopende spel, of een keuzelijst
+$code = trim($_GET['game'] ?? '');
+$game = null;
+$choices = [];
+$notFound = false;
+if ($code !== '') {
+    $game = getGameByCode($db, $code);
+    $notFound = $game === null;
+} else {
+    $choices = $db->query("SELECT " . gameSelectSql() . " FROM games g WHERE " . effectiveStatusSql() . " IN ('running', 'paused') ORDER BY g.name")->fetchAll(PDO::FETCH_ASSOC);
+    if (count($choices) === 1) {
+        $game = $choices[0];
+    }
+}
 
-// AJAX endpoint om de gegevens live op te halen zonder de pagina te verversen
+$teams = [];
+$total_assignments = 0;
+$status = null;
+if ($game) {
+    $teams = rankedTeams($db, (int)$game['id']);
+    $total_assignments = totalAssignments($db, (int)$game['id']);
+    $status = $game['effective_status'];
+}
+
+function levelBadge(int $level, int $total): string {
+    if ($level <= 0) {
+        return 'Start';
+    }
+    return $level > $total ? 'Finish' : "Level $level/$total";
+}
+
+// AJAX endpoint om de gegevens live op te halen zonder de pagina te verversen.
+// Alleen publieke velden: geen e-mail of toegangstoken.
 if (isset($_GET['ajax'])) {
     header('Content-Type: application/json');
     $data = [];
     foreach ($teams as $index => $team) {
-        $team['rank'] = $index + 1;
-        $team['progress'] = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0;
-        $data[] = $team;
+        $data[] = [
+            'id' => (int)$team['id'],
+            'team_name' => $team['team_name'],
+            'current_level' => (int)$team['current_level'],
+            'rank' => $index + 1,
+            'progress' => progressPercent((int)$team['current_level'], $total_assignments),
+            'badge' => levelBadge((int)$team['current_level'], $total_assignments),
+        ];
     }
-    echo json_encode(['teams' => $data, 'total_assignments' => $total_assignments]);
+    echo json_encode(['status' => $status, 'teams' => $data, 'total_assignments' => $total_assignments]);
     exit;
 }
+$logo = $game ? gameLogoUrl($game) : null;
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assignment Leaderboard</title>
+    <title><?= $game ? htmlspecialchars($game['name']) . ' - ' : '' ?>Leaderboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -126,6 +162,21 @@ if (isset($_GET['ajax'])) {
             min-width: 80px;
             text-align: center;
         }
+        .soon { text-align: center; padding: 50px 30px; }
+        .soon img { max-width: min(90%, 600px); max-height: 50vh; object-fit: contain; margin-bottom: 30px; }
+        .soon h2 { font-size: 2.2em; color: #667eea; }
+        .status-pill { display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; margin-top: 10px; font-weight: 600; }
+        .choice { display: block; padding: 20px; margin-bottom: 15px; background: #f8f9fa; border-radius: 10px; color: #333; text-decoration: none; font-size: 1.2em; font-weight: 600; }
+        .choice:hover { background: #f0f4ff; color: #667eea; }
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            h1 { font-size: 1.8em; }
+            .leaderboard { padding: 15px; }
+            .team-row { padding: 12px; flex-wrap: wrap; }
+            .rank { width: 40px; font-size: 1.5em; }
+            .team-info { margin: 0 10px; min-width: 0; }
+            .level-badge { padding: 6px 12px; min-width: 0; }
+        }
         .admin-link {
             text-align: center;
             padding: 20px;
@@ -141,10 +192,33 @@ if (isset($_GET['ajax'])) {
 <body>
     <div class="container">
         <header>
-            <h1>Leaderboard Zebrawave Studios</h1>
-            <!--<p class="subtitle"></p>-->
+            <h1><?= $game ? htmlspecialchars($game['name']) : 'Leaderboard Zebrawave Studios' ?></h1>
+            <?php if ($status === 'finished'): ?>
+                <div class="status-pill">🏁 Afgelopen – eindstand</div>
+            <?php elseif ($status === 'paused'): ?>
+                <div class="status-pill">⏸️ Pauze</div>
+            <?php endif; ?>
         </header>
-        
+
+        <?php if (!$game): ?>
+            <div class="leaderboard">
+                <?php if ($notFound): ?>
+                    <p style="text-align: center; padding: 40px; color: #999;">Dit spel bestaat niet.</p>
+                <?php elseif (empty($choices)): ?>
+                    <p style="text-align: center; padding: 40px; color: #999;">Er is op dit moment geen spel bezig.</p>
+                <?php else: ?>
+                    <p style="margin-bottom: 20px; color: #666;">Kies een spel:</p>
+                    <?php foreach ($choices as $choice): ?>
+                        <a class="choice" href="index.php?game=<?= urlencode((string)$choice['join_code']) ?>"><?= htmlspecialchars($choice['name']) ?></a>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        <?php elseif ($status === 'draft'): ?>
+            <div class="soon">
+                <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt=""><?php endif; ?>
+                <h2>Binnenkort van start</h2>
+            </div>
+        <?php else: ?>
         <div class="leaderboard" id="leaderboard-container">
             <?php if (empty($teams)): ?>
                 <p style="text-align: center; padding: 40px; color: #999;">No teams registered yet.</p>
@@ -157,7 +231,7 @@ if (isset($_GET['ajax'])) {
                     elseif ($rank === 2) $rankClass = 'second';
                     elseif ($rank === 3) $rankClass = 'third';
                     
-                    $progress = ($total_assignments > 0) ? ($team['current_level'] / $total_assignments) * 100 : 0;
+                    $progress = progressPercent((int)$team['current_level'], $total_assignments);
                     ?>
                     <div class="team-row" data-id="<?= $team['id'] ?>">
                         <div class="rank <?= $rankClass ?>" id="rank-<?= $team['id'] ?>">#<?= $rank ?></div>
@@ -165,25 +239,39 @@ if (isset($_GET['ajax'])) {
                             <div class="team-name"><?= htmlspecialchars($team['team_name']) ?></div>
                             <div class="progress-bar">
                                 <div class="progress-fill" id="prog-<?= $team['id'] ?>" style="width: <?= $progress ?>%">
-                                    <?= round($progress, 1) ?>%
+                                    <?= $progress > 0 ? round($progress, 1) . '%' : '' ?>
                                 </div>
                             </div>
                         </div>
                         <div class="level-badge" id="lvl-<?= $team['id'] ?>">
-                            <?= $team['current_level'] > $total_assignments ? 'Finish' : 'Level ' . $team['current_level'] . '/' . $total_assignments ?>
+                            <?= levelBadge((int)$team['current_level'], $total_assignments) ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
+    <?php if ($game): ?>
     <script>
+        const gameCode = <?= json_encode((string)$game['join_code']) ?>;
+        const gameStatus = <?= json_encode($status) ?>;
+        // Spelcode in de URL, zodat herladen hetzelfde spel toont (ook als het afgelopen is)
+        if (!new URLSearchParams(location.search).has('game')) {
+            history.replaceState(null, '', 'index.php?game=' + encodeURIComponent(gameCode));
+        }
+
         function fetchLeaderboard() {
-            fetch('index.php?ajax=1')
+            fetch('index.php?ajax=1&game=' + encodeURIComponent(gameCode))
                 .then(response => response.json())
                 .then(data => {
+                    // Start, pauze of einde: de pagina ziet er anders uit
+                    if (data.status !== gameStatus) { location.reload(); return; }
                     const container = document.getElementById('leaderboard-container');
+                    if (!container) return;
                     const rows = Array.from(container.querySelectorAll('.team-row'));
+                    // Team erbij of weg: ververs de hele pagina (simpelste oplossing)
+                    if (rows.length !== data.teams.length) { location.reload(); return; }
                     
                     // Sla de huidige posities op (First)
                     const oldPositions = {};
@@ -206,8 +294,8 @@ if (isset($_GET['ajax'])) {
 
                         // Update progress bar en level badge
                         document.getElementById(`prog-${teamData.id}`).style.width = teamData.progress + '%';
-                        document.getElementById(`prog-${teamData.id}`).innerText = Math.round(teamData.progress * 10) / 10 + '%';
-                        document.getElementById(`lvl-${teamData.id}`).innerText = teamData.current_level > data.total_assignments ? 'Finish' : `Level ${teamData.current_level}/${data.total_assignments}`;
+                        document.getElementById(`prog-${teamData.id}`).innerText = teamData.progress > 0 ? Math.round(teamData.progress * 10) / 10 + '%' : '';
+                        document.getElementById(`lvl-${teamData.id}`).innerText = teamData.badge;
                         
                         // Zet ze in de juiste volgorde in de DOM
                         container.appendChild(row);
@@ -243,5 +331,6 @@ if (isset($_GET['ajax'])) {
         // Elke 10 seconden verversen, net als de oude meta-refresh
         setInterval(fetchLeaderboard, 10000);
     </script>
+    <?php endif; ?>
 </body>
 </html>

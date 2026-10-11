@@ -1,6 +1,7 @@
 <?php
 require_once '../conf/config.php';
 require_once '../conf/database.php';
+require_once '../conf/game.php';
 
 $token = $_GET['token'] ?? '';
 if (empty($token)) {
@@ -16,50 +17,60 @@ if (!$team) {
     die("Toegang geweigerd: Ongeldige token.");
 }
 
-// Haal het totale aantal opdrachten op voor het bepalen van het laatste level
-$total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+$game = getGame($db, (int)$team['game_id']);
+if (!$game) {
+    die("Toegang geweigerd: Dit team hoort niet bij een spel.");
+}
+$status = $game['effective_status'];
+$level = (int)$team['current_level'];
 
-// Handle bericht versturen
+// Het totale aantal opdrachten van dit spel bepaalt het laatste level (N+1 = Finish)
+$total_assignments = totalAssignments($db, (int)$game['id']);
+
+// De chat is alleen open in een lopend of gepauzeerd spel, tijdens een opdracht
+$chatOpen = in_array($status, ['running', 'paused'], true) && $level >= 1 && $level <= $total_assignments;
+
+// Handle bericht versturen; de server weigert berichten bij een concept- of afgelopen spel
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'send_message') {
-    // Als het team al gewonnen heeft, negeer het bericht
-    if ($team['current_level'] > $total_assignments) {
-        header("Location: team.php?token=" . $token);
-        exit;
-    }
-
     $msg = trim($_POST['message'] ?? '');
-    if (!empty($msg)) {
+    if ($chatOpen && $msg !== '') {
         $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'team', ?)");
-        $stmt->execute([$team['id'], $team['current_level'], $msg]);
-        header("Location: team.php?token=" . $token);
-        exit;
+        $stmt->execute([$team['id'], $level, $msg]);
     }
+    header("Location: team.php?token=" . urlencode($team['access_token']));
+    exit;
 }
 
-// Bereken de ranking op basis van dezelfde criteria als het leaderboard
-$allTeams = $db->query("SELECT id FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_COLUMN);
-$rank = array_search($team['id'], $allTeams) + 1;
+// Positie binnen het spel, met dezelfde criteria als het leaderboard
+$rank = teamRank($db, $team);
 
-// Verkrijg de timestamp van wanneer het huidige level is gestart
-$startTime = strtotime($team['level_updated_at']);
-
-// Haal het huidige assignment op
-$stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
-$stmt->execute([$team['current_level']]);
+// Haal het huidige assignment van dit spel op
+$stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? AND assignment_number = ?");
+$stmt->execute([$game['id'], $level]);
 $assignment = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // Haal download count op
 $stmt = $db->prepare("SELECT download_count FROM team_downloads WHERE team_id = ? AND assignment_number = ?");
-$stmt->execute([$team['id'], $team['current_level']]);
+$stmt->execute([$team['id'], $level]);
 $download_count = $stmt->fetchColumn() ?: 0;
 $max_downloads = 10;
 
 // Haal chatberichten op voor dit level
 $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
-$stmt->execute([$team['id'], $team['current_level']]);
+$stmt->execute([$team['id'], $level]);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// AJAX endpoint voor live updates
+// Mededelingen voor alle teams van het spel of voor dit team
+$stmt = $db->prepare("SELECT id, message, created_at FROM announcements WHERE game_id = ? AND (team_id IS NULL OR team_id = ?) ORDER BY id ASC");
+$stmt->execute([$game['id'], $team['id']]);
+$announcements = array_map(function ($a) {
+    return ['id' => (int)$a['id'], 'message' => $a['message'], 'time' => formatDateTime($a['created_at'])];
+}, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+$logo = gameLogoUrl($game);
+$hasEnd = $game['ends_at'] !== null;
+
+// AJAX endpoint voor live updates. Tijden komen van de server, zodat de klok van het team niet uitmaakt.
 if (isset($_GET['ajax'])) {
     $msg_html = '';
     foreach ($messages as $m) {
@@ -72,21 +83,25 @@ if (isset($_GET['ajax'])) {
     header('Content-Type: application/json');
     echo json_encode([
         'html' => $msg_html, 
-        'level' => (int)$team['current_level'],
+        'level' => $level,
         'rank' => $rank,
         'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
         'assignment_desc' => $assignment ? $assignment['description'] : 'Wacht op instructies.',
         'assignment_instruction' => $assignment ? $assignment['instruction'] : '',
         'time_limit' => $assignment ? (int)$assignment['time_limit'] : 0,
         'has_file' => !empty($assignment['artifact_file']),
-        'start_time' => $startTime,
-        'total_assignments' => (int)$total_assignments // Voeg totaal aantal opdrachten toe
+        'total_assignments' => $total_assignments,
+        'status' => $status,
+        'status_message' => $game['status_message'],
+        'seconds_left' => $game['seconds_left'] === null ? null : (int)$game['seconds_left'],
+        'seconds_elapsed' => $game['seconds_elapsed'] === null ? null : (int)$game['seconds_elapsed'],
+        'announcements' => $announcements,
     ]);
     exit;
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -200,6 +215,49 @@ if (isset($_GET['ajax'])) {
             main { overflow-y: auto; }
             .chat-section { border-left: none; border-top: 1px solid #ddd; min-height: 500px; height: auto; }
         }
+
+        /* Pauzebanner en welkomstmelding */
+        .notice-banner { padding: 12px 40px; font-weight: 600; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .notice-banner.pause { background: #fff3e0; color: #e65100; border-bottom: 3px solid #ff9800; }
+        .notice-banner.welcome { background: #e8f5e9; color: #2e7d32; border-bottom: 3px solid #4caf50; }
+        .notice-banner input { flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #a5d6a7; border-radius: 6px; font-family: monospace; }
+        .notice-banner button { padding: 6px 12px; border: none; border-radius: 6px; background: #4caf50; color: white; font-weight: bold; cursor: pointer; }
+
+        /* Aftelklok: laatste 10 minuten rood */
+        .stat-value.urgent { color: #ff5252; text-shadow: 0 0 8px rgba(255,82,82,0.6); }
+
+        /* Watermerk: logo van het spel vast achter de berichten */
+        .chat-watermark { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; background: #f9f9f9; }
+        .chat-watermark::before { content: ""; position: absolute; inset: 10%; background: var(--logo) center / contain no-repeat; opacity: 0.08; pointer-events: none; }
+        .chat-watermark .messages { background: transparent; position: relative; z-index: 1; }
+
+        /* Schermvullend wachtscherm en eindscherm */
+        .fullscreen { position: fixed; inset: 0; z-index: 9000; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px; gap: 20px; overflow-y: auto; }
+        .fullscreen .big-logo { max-width: min(80vw, 600px); max-height: 45vh; object-fit: contain; filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3)); }
+        .fullscreen h1 { font-size: clamp(1.8em, 5vw, 3.2em); }
+        .fullscreen .sub { font-size: clamp(1.1em, 3vw, 1.6em); opacity: 0.9; }
+        .fullscreen .status-text { background: rgba(0,0,0,0.25); padding: 15px 25px; border-radius: 12px; font-size: clamp(1em, 2.5vw, 1.4em); max-width: 800px; white-space: pre-line; }
+        .fullscreen .header-link { margin-top: 10px; }
+        .waiting-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+        @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+        /* Mededelingen */
+        .btn-announce { position: relative; background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 15px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85em; }
+        .btn-announce:hover { background: rgba(255,255,255,0.25); }
+        .ann-count { position: absolute; top: -8px; right: -8px; background: #f44336; color: white; border-radius: 10px; padding: 1px 6px; font-size: 0.8em; }
+        #announcement-modal { z-index: 11000; }
+        .announcement { border-left: 4px solid #667eea; background: #f8f9ff; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; }
+        .announcement .ann-time { font-size: 0.8em; color: #888; margin-bottom: 6px; }
+        .announcement p { margin-bottom: 8px; }
+        .announcement ul, .announcement ol { margin-left: 20px; }
+
+        @media (max-width: 700px) {
+            header { padding: 15px; }
+            .header-top { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .header-actions { flex-wrap: wrap; }
+            .stats-bar { gap: 10px; padding: 8px 10px; }
+            .notice-banner { padding: 10px 15px; }
+        }
     </style>
 </head>
 <body>
@@ -207,11 +265,12 @@ if (isset($_GET['ajax'])) {
         <div class="header-top">
             <div class="team-name">Team: <?= htmlspecialchars($team['team_name']) ?></div>
             <div class="header-actions">
-                <?php if ($assignment): ?>
+                <?php if ($assignment && $chatOpen): ?>
                     <button class="btn-assignment" onclick="openAssignmentModal()">📄 Bekijk Opdracht</button>
                 <?php endif; ?>
+                <button class="btn-announce" onclick="showAnnouncements(false)">📣 Mededelingen<span class="ann-count" id="ann-count" style="display:none;"></span></button>
                 
-                <a href="index.php" target="_leaderboard" class="header-link">View Public Leaderboard</a>
+                <a href="index.php?game=<?= urlencode((string)$game['join_code']) ?>" target="_leaderboard" class="header-link">View Public Leaderboard</a>
                 <div class="stats-bar">
                     <div class="stat-item">
                         <span class="stat-label">Positie</span>
@@ -219,16 +278,28 @@ if (isset($_GET['ajax'])) {
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Level</span>
-                        <span class="stat-value"><span id="display-level"><?= $team['current_level'] > $total_assignments ? 'Finish' : $team['current_level'] ?></span></span>
+                        <span class="stat-value"><span id="display-level"><?= levelLabel($level, $total_assignments) ?></span></span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label">Tijd Bezig</span>
+                        <span class="stat-label" id="timer-label"><?= $hasEnd ? 'Resterende tijd' : 'Tijd bezig' ?></span>
                         <span class="stat-value" id="live-timer">00:00:00</span>
                     </div>
                 </div>
             </div>
         </div>
     </header>
+
+    <div class="notice-banner pause" id="pause-banner" style="<?= $status === 'paused' ? '' : 'display: none;' ?>">
+        ⏸️ <span id="pause-text"><?= htmlspecialchars($game['status_message'] ?: 'Het spel is even gepauzeerd. Jullie kunnen gewoon doorwerken.') ?></span>
+    </div>
+
+    <?php if (isset($_GET['welcome'])): ?>
+        <div class="notice-banner welcome" id="welcome-banner">
+            ✅ Jullie team is aangemeld! Bewaar deze link, daarmee komen jullie altijd terug op dit dashboard:
+            <input type="text" readonly value="<?= htmlspecialchars(teamDashboardUrl($team['access_token'])) ?>" onclick="this.select()">
+            <button type="button" onclick="copyLink(this)">Kopiëren</button>
+        </div>
+    <?php endif; ?>
 
     <main>
         <section id="assignment-modal" class="modal">
@@ -250,8 +321,21 @@ if (isset($_GET['ajax'])) {
 
                     <div class="download-box" id="download-box" style="<?= (!$assignment || empty($assignment['artifact_file'])) ? 'display: none;' : '' ?>">
                         <p style="margin-bottom: 15px; font-weight: bold; color: #333;">Download de opdrachtdocumentatie:</p>
-                        <a href="team_download.php?token=<?= $token ?>" class="download-btn" id="dl-link">📄 Bestanden Downloaden (PDF/ZIP)</a>
+                        <a href="team_download.php?token=<?= htmlspecialchars($team['access_token']) ?>" class="download-btn" id="dl-link">📄 Bestanden Downloaden (PDF/ZIP)</a>
                         <div class="remaining">Downloads gebruikt: <span id="display-dl-count"><?= $download_count ?></span> / <?= $max_downloads ?></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="announcement-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal" onclick="closeAnnouncements()">&times;</span>
+                <div class="assignment-card">
+                    <div class="assignment-title" id="announcement-title">📣 Mededelingen</div>
+                    <div id="announcement-list"></div>
+                    <div style="text-align: right; margin-top: 10px;">
+                        <button class="download-btn" style="margin: 0;" onclick="closeAnnouncements()">Gelezen</button>
                     </div>
                 </div>
             </div>
@@ -262,14 +346,16 @@ if (isset($_GET['ajax'])) {
                 <span>Berichten & Antwoorden</span>
                 <button class="btn-zoom" onclick="toggleChatSize()">🔍 Tekst vergroten</button>
             </div>
-            <?php if ($team['current_level'] > 0 && $team['current_level'] <= $total_assignments): ?>
-                <div class="messages" id="chat-box">
-                    <?php foreach ($messages as $m): ?>
-                        <div class="message <?= $m['sender'] ?>">
-                            <div class="msg-meta"><?= $m['sender'] === 'team' ? 'Jullie' : 'Docent' ?> - <?= $m['created_at'] ?></div>
-                            <div><?= nl2br(htmlspecialchars($m['message'])) ?></div>
-                        </div>
-                    <?php endforeach; ?>
+            <?php if ($chatOpen): ?>
+                <div class="chat-watermark"<?= $logo ? ' style="--logo: url(\'' . htmlspecialchars($logo) . '\')"' : '' ?>>
+                    <div class="messages" id="chat-box">
+                        <?php foreach ($messages as $m): ?>
+                            <div class="message <?= $m['sender'] ?>">
+                                <div class="msg-meta"><?= $m['sender'] === 'team' ? 'Jullie' : 'Docent' ?> - <?= $m['created_at'] ?></div>
+                                <div><?= nl2br(htmlspecialchars($m['message'])) ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
                 <div class="chat-input-area">
                     <form method="POST" class="chat-form">
@@ -278,7 +364,7 @@ if (isset($_GET['ajax'])) {
                         <button type="submit" class="download-btn" style="width:100%; margin:0;">Bericht versturen</button>
                     </form>
                 </div>
-            <?php elseif ($team['current_level'] > $total_assignments): ?>
+            <?php elseif ($level > $total_assignments && $status !== 'draft'): ?>
                 <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #2e7d32; padding: 40px;">
                     <div>
                         <h2 style="margin-bottom: 10px;">🏆 Gefeliciteerd!</h2>
@@ -287,11 +373,34 @@ if (isset($_GET['ajax'])) {
                 </div>
             <?php else: ?>
                 <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #888;">
-                    De chat wordt geactiveerd zodra je aan level 1 begint.
+                    De chat wordt geactiveerd zodra het spel begint.
                 </div>
             <?php endif; ?>
         </section>
     </main>
+
+    <?php if ($status === 'draft'): ?>
+        <div class="fullscreen" id="waiting-screen">
+            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="big-logo"><?php endif; ?>
+            <h1>Team <?= htmlspecialchars($team['team_name']) ?></h1>
+            <div class="sub">Wacht op het startsein<span class="waiting-dots"></span></div>
+            <button class="btn-announce" onclick="showAnnouncements(false)">📣 Mededelingen</button>
+        </div>
+    <?php elseif ($status === 'finished'): ?>
+        <div class="fullscreen" id="finished-screen">
+            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="big-logo"><?php endif; ?>
+            <h1>🏁 Het spel is afgelopen</h1>
+            <?php if ($game['status_message']): ?>
+                <div class="status-text"><?= htmlspecialchars($game['status_message']) ?></div>
+            <?php endif; ?>
+            <div class="sub">Team <?= htmlspecialchars($team['team_name']) ?> eindigt op positie <strong>#<?= $rank ?></strong>
+                (<?= $level > $total_assignments ? 'alle opdrachten voltooid' : 'level ' . max(1, $level) . ' van ' . $total_assignments ?>)</div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                <a href="index.php?game=<?= urlencode((string)$game['join_code']) ?>" class="header-link">🏆 Eindstand</a>
+                <button class="btn-announce" onclick="showAnnouncements(false)">📣 Mededelingen</button>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div id="level-up-overlay">
         <h1 id="overlay-title" style="font-size: 4em; margin-bottom: 20px;">🎉 GEFELICITEERD! 🎉</h1>
@@ -300,9 +409,23 @@ if (isset($_GET['ajax'])) {
     </div>
 
     <script>
-        let startTime = <?= $startTime ?> * 1000;
-        let currentLevel = <?= (int)$team['current_level'] ?>;
-        let totalAssignments = <?= (int)$total_assignments ?>; // Initialiseer met PHP waarde
+        const teamId = <?= (int)$team['id'] ?>;
+        let currentLevel = <?= $level ?>;
+        let totalAssignments = <?= $total_assignments ?>;
+        let gameStatus = <?= json_encode($status) ?>;
+        let announcements = <?= json_encode($announcements) ?>;
+
+        // Tijden zijn relatief aan de server: alleen het verschil met nu telt, niet de klok van deze laptop
+        let hasEnd = <?= $hasEnd ? 'true' : 'false' ?>;
+        let deadline = Date.now() + <?= (int)($game['seconds_left'] ?? 0) ?> * 1000;
+        let startedAt = Date.now() - <?= (int)($game['seconds_elapsed'] ?? 0) ?> * 1000;
+
+        function syncClock(data) {
+            hasEnd = data.seconds_left !== null;
+            if (hasEnd) deadline = Date.now() + data.seconds_left * 1000;
+            if (data.seconds_elapsed !== null) startedAt = Date.now() - data.seconds_elapsed * 1000;
+            document.getElementById('timer-label').innerText = hasEnd ? 'Resterende tijd' : 'Tijd bezig';
+        }
 
         function triggerLevelUp(isFinal = false) {
             const overlay = document.getElementById('level-up-overlay');
@@ -322,8 +445,14 @@ if (isset($_GET['ajax'])) {
         }
 
         function updateTimer() {
-            const now = new Date().getTime();
-            const diff = Math.max(0, now - startTime);
+            let diff;
+            if (gameStatus === 'draft') {
+                diff = 0;
+            } else if (hasEnd) {
+                diff = Math.max(0, deadline - Date.now());
+            } else {
+                diff = Math.max(0, Date.now() - startedAt);
+            }
 
             const hours = Math.floor(diff / (1000 * 60 * 60));
             const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -334,7 +463,10 @@ if (isset($_GET['ajax'])) {
                 (minutes < 10 ? "0" + minutes : minutes) + ":" + 
                 (seconds < 10 ? "0" + seconds : seconds);
 
-            document.getElementById('live-timer').innerText = display;
+            const timer = document.getElementById('live-timer');
+            timer.innerText = display;
+            // Laatste 10 minuten rood
+            timer.classList.toggle('urgent', hasEnd && gameStatus !== 'draft' && diff <= 10 * 60 * 1000);
         }
 
         function renderMarkdown() {
@@ -368,10 +500,67 @@ if (isset($_GET['ajax'])) {
             }
         }
 
+        // --- Mededelingen: nieuwe (hoger id dan de laatst gesloten) verschijnen als pop-up ---
+        const annKey = 'announcements_closed_' + teamId;
+        let closedInMemory = 0;
+        function lastClosedId() {
+            try { return Math.max(closedInMemory, parseInt(localStorage.getItem(annKey) || '0', 10) || 0); }
+            catch (e) { return closedInMemory; }
+        }
+        function annModalOpen() {
+            return document.getElementById('announcement-modal').style.display === 'flex';
+        }
+        function showAnnouncements(onlyNew) {
+            const list = onlyNew ? announcements.filter(a => a.id > lastClosedId()) : announcements;
+            const box = document.getElementById('announcement-list');
+            document.getElementById('announcement-title').innerText = onlyNew ? '📣 Nieuwe mededeling' : '📣 Mededelingen';
+            box.innerHTML = '';
+            if (list.length === 0) {
+                box.innerHTML = '<p style="color: #888;">Er zijn nog geen mededelingen.</p>';
+            }
+            marked.setOptions({ breaks: true });
+            list.slice().reverse().forEach(a => {
+                const item = document.createElement('div');
+                item.className = 'announcement';
+                const time = document.createElement('div');
+                time.className = 'ann-time';
+                time.innerText = a.time;
+                const body = document.createElement('div');
+                body.innerHTML = marked.parse(a.message);
+                item.appendChild(time);
+                item.appendChild(body);
+                box.appendChild(item);
+            });
+            document.getElementById('announcement-modal').style.display = 'flex';
+        }
+        function closeAnnouncements() {
+            const maxId = announcements.reduce((max, a) => Math.max(max, a.id), 0);
+            closedInMemory = Math.max(closedInMemory, maxId);
+            try { localStorage.setItem(annKey, String(closedInMemory)); } catch (e) {}
+            document.getElementById('announcement-modal').style.display = 'none';
+            checkAnnouncements();
+        }
+        function checkAnnouncements() {
+            const fresh = announcements.filter(a => a.id > lastClosedId()).length;
+            const badge = document.getElementById('ann-count');
+            badge.style.display = fresh > 0 ? 'inline' : 'none';
+            badge.innerText = fresh;
+            if (fresh > 0 && !annModalOpen()) showAnnouncements(true);
+        }
+
+        function updatePauseBanner(data) {
+            document.getElementById('pause-banner').style.display = data.status === 'paused' ? '' : 'none';
+            document.getElementById('pause-text').innerText = data.status_message || 'Het spel is even gepauzeerd. Jullie kunnen gewoon doorwerken.';
+        }
+
         function fetchMessages() {
             fetch(window.location.href + '&ajax=1')
                 .then(response => response.json())
                 .then(data => {
+                    syncClock(data);
+                    announcements = data.announcements;
+                    checkAnnouncements();
+
                     const chatBox = document.getElementById('chat-box');
                     // Alleen scrollen en updaten als er daadwerkelijk nieuwe berichten zijn
                     if (chatBox && chatBox.innerHTML !== data.html) {
@@ -380,6 +569,7 @@ if (isset($_GET['ajax'])) {
                     }
                     if (data.level > currentLevel) {
                         currentLevel = data.level;
+                        gameStatus = data.status;
                         // Update UI onmiddellijk voor de reload
                         document.getElementById('display-level').innerText = data.level > data.total_assignments ? 'Finish' : data.level;
                         document.getElementById('display-rank').innerText = data.rank;
@@ -415,14 +605,30 @@ if (isset($_GET['ajax'])) {
                             downloadBox.style.display = data.has_file ? 'block' : 'none';
                         }
 
-                        startTime = data.start_time * 1000;
-                        
                         const isFinal = data.level > data.total_assignments;
                         triggerLevelUp(isFinal);
                         if (!isFinal) setTimeout(openAssignmentModal, 1500);
+                        // Na de kampioens-overlay toch herladen als het spel intussen afgelopen is
+                        if (isFinal && data.status === 'finished') setTimeout(() => location.reload(), 5000);
+                    } else if (data.level < currentLevel) {
+                        // Level terug door de docent: opdracht en gesprek van het vorige level laden
+                        location.reload();
+                    } else if (data.status !== gameStatus) {
+                        const live = ['running', 'paused'];
+                        if (live.includes(data.status) && live.includes(gameStatus)) {
+                            // Pauze aan of uit: alleen de banner, zodat getypte tekst niet verloren gaat
+                            gameStatus = data.status;
+                            updatePauseBanner(data);
+                        } else {
+                            // Start of einde: de pagina ziet er anders uit
+                            location.reload();
+                        }
+                    } else if (gameStatus === 'paused') {
+                        updatePauseBanner(data);
                     }
                     renderMarkdown();
-                });
+                })
+                .catch(err => console.error('Fout bij ophalen updates:', err));
         }
 
         setInterval(updateTimer, 1000);
@@ -430,16 +636,19 @@ if (isset($_GET['ajax'])) {
         updateTimer();
         renderMarkdown();
         scrollToBottom();
+        checkAnnouncements();
 
         // Open de opdracht popup alleen de eerste keer dat een level geladen wordt in deze browser
-        const modalKey = 'assignment_seen_lvl_' + currentLevel;
-        if (currentLevel > 0 && currentLevel <= totalAssignments && localStorage.getItem(modalKey) !== 'true') {
+        const modalKey = 'assignment_seen_' + teamId + '_lvl_' + currentLevel;
+        let seen = false;
+        try { seen = localStorage.getItem(modalKey) === 'true'; } catch (e) {}
+        if (<?= $chatOpen ? 'true' : 'false' ?> && !seen && !annModalOpen()) {
             openAssignmentModal();
-            localStorage.setItem(modalKey, 'true');
+            try { localStorage.setItem(modalKey, 'true'); } catch (e) {}
         }
 
-        // Als het team al op het eindlevel zit bij het laden van de pagina, toon de overlay direct
-        if (currentLevel > totalAssignments) {
+        // Als het team al op het eindlevel zit bij het laden van de pagina (en het spel nog loopt), toon de overlay direct
+        if (currentLevel > totalAssignments && (gameStatus === 'running' || gameStatus === 'paused')) {
             const rank = document.getElementById('display-rank').innerText;
             document.getElementById('overlay-title').innerText = "🏆 KAMPIOENEN! 🏆";
             document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
@@ -449,10 +658,10 @@ if (isset($_GET['ajax'])) {
             setTimeout(() => triggerLevelUp(true), 500);
         }
 
-        // Sluit modal als je buiten de box klikt
+        // Sluit modals als je buiten de box klikt
         window.onclick = function(event) {
-            const modal = document.getElementById('assignment-modal');
-            if (event.target == modal) closeAssignmentModal();
+            if (event.target == document.getElementById('assignment-modal')) closeAssignmentModal();
+            if (event.target == document.getElementById('announcement-modal')) closeAnnouncements();
         }
 
         function toggleChatSize() {
@@ -461,6 +670,17 @@ if (isset($_GET['ajax'])) {
             const btn = document.querySelector('.btn-zoom');
             btn.innerText = chat.classList.contains('large-mode') ? '🔍 Tekst verkleinen' : '🔍 Tekst vergroten';
             scrollToBottom();
+        }
+
+        function copyLink(btn) {
+            const input = btn.previousElementSibling;
+            input.select();
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(input.value).then(() => { btn.innerText = 'Gekopieerd'; });
+            } else {
+                document.execCommand('copy');
+                btn.innerText = 'Gekopieerd';
+            }
         }
     </script>
 </body>

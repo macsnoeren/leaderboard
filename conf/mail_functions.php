@@ -45,79 +45,6 @@ function createMailer(): PHPMailer {
 }
 
 /**
- * Verstuurt een e-mail wanneer een team een level omhoog gaat.
- */
-function sendLevelUpEmail($db, $to, $team_id, $team_name, $level) {
-    // Controleer of e-mail is ingeschakeld
-    if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false) {
-        return true;
-    }
-
-    try {
-        $mail = createMailer();
-        $mail->addAddress($to, $team_name);
-        $mail->Subject = "$team_name: Gefeliciteerd! Level $level is behaald!";
-
-        $token = bin2hex(random_bytes(32));
-        $expires_at = date('Y-m-d H:i:s', time() + 86400);
-
-        $stmt = $db->prepare("INSERT INTO download_tokens (team_id, level, token, expires_at) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$team_id, $level, $token, $expires_at]);
-
-        $download_link = BASE_URL . "/download.php?token=$token";
-
-        $mail->Body = "
-          <html>
-          <body style='font-family: Arial, sans-serif;'>
-          <h2>Gefeliciteerd $team_name!</h2>
-             <p>Jullie hebben level $level behaald!</p>
-             <p>Klik op de onderstaande link om de documenten te krijgen voor de volgende opdracht:</p>
-             <p><a href='$download_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Download Artifacts</a></p>
-             <p>Ga vooral zo door! Goed bezig!!</p>
-             </body>
-            </html>
-        ";
-
-        $mail->AltBody = "Gefeliciteerd $team_name! Je hebt level $level behaald. Download de volgende opdracht: $download_link";
-
-        $mail->send();
-        return true;
-    } catch (Exception $e) {
-        return isset($mail) ? $mail->ErrorInfo : $e->getMessage();
-    }
-}
-
-/**
- * Verstuurt een welkomstmail naar een nieuw aangemaakt team.
- */
-function sendWelcomeEmail($to, $team_name, $token) {
-    // Controleer of e-mail is ingeschakeld
-    if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false) {
-        return true;
-    }
-
-    try {
-        $mail = createMailer();
-        $mail->addAddress($to, $team_name);
-        $mail->Subject = "$team_name: Je bent aangemeld!";
-
-        $leaderboard_link = BASE_URL;
-        $dashboard_link = BASE_URL . "/team.php?token=$token";
-
-        $mail->Body = "
-          <html><body style='font-family: Arial, sans-serif;'><h2>Welkom $team_name!</h2><p>Je bent aangemeld als recherche team!</p><p>Jullie hebben nu toegang tot jullie eigen dashboard waar opdrachten gedownload kunnen worden zodra jullie het juiste level bereiken.</p><p><strong>Jullie persoonlijke dashboard:</strong> <a href='$dashboard_link' style='color: #667eea;'>$dashboard_link</a></p><p>Houd de stand in de gaten op het: <a href='$leaderboard_link' style='background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;'>Leaderboard</a></p><p>Heel veel succes!!</p></body></html>
-        ";
-
-        $mail->AltBody = "Welkom $team_name! Je bent aangemeld. Jouw dashboard: $dashboard_link";
-
-        $mail->send();
-        return true;
-    } catch (Exception $e) {
-        return isset($mail) ? $mail->ErrorInfo : $e->getMessage();
-    }
-}
-
-/**
  * Verstuurt een accountmail met één knop. $paragraphs is platte tekst en wordt ge-escaped.
  * Geeft true terug, of de foutmelding van PHPMailer.
  */
@@ -220,5 +147,24 @@ function sendEmailChangedNotice($to, $newEmail) {
             "Het e-mailadres van je Zebrawave docentenaccount is gewijzigd naar $newEmail. Mails over je account gaan voortaan naar dat adres.",
             'Heb je dit niet zelf gedaan? Neem dan direct contact op met de beheerder.',
         ]
+    );
+}
+
+/**
+ * Link naar het teamdashboard, voor een team dat er niet (meer) bij kan of zich net heeft aangemeld.
+ * De teamnaam wordt in sendAccountEmail ge-escaped; teams vullen hem bij zelf aanmelden zelf in.
+ */
+function sendTeamLinkEmail($to, $teamName, $gameName, $link) {
+    return sendAccountEmail(
+        $to,
+        "$teamName: jullie teamdashboard",
+        "Welkom, team $teamName!",
+        [
+            "Jullie doen mee aan $gameName. Via de knop komen jullie op het teamdashboard met de opdrachten en de chat met de docenten.",
+            'Bewaar deze mail: met deze link komen jullie altijd weer terug op het dashboard. Deel hem alleen binnen je team.',
+            'Heel veel succes!',
+        ],
+        'Naar het teamdashboard',
+        $link
     );
 }

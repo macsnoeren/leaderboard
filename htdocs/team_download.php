@@ -28,9 +28,9 @@ if ($count >= $max_downloads) {
     die("Maximale aantal downloads (10) voor dit level bereikt.");
 }
 
-// Haal assignment op
-$stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
-$stmt->execute([$level]);
+// Haal assignment van het spel van dit team op
+$stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? AND assignment_number = ?");
+$stmt->execute([$team['game_id'], $level]);
 $assignment = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$assignment) {

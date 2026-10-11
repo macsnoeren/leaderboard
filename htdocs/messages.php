@@ -4,95 +4,89 @@ require_once '../conf/config.php';
 require_once '../conf/database.php';
 require_once '../conf/mail_functions.php';
 require_once '../conf/auth.php';
+require_once '../conf/game.php';
 
 $db = getDB();
-requireTeacher($db);
+$user = requireTeacher($db);
+$userId = (int)$user['id'];
+$game = requireGame($db, $user);
+$gameId = (int)$game['id'];
 $selected_team_id = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
 
-// Handle antwoord van docent
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reply') {
-    $team_id = (int)$_POST['team_id'];
-    $lvl = (int)$_POST['level'];
-    $msg = trim($_POST['message'] ?? '');
-    
-    if (!empty($msg)) {
-        $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'teacher', ?)");
-        $stmt->execute([$team_id, $lvl, $msg]);
-        
-        // Verwijder AI suggesties zodra de docent zelf antwoordt
-        $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'")
-           ->execute([$team_id, $lvl]);
-
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'MSG_REPLY', ?)")->execute([$_SESSION['teacher_id'], "Replied to team ID $team_id on level $lvl"]);
-        header("Location: messages.php?team_id=$team_id");
-        exit;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    $back = 'messages.php' . ($selected_team_id ? "?team_id=$selected_team_id" : '');
+    if (!verifyCsrf()) {
+        flash('error', CSRF_ERROR);
+        redirect($back);
     }
-}
 
-// Handle verwijderen van suggestie
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reject_suggestion') {
-    $msg_id = (int)$_POST['message_id'];
-    $stmt = $db->prepare("DELETE FROM team_messages WHERE id = ? AND sender = 'suggestion'");
-    $stmt->execute([$msg_id]);
-    $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'MSG_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Rejected and deleted AI suggestion ID $msg_id"]);
-    header("Location: messages.php" . ($selected_team_id ? "?team_id=$selected_team_id" : ""));
-    exit;
-}
-
-// Handle level up vanuit chat
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'level_up') {
-    $team_id = (int)$_POST['team_id'];
-    
-    $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
-    $stmt->execute([$team_id]);
-    $team = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($team) {
-        // Archiveer de chatgeschiedenis voor de huidige opdracht
-        $stmtMsgs = $db->prepare("SELECT sender, message FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
-        $stmtMsgs->execute([$team_id, $team['current_level']]);
-        $history = [];
-        foreach ($stmtMsgs->fetchAll(PDO::FETCH_ASSOC) as $m) {
-            $history[] = ($m['sender'] === 'team' ? 'Team: ' : 'Docent: ') . $m['message'];
+    // Handle verwijderen van suggestie (alleen van een team in het actieve spel)
+    if ($action === 'reject_suggestion') {
+        $msg_id = (int)$_POST['message_id'];
+        $stmt = $db->prepare("DELETE FROM team_messages WHERE id = ? AND sender = 'suggestion' AND team_id IN (SELECT id FROM teams WHERE game_id = ?)");
+        $stmt->execute([$msg_id, $gameId]);
+        if ($stmt->rowCount() > 0) {
+            logAudit($db, $userId, 'MSG_DELETE', "Rejected and deleted AI suggestion ID $msg_id");
         }
-        $db->prepare("INSERT INTO completed_assignments (team_id, assignment_number, chat_history) VALUES (?, ?, ?)")
-           ->execute([$team_id, $team['current_level'], implode("\n", $history)]);
-
-        // Verwijder de chatberichten van het voltooide level (inclusief AI suggesties)
-        $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ?")
-           ->execute([$team_id, $team['current_level']]);
-
-        // Voer de level up uit
-        $new_level = $team['current_level'] + 1;
-        $db->prepare("UPDATE teams SET current_level = ?, level_updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-           ->execute([$new_level, $team_id]);
-        
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_UPDATE', ?)")
-           ->execute([$_SESSION['teacher_id'], "Team '{$team['team_name']}' level up via chat naar $new_level"]);
-        
-        @sendLevelUpEmail($db, $team['email'], $team_id, $team['team_name'], $new_level);
-        header("Location: messages.php?team_id=$team_id");
-        exit;
+        redirect($back);
     }
+
+    $team = findTeamInGame($db, (int)($_POST['team_id'] ?? 0), $gameId);
+    if (!$team) {
+        flash('error', 'Dit team hoort niet bij het actieve spel.');
+        redirect('messages.php');
+    }
+    $team_id = (int)$team['id'];
+
+    // Handle antwoord van docent: altijd op het huidige level van het team
+    if ($action === 'reply') {
+        $lvl = (int)$team['current_level'];
+        $msg = trim($_POST['message'] ?? '');
+        if ($msg !== '') {
+            $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'teacher', ?)");
+            $stmt->execute([$team_id, $lvl, $msg]);
+
+            // Verwijder AI suggesties zodra de docent zelf antwoordt
+            $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'")
+               ->execute([$team_id, $lvl]);
+
+            logAudit($db, $userId, 'MSG_REPLY', "Replied to team ID $team_id on level $lvl");
+        }
+    } elseif ($action === 'level_up') {
+        if (!levelUp($db, $team_id, $userId)) {
+            flash('error', "Team '{$team['team_name']}' kan niet verder omhoog.");
+        }
+    } elseif ($action === 'level_down') {
+        if (!levelDown($db, $team_id, $userId)) {
+            flash('error', "Team '{$team['team_name']}' staat al op het laagste level.");
+        }
+    }
+    redirect("messages.php?team_id=$team_id");
 }
 
-// Haal lijst met actieve teams op met aantal ongelezen berichten
-$teams_with_msgs = $db->query("
+// Teams van dit spel met berichten; ongelezen telt alleen het huidige level
+$stmt = $db->prepare("
     SELECT t.id, t.team_name, t.current_level, 
-    (SELECT COUNT(*) FROM team_messages WHERE team_id = t.id AND sender = 'team' AND is_read = 0) as unread_count
+    (SELECT COUNT(*) FROM team_messages WHERE team_id = t.id AND sender = 'team' AND is_read = 0 AND assignment_number = t.current_level) as unread_count
     FROM teams t 
-    WHERE t.id IN (SELECT team_id FROM team_messages)
+    WHERE t.game_id = ? AND t.id IN (SELECT team_id FROM team_messages)
     ORDER BY (SELECT MAX(created_at) FROM team_messages WHERE team_id = t.id) DESC
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$stmt->execute([$gameId]);
+$teams_with_msgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $chat_messages = [];
 $selected_team = null;
 $assignment = null;
+$total_assignments = totalAssignments($db, $gameId);
+$logo = gameLogoUrl($game);
 
 if ($selected_team_id) {
-    $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
-    $stmt->execute([$selected_team_id]);
-    $selected_team = $stmt->fetch(PDO::FETCH_ASSOC);
+    $selected_team = findTeamInGame($db, $selected_team_id, $gameId);
+    if (!$selected_team) {
+        $selected_team_id = null;
+    }
     
     if ($selected_team) {
         // Markeer berichten als gelezen
@@ -100,8 +94,8 @@ if ($selected_team_id) {
            ->execute([$selected_team_id, $selected_team['current_level']]);
 
         // Haal assignment info op
-        $stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
-        $stmt->execute([$selected_team['current_level']]);
+        $stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? AND assignment_number = ?");
+        $stmt->execute([$gameId, $selected_team['current_level']]);
         $assignment = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? ORDER BY created_at ASC");
@@ -183,7 +177,11 @@ $extraCSS = '
     .team-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; text-decoration: none; color: #333; display: block; }
     .team-item:hover, .team-item.active { background: #f0f4ff; }
     .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .messages-box { flex: 1; height: 500px; overflow-y: auto; margin-bottom: 20px; padding: 10px; display: flex; flex-direction: column; min-height: 0; }
+    .messages-box { flex: 1; height: 500px; overflow-y: auto; margin-bottom: 20px; padding: 10px; display: flex; flex-direction: column; min-height: 0; position: relative; z-index: 1; }
+    /* Logo van het spel als vast watermerk achter de berichten */
+    .chat-watermark { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .chat-watermark::before { content: ""; position: absolute; inset: 10%; background: var(--logo) center / contain no-repeat; opacity: 0.08; pointer-events: none; }
+    .btn[disabled] { opacity: 0.35; cursor: not-allowed; }
     .message { margin-bottom: 15px; padding: 12px; border-radius: 10px; max-width: 75%; font-size: 0.95em; line-height: 1.4; }
     .message.team { background: #e3f2fd; align-self: flex-start; }
     .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
@@ -232,11 +230,20 @@ include 'admin_header.php';
         <div class="chat-area">
             <?php if ($selected_team): ?>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h1 style="margin-bottom: 0;">Chat met <?= htmlspecialchars($selected_team['team_name']) ?> (Level <?= $selected_team['current_level'] ?>)</h1>
+                    <h1 style="margin-bottom: 0;">Chat met <?= htmlspecialchars($selected_team['team_name']) ?> (Level <?= levelLabel((int)$selected_team['current_level'], $total_assignments) ?>)</h1>
                     <div style="display: flex; gap: 10px;">
                         <?php if ($assignment): ?>
                             <button class="btn btn-outline" onclick="openAssignmentModal()">📄 Opdracht</button>
+                        <?php endif; ?>
+                        <form method="POST" onsubmit="return confirm('Team een level terugzetten? Het gesprek van het vorige level komt terug en de archiefregel van dat level verdwijnt.');" style="margin:0;">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="action" value="level_down">
+                            <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
+                            <button type="submit" class="btn btn-outline" style="margin-top: 0; padding: 8px 16px;" title="Level terug" <?= (int)$selected_team['current_level'] <= 1 ? 'disabled' : '' ?>>⬇️</button>
+                        </form>
+                        <?php if ($assignment): ?>
                             <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');" style="margin:0;">
+                                <?= csrfField() ?>
                                 <input type="hidden" name="action" value="level_up">
                                 <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
                                 <button type="submit" class="btn btn-success" style="margin-top: 0; padding: 8px 16px;">🚀 Level Up!</button>
@@ -279,7 +286,9 @@ include 'admin_header.php';
                     </div>
                 <?php endif; ?>
 
+                <?= renderFlash() ?>
                 <div class="chat-window">
+                    <div class="chat-watermark"<?= $logo ? ' style="--logo: url(\'' . htmlspecialchars($logo) . '\')"' : '' ?>>
                     <div class="messages-box" id="chat-box">
                         <?php foreach ($chat_messages as $m): ?>
                             <div class="message <?= $m['sender'] ?>">
@@ -294,15 +303,17 @@ include 'admin_header.php';
                             </div>
                         <?php endforeach; ?>
                     </div>
+                    </div>
                     <form method="POST">
+                        <?= csrfField() ?>
                         <input type="hidden" name="action" value="reply">
                         <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
-                        <input type="hidden" name="level" value="<?= $selected_team['current_level'] ?>">
                         <textarea id="teacher-reply-box" name="message" rows="3" placeholder="Type je reactie..." required></textarea>
                         <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Verstuur Antwoord</button>
                     </form>
                 </div>
             <?php else: ?>
+                <?= renderFlash() ?>
                 <div style="flex: 1; display: flex; align-items: center; justify-content: center; color: #888;">
                     <h2>Selecteer een team om de chat te openen</h2>
                 </div>
@@ -367,6 +378,7 @@ $extraJS = "
             const form = document.createElement('form');
             form.method = 'POST';
             form.innerHTML = `
+                <input type=\"hidden\" name=\"csrf_token\" value=\"" . csrfToken() . "\">
                 <input type=\"hidden\" name=\"action\" value=\"reject_suggestion\">
                 <input type=\"hidden\" name=\"message_id\" value=\"\${id}\">
             `;

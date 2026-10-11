@@ -1,5 +1,6 @@
 bin/config.py
 htdocs/artifacts
+htdocs/uploads
 database
 
 # Created by https://www.toptal.com/developers/gitignore/api/emacs

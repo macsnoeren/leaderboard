@@ -6,9 +6,22 @@ if (!isset($_SESSION['teacher_logged_in'])) {
     exit;
 }
 
+require_once __DIR__ . '/../conf/game.php';
+
 $db = getDB();
 
-$unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
+// Spelkiezer: de pagina heeft $game al als hij requireGame() aanroept; anders het spel uit de sessie
+$headerUser = findTeacher($db, (int)$_SESSION['teacher_id']);
+$headerGames = $headerUser ? accessibleGames($db, $headerUser) : [];
+$headerGame = $game ?? null;
+if (!$headerGame) {
+    foreach ($headerGames as $g) {
+        if ((int)$g['id'] === (int)($_SESSION['game_id'] ?? 0)) {
+            $headerGame = $g;
+        }
+    }
+}
+$unread_total = $headerGame ? countUnread($db, (int)$headerGame['id']) : 0;
 $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
@@ -31,7 +44,11 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             color: white; text-align: center; font-weight: bold; font-size: 1.2em; 
             display: flex; flex-direction: column; gap: 5px;
         }
-        .sidebar-nav { flex: 1; padding: 20px 0; display: flex; flex-direction: column; }
+        .sidebar-nav { flex: 1; padding: 20px 0; display: flex; flex-direction: column; overflow-y: auto; }
+        .game-picker { padding: 12px 20px; border-bottom: 1px solid #eee; font-size: 0.85em; }
+        .game-picker label { display: block; color: #999; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+        .game-picker select { padding: 8px; font-size: 0.95em; }
+        .game-picker .game-name { font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
         .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
         .nav-item:hover { background: #f0f2f5; color: #667eea; }
         .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
@@ -81,8 +98,31 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                 👤 <?= htmlspecialchars($_SESSION['teacher_display_name'] ?? $_SESSION['teacher_username'] ?? 'Docent') ?>
             </div>
         </div>
+        <div class="game-picker">
+            <label>Spel</label>
+            <?php if (count($headerGames) > 1): ?>
+                <form method="POST" action="choose_game.php" style="margin: 0;">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="return" value="<?= htmlspecialchars($currentPage) ?>">
+                    <select name="game_id" onchange="this.form.submit()" aria-label="Kies een spel">
+                        <?php if (!$headerGame): ?><option value="">Kies een spel…</option><?php endif; ?>
+                        <?php foreach ($headerGames as $g): ?>
+                            <option value="<?= (int)$g['id'] ?>" <?= $headerGame && (int)$headerGame['id'] === (int)$g['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($g['name']) ?> (<?= htmlspecialchars(gameStatusLabel($g['effective_status'])) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <noscript><button type="submit" class="btn btn-outline" style="margin-top: 5px; padding: 4px 10px;">Wissel</button></noscript>
+                </form>
+            <?php elseif ($headerGame): ?>
+                <div class="game-name"><span><?= htmlspecialchars($headerGame['name']) ?></span><?= gameStatusBadge($headerGame['effective_status']) ?></div>
+            <?php else: ?>
+                <span style="color: #999;">Nog geen spel</span>
+            <?php endif; ?>
+        </div>
         <div class="sidebar-nav">
             <a href="teacher.php" class="nav-item <?= $currentPage == 'teacher.php' ? 'active' : '' ?>">📊 Dashboard</a>
+            <a href="game.php" class="nav-item <?= in_array($currentPage, ['game.php', 'choose_game.php']) ? 'active' : '' ?>">⚙️ Spel</a>
             <a href="assignments.php" class="nav-item <?= $currentPage == 'assignments.php' ? 'active' : '' ?>">📘 Assignments</a>
             <a href="messages.php" class="nav-item <?= $currentPage == 'messages.php' ? 'active' : '' ?>">
                 ✉️ Messages
@@ -92,7 +132,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                     <?php endif; ?>
                 </span>
             </a>
+            <a href="announcements.php" class="nav-item <?= $currentPage == 'announcements.php' ? 'active' : '' ?>">📣 Mededelingen</a>
             <?php if (($_SESSION['teacher_role'] ?? 'user') === 'admin'): ?>
+            <a href="games.php" class="nav-item <?= $currentPage == 'games.php' ? 'active' : '' ?>">🎮 Spellen</a>
             <a href="users.php" class="nav-item <?= in_array($currentPage, ['users.php', 'user_edit.php']) ? 'active' : '' ?>">👥 Users</a>
             <a href="api_keys.php" class="nav-item <?= $currentPage == 'api_keys.php' ? 'active' : '' ?>">🔑 API Keys</a>
             <a href="archive.php" class="nav-item <?= $currentPage == 'archive.php' ? 'active' : '' ?>">📦 Archief</a>
@@ -128,6 +170,6 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         <?php if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false): ?>
             <div style="background: #fff3e0; color: #e65100; padding: 10px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #ff9800; font-size: 0.9em; display: flex; align-items: center; gap: 10px;">
                 <span>⚠️</span>
-                <span><strong>Test Modus:</strong> E-mail verzending staat uitgeschakeld in de configuratie. Er worden geen uitnodigingen of level-up berichten verstuurd.</span>
+                <span><strong>Test Modus:</strong> E-mail verzending staat uitgeschakeld in de configuratie. Er worden geen uitnodigingen of teamlinks verstuurd.</span>
             </div>
         <?php endif; ?>

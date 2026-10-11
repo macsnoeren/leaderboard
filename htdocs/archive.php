@@ -3,18 +3,22 @@ session_start();
 require_once '../conf/config.php';
 require_once '../conf/database.php';
 require_once '../conf/auth.php';
+require_once '../conf/game.php';
 
 $db = getDB();
 // Autorisatie check: Alleen admin mag hier komen
-requireAdmin($db);
+$user = requireAdmin($db);
+$game = requireGame($db, $user);
 
-// Haal gearchiveerde opdrachten op
-$stmt = $db->query("
-    SELECT ca.*, t.team_name 
+// Haal gearchiveerde opdrachten van het actieve spel op; de teamnaam staat in het archief zelf
+$stmt = $db->prepare("
+    SELECT ca.*, COALESCE(ca.team_name, t.team_name) AS team_name
     FROM completed_assignments ca 
     LEFT JOIN teams t ON ca.team_id = t.id 
+    WHERE ca.game_id = ?
     ORDER BY ca.created_at DESC
 ");
+$stmt->execute([(int)$game['id']]);
 $archives = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $pageTitle = 'Archief';
@@ -37,7 +41,7 @@ $extraCSS = '
 
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">📦 Archief Voltooide Opdrachten</h1>
+    <h1 style="margin-bottom: 30px;">📦 Archief Voltooide Opdrachten <span style="font-size: 0.6em; color: #888; font-weight: normal;"><?= htmlspecialchars($game['name']) ?></span></h1>
 
     <div class="card">
         <p style="margin-bottom: 20px; color: #666;">Hier staan alle chats van teams die een level succesvol hebben afgerond.</p>
@@ -54,7 +58,7 @@ include 'admin_header.php';
             <tbody>
                 <?php foreach ($archives as $a): ?>
                     <tr>
-                        <td style="color: #888; font-size: 0.9em;"><?= $a['created_at'] ?></td>
+                        <td style="color: #888; font-size: 0.9em;"><?= formatDateTime($a['created_at']) ?></td>
                         <td><strong><?= htmlspecialchars($a['team_name'] ?? 'Verwijderd Team') ?></strong></td>
                         <td style="text-align: center;"><span class="badge" style="background:#667eea;">Level <?= $a['assignment_number'] ?></span></td>
                         <td><div class="chat-preview"><?= htmlspecialchars($a['chat_history']) ?></div></td>

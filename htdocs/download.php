@@ -23,9 +23,9 @@ $token = $_GET['token'];
 
 $db = getDB();
 
-// Look up token
+// Look up token (oude links uit de level-up-mail; nieuwe worden niet meer gemaakt)
 $stmt = $db->prepare("
-    SELECT dt.*, t.email, t.team_name
+    SELECT dt.*, t.email, t.team_name, t.game_id, (dt.expires_at > datetime('now')) AS is_valid
     FROM download_tokens dt
     JOIN teams t ON t.id = dt.team_id
     WHERE dt.token = ?
@@ -37,8 +37,8 @@ if (!$entry) {
     die('Invalid or expired token');
 }
 
-// Check expiry
-if (strtotime($entry['expires_at']) < time()) {
+// Check expiry (in SQL: de tijden zijn UTC)
+if (!(int)$entry['is_valid']) {
     die('This link has expired');
 }
 
@@ -52,8 +52,8 @@ if (!$team) {
 }
 
 // Proceed with normal artifact download
-$stmt = $db->prepare("SELECT * FROM assignments WHERE assignment_number = ?");
-$stmt->execute([$entry['level']]);
+$stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? AND assignment_number = ?");
+$stmt->execute([$entry['game_id'], $entry['level']]);
 $assignment = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$assignment) {
@@ -64,7 +64,7 @@ $level = $entry["level"];
 
 // Check if actual file exists
 $artifact_path = __DIR__ . '/' . $assignment['artifact_file'];
-if (file_exists($artifact_path)) {
+if (!empty($assignment['artifact_file']) && is_file($artifact_path)) {
     // Download the actual file
     $filename = basename($artifact_path);
     

@@ -17,17 +17,13 @@ require_once '../conf/config.php';
 require_once '../conf/database.php'; // Correct include for database
 require_once '../conf/mail_functions.php'; // New include for mail functions
 require_once '../conf/auth.php';
+require_once '../conf/game.php';
 
 $db = getDB();
-requireTeacher($db);
+$user = requireTeacher($db);
+$userId = (int)$user['id'];
 
-// AJAX endpoint voor live unread count updates
-if (isset($_GET['ajax_unread'])) {
-    echo $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
-    exit;
-}
-
-// AJAX endpoint voor AI Agent status heartbeat check
+// AJAX endpoint voor AI Agent status heartbeat check (geldt voor alle spellen)
 if (isset($_GET['ajax_ai_status'])) {
     if (!defined('POLL_INTERVAL')) define('POLL_INTERVAL', 30);
     // Gebruik Unix timestamp vergelijking en verruim de marge naar 120 seconden (2 min)
@@ -38,116 +34,121 @@ if (isset($_GET['ajax_ai_status'])) {
     exit;
 }
 
-// Handle level changes
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    if (($_POST['action'] === 'level_up' || $_POST['action'] === 'resend_level_mail') && isset($_POST['team_id'])) {
-        $team_id = (int)$_POST['team_id'];
-        
-        // Get team info
-        $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
-        $stmt->execute([$team_id]);
-        $team = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($team) {
-            $new_level = $team['current_level'] + ($_POST['action'] === 'level_up' ? 1 : 0);
+$game = requireGame($db, $user);
+$gameId = (int)$game['id'];
 
-            // Archiveer de chatgeschiedenis als het een echte level up is
-            if ($_POST['action'] === 'level_up') {
-                $stmtMsgs = $db->prepare("SELECT sender, message FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
-                $stmtMsgs->execute([$team_id, $team['current_level']]);
-                $history = [];
-                foreach ($stmtMsgs->fetchAll(PDO::FETCH_ASSOC) as $m) {
-                    $history[] = ($m['sender'] === 'team' ? 'Team: ' : 'Docent: ') . $m['message'];
-                }
-                $db->prepare("INSERT INTO completed_assignments (team_id, assignment_number, chat_history) VALUES (?, ?, ?)")
-                   ->execute([$team_id, $team['current_level'], implode("\n", $history)]);
-
-                // Verwijder de chatberichten van het voltooide level (inclusief AI suggesties)
-                $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ?")
-                   ->execute([$team_id, $team['current_level']]);
-            }
-            
-            // Update level
-            $sql = "UPDATE teams SET current_level = ?" . ($_POST['action'] === 'level_up' ? ", level_updated_at = CURRENT_TIMESTAMP" : "") . " WHERE id = ?";
-            $stmt = $db->prepare($sql);
-            $stmt->execute([$new_level, $team_id]);
-
-            $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_UPDATE', ?)")->execute([$_SESSION['teacher_id'], "Team '{$team['team_name']}' action: {$_POST['action']} (New level: $new_level)"]);
-            
-            // Send email with artifacts
-            @sendLevelUpEmail($db, $team['email'], $team_id, $team['team_name'], $new_level);
-            
-            $_SESSION['success'] = "Team leveled up and email sent!";
-        }
-/*	
-    } elseif ($_POST['action'] === 'resend_level_mail' && isset($_POST['team_id'])) {
-        $team_id = (int)$_POST['team_id'];
-        
-        // Get team info
-        $stmt = $db->prepare("SELECT * FROM teams WHERE id = ?");
-        $stmt->execute([$team_id]);
-        $team = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($team) {                        
-            // Send email with artifacts
-            sendLevelUpEmail($team['email'], $team_id, $team['team_name'], $team['current_level']);
-            
-            $_SESSION['success'] = "Resend level information email!";
-        }
-*/
-    } elseif ($_POST['action'] === 'add_team') {
-        $team_name = trim($_POST['team_name']);
-        $email = trim($_POST['email']);
-        $access_token = bin2hex(random_bytes(32));
-
-        // Controleer op unieke teamnaam
-        $stmt = $db->prepare("SELECT COUNT(*) FROM teams WHERE team_name = ?");
-        $stmt->execute([$team_name]);
-        if ($stmt->fetchColumn() > 0) {
-            $_SESSION['error'] = "Fout: Een team met deze naam bestaat al. Kies een andere naam.";
-            header('Location: teacher.php');
-            exit;
-        }
-        
-        $stmt = $db->prepare("INSERT INTO teams (team_name, email, access_token, level_updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)");
-        $stmt->execute([$team_name, $email, $access_token]);
-        
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_ADD', ?)")->execute([$_SESSION['teacher_id'], "Added team: $team_name"]);
-        $_SESSION['success'] = "Team added successfully!";
-	sendWelcomeEmail($email, $team_name, $access_token);
-	
-    } elseif ($_POST['action'] === 'delete_team' && isset($_POST['team_id'])) {
-        $team_id = (int)$_POST['team_id'];
-        $stmt = $db->prepare("DELETE FROM teams WHERE id = ?");
-        $stmt->execute([$team_id]);
-
-	$stmt = $db->prepare("DELETE FROM download_tokens WHERE team_id = ?");
-	$stmt->execute([$team_id]);
-
-        $db->prepare("INSERT INTO audit_logs (user_id, event_type, description) VALUES (?, 'TEAM_DELETE', ?)")->execute([$_SESSION['teacher_id'], "Deleted team ID: $team_id"]);
-        $_SESSION['success'] = "Team deleted successfully!";
-    }
-    
-    header('Location: teacher.php');
+// AJAX endpoint voor live unread count updates (alleen het huidige level van elk team)
+if (isset($_GET['ajax_unread'])) {
+    echo countUnread($db, $gameId);
     exit;
 }
 
-$teams = $db->query("SELECT * FROM teams ORDER BY current_level DESC, level_updated_at ASC, team_name ASC")->fetchAll(PDO::FETCH_ASSOC);
-$total_assignments = $db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
-$unread_total = $db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'team' AND is_read = 0")->fetchColumn();
+// Handle level changes
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    if (!verifyCsrf()) {
+        flash('error', CSRF_ERROR);
+        redirect('teacher.php');
+    }
+
+    if ($action === 'add_team') {
+        $emailInput = trim($_POST['email'] ?? '');
+        $email = normalizeEmail($emailInput);
+        if ($emailInput !== '' && $email === null) {
+            flash('error', 'Vul een geldig e-mailadres in, of laat het veld leeg.');
+            redirect('teacher.php');
+        }
+        $team = createTeam($db, $game, $_POST['team_name'] ?? '', $email, $userId);
+        if (is_string($team)) {
+            flash('error', $team);
+            redirect('teacher.php');
+        }
+        if ($email !== null && !empty($_POST['send_link'])) {
+            $result = sendTeamLinkEmail($email, $team['team_name'], $game['name'], teamDashboardUrl($team['access_token']));
+            if ($result !== true) {
+                flash('error', "Team '{$team['team_name']}' is toegevoegd, maar de mail kon niet worden verstuurd ($result). Kopieer de teamlink en geef hem zelf door.");
+                redirect('teacher.php');
+            }
+            flash('success', "Team '{$team['team_name']}' is toegevoegd" . (isEmailEnabled() ? " en de teamlink is gemaild naar $email." : '. Testmodus: er is geen mail verstuurd.'));
+        } else {
+            flash('success', "Team '{$team['team_name']}' is toegevoegd.");
+        }
+        redirect('teacher.php');
+    }
+
+    // Alle andere acties werken op een team van het actieve spel
+    $team = findTeamInGame($db, (int)($_POST['team_id'] ?? 0), $gameId);
+    if (!$team) {
+        flash('error', 'Dit team hoort niet bij het actieve spel.');
+        redirect('teacher.php');
+    }
+
+    if ($action === 'level_up') {
+        if (levelUp($db, (int)$team['id'], $userId)) {
+            flash('success', "Team '{$team['team_name']}' is een level omhoog gegaan.");
+        } else {
+            flash('error', "Team '{$team['team_name']}' kan niet verder omhoog.");
+        }
+    } elseif ($action === 'level_down') {
+        if (levelDown($db, (int)$team['id'], $userId)) {
+            flash('success', "Team '{$team['team_name']}' is een level teruggezet.");
+        } else {
+            flash('error', "Team '{$team['team_name']}' staat al op het laagste level.");
+        }
+    } elseif ($action === 'send_link') {
+        // Teamlink opnieuw mailen, voor een team dat niet meer bij het dashboard kan
+        if (!$team['email']) {
+            flash('error', "Team '{$team['team_name']}' heeft geen e-mailadres.");
+        } else {
+            $result = sendTeamLinkEmail($team['email'], $team['team_name'], $game['name'], teamDashboardUrl($team['access_token']));
+            logAudit($db, $userId, 'TEAM_SEND_LINK', "Teamlink gemaild naar team '{$team['team_name']}' (ID {$team['id']})" . ($result === true ? '' : ' - mail niet verstuurd'));
+            if ($result !== true) {
+                flash('error', "De mail kon niet worden verstuurd ($result). Kopieer de teamlink en geef hem zelf door.");
+            } else {
+                flash('success', isEmailEnabled() ? "Teamlink gemaild naar {$team['email']}." : 'Testmodus: er is geen mail verstuurd.');
+            }
+        }
+    } elseif ($action === 'delete_team') {
+        deleteTeam($db, (int)$team['id']);
+        logAudit($db, $userId, 'TEAM_DELETE', "Team '{$team['team_name']}' (ID {$team['id']}) verwijderd uit spel #$gameId");
+        flash('success', "Team '{$team['team_name']}' is verwijderd.");
+    }
+
+    redirect('teacher.php');
+}
+
+$teams = rankedTeams($db, $gameId);
+$total_assignments = totalAssignments($db, $gameId);
+$unread_total = countUnread($db, $gameId);
+$canAddTeam = initialLevel($game) !== null;
+
+// Knop in een eigen POST-formulier met CSRF-token
+function teamButton(string $action, int $teamId, string $label, string $class, string $title, bool $disabled = false, ?string $confirm = null): string {
+    $onsubmit = $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '';
+    return '<form method="POST" style="display: inline;"' . $onsubmit . '>' . csrfField()
+        . '<input type="hidden" name="action" value="' . $action . '">'
+        . '<input type="hidden" name="team_id" value="' . $teamId . '">'
+        . '<button type="submit" class="btn ' . $class . '" style="padding: 6px 12px; border-radius: 6px;" title="' . htmlspecialchars($title) . '"' . ($disabled ? ' disabled' : '') . '>' . $label . '</button>'
+        . '</form>';
+}
 
 $pageTitle = 'Dashboard';
+$extraCSS = '<style>
+    .disabled-btn { opacity: 0.4; pointer-events: none; }
+    .btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+</style>';
 include 'admin_header.php';
 ?>
         <header class="content-header">
-            <h1>Dashboard</h1>
-            <a target="_leaderboard" href="index.php" class="btn btn-outline">View Public Leaderboard</a>
+            <h1>Dashboard <span style="font-size: 0.6em; color: #888; font-weight: normal;"><?= htmlspecialchars($game['name']) ?></span> <?= gameStatusBadge($game['effective_status']) ?></h1>
+            <a target="_leaderboard" href="index.php?game=<?= urlencode((string)$game['join_code']) ?>" class="btn btn-outline">View Public Leaderboard</a>
         </header>
         
-        <?php if (isset($_SESSION['success'])): ?>
-            <div class="success">
-                <?= $_SESSION['success'] ?>
-                <?php unset($_SESSION['success']); ?>
+        <?= renderFlash() ?>
+
+        <?php if ($game['effective_status'] === 'draft'): ?>
+            <div class="card" style="background: #fff8e1; border-left: 5px solid #ffb300; padding: 15px 20px;">
+                Dit spel is nog niet gestart: teams zien een wachtscherm. Start het spel via <a href="game.php" style="color: #667eea;">⚙️ Spel</a>.
             </div>
         <?php endif; ?>
 
@@ -181,65 +182,58 @@ include 'admin_header.php';
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($teams as $index => $team): ?>
+                            <?php foreach ($teams as $index => $team):
+                                $level = (int)$team['current_level'];
+                                $finished = $level > $total_assignments;
+                                $progress = progressPercent($level, $total_assignments);
+                            ?>
                                 <tr>
                                     <td style="font-weight: bold; color: #667eea; vertical-align: middle;">
                                         <?= $index + 1 ?>
                                     </td>
                                     <td>
                                         <div class="team-main-info">
-                                            <a href="team.php?token=<?= $team['access_token'] ?>" target="_blank" class="team-name-link">
+                                            <a href="team.php?token=<?= htmlspecialchars($team['access_token']) ?>" target="_blank" class="team-name-link">
                                                 <?= htmlspecialchars($team['team_name']) ?>
                                             </a>
                                             <div style="display: flex; gap: 10px; align-items: center; margin-top: 4px;">
-                                                <span class="team-email" style="font-size: 0.85em; color: #666;">📧 <?= htmlspecialchars($team['email']) ?></span>
-                                                <span style="font-size: 0.75em; color: #aaa;">🕒 <?= date('H:i', strtotime($team['level_updated_at'])) ?></span>
+                                                <?php if ($team['email']): ?>
+                                                    <span class="team-email" style="font-size: 0.85em; color: #666;">📧 <?= htmlspecialchars($team['email']) ?></span>
+                                                <?php endif; ?>
+                                                <span style="font-size: 0.75em; color: #aaa;">🕒 <?= htmlspecialchars(substr(formatDateTime($team['level_updated_at']), -5)) ?></span>
                                             </div>
                                         </div>
                                     </td>
                                     <td style="text-align: center; vertical-align: middle;">
                                         <span style="background: #f0f4ff; color: #667eea; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 1.1em;">
-                                            <?= $team['current_level'] > $total_assignments ? 'Finish' : $team['current_level'] ?>
+                                            <?= levelLabel($level, $total_assignments) ?>
                                         </span>
                                     </td>
                                     <td style="vertical-align: middle;">
-                                        <?php 
-                                        $progress = ($total_assignments > 0) ? (min($total_assignments, max(0, $team['current_level'] - 1)) / $total_assignments) * 100 : 0; ?>
                                         <div class="progress-wrapper">
                                             <div class="progress-bg" style="height: 6px; background: #eee;">
                                                 <div class="progress-fill" style="width: <?= $progress ?>%"></div>
                                             </div>
-                                            <div class="progress-text" style="font-size: 0.75em; font-weight: 600; color: #888;"><?= $team['current_level'] > $total_assignments ? 'Voltooid!' : round($progress) . '% voltooid' ?></div>
+                                            <div class="progress-text" style="font-size: 0.75em; font-weight: 600; color: #888;"><?= $finished ? 'Voltooid!' : round($progress) . '% voltooid' ?></div>
                                         </div>
                                     </td>
                                     <td style="text-align: right; vertical-align: middle;">
-                                        <div class="action-btns" style="justify-content: flex-end;">
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="action" value="level_up">
-                                                <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                                <button type="submit" class="btn btn-success" style="padding: 6px 12px; border-radius: 6px;"
-                                                    <?= $team['current_level'] > $total_assignments ? 'disabled' : '' ?>>
-                                                    ⬆️
-                                                </button>
-                                            </form>
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="action" value="resend_level_mail">
-                                                <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                                <button type="submit" class="btn btn-outline" style="padding: 6px 12px; border-radius: 6px;" title="Resend Level Mail">
-                                                    📧
-                                                </button>
-                                            </form>
-                                            <form method="POST" style="display: inline;" onsubmit="return confirm('Delete team?');">
-                                                <input type="hidden" name="action" value="delete_team">
-                                                <input type="hidden" name="team_id" value="<?= $team['id'] ?>">
-                                                <button type="submit" class="btn btn-danger" style="padding: 6px 12px; border-radius: 6px;">
-                                                    🗑️
-                                                </button>
-                                            </form>
+                                        <div class="action-btns" style="justify-content: flex-end; display: flex; gap: 4px; flex-wrap: wrap;">
+                                            <?= teamButton('level_up', (int)$team['id'], '⬆️', 'btn-success', 'Level omhoog', $level < 1 || $finished) ?>
+                                            <?= teamButton('level_down', (int)$team['id'], '⬇️', 'btn-outline', 'Level terug', $level <= 1, "Team '{$team['team_name']}' een level terugzetten? Het gesprek van het vorige level komt terug en de archiefregel van dat level verdwijnt.") ?>
+                                            <button type="button" class="btn btn-outline" style="padding: 6px 12px; border-radius: 6px;" title="Kopieer teamlink"
+                                                onclick="copyTeamLink(this, <?= htmlspecialchars(json_encode(teamDashboardUrl($team['access_token']))) ?>)">📋</button>
+                                            <?php if ($team['email']): ?>
+                                                <?= teamButton('send_link', (int)$team['id'], '📧', 'btn-outline', 'Teamlink opnieuw mailen', false, "Teamlink mailen naar {$team['email']}?") ?>
+                                            <?php endif; ?>
+                                            <?= teamButton('delete_team', (int)$team['id'], '🗑️', 'btn-danger', 'Team verwijderen', false, "Team '{$team['team_name']}' verwijderen? De chat gaat verloren; het archief blijft.") ?>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
+                            <?php if (empty($teams)): ?>
+                                <tr><td colspan="5" style="text-align: center; color: #999; padding: 40px;">Nog geen teams in dit spel.</td></tr>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -248,19 +242,45 @@ include 'admin_header.php';
             <div class="side-panel">
                 <div class="card" style="border-top: 5px solid #667eea; background: #fff;">
                     <div class="card-title" style="color: #667eea; font-size: 1.4em;">➕ Nieuw Team</div>
+                    <?php if (!$canAddTeam): ?>
+                        <p style="color: #888;">Dit spel is afgelopen; er kunnen geen teams meer bij.</p>
+                    <?php else: ?>
                     <form method="POST">
+                        <?= csrfField() ?>
                         <input type="hidden" name="action" value="add_team">
                         <div class="form-group" style="margin-bottom: 20px;">
                             <label style="color: #555; font-size: 0.9em;">Team Naam</label>
-                            <input type="text" name="team_name" placeholder="Bijv. De Speurders" style="border: 1px solid #ddd; padding: 12px;" required>
+                            <input type="text" name="team_name" placeholder="Bijv. De Speurders" maxlength="<?= TEAM_NAME_MAX_LENGTH ?>" style="border: 1px solid #ddd; padding: 12px;" required>
                         </div>
-                        <div class="form-group" style="margin-bottom: 25px;">
-                            <label style="color: #555; font-size: 0.9em;">E-mail adres</label>
-                            <input type="email" name="email" placeholder="begeleider@school.nl" style="border: 1px solid #ddd; padding: 12px;" required>
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="color: #555; font-size: 0.9em;">E-mail adres (optioneel)</label>
+                            <input type="email" name="email" id="team-email" placeholder="begeleider@school.nl" style="border: 1px solid #ddd; padding: 12px;" oninput="toggleSendLink()">
                         </div>
+                        <label id="send-link-row" style="display: none; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.9em; color: #555;">
+                            <input type="checkbox" name="send_link" value="1" checked style="width: auto;"> Stuur de dashboardlink per mail
+                        </label>
                         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 1em; text-transform: uppercase; letter-spacing: 1px;">🚀 Team Toevoegen</button>
+                        <p style="margin-top: 10px; font-size: 0.8em; color: #999;">
+                            <?= $game['effective_status'] === 'draft' ? 'Het team wacht tot het spel start.' : 'Het team begint direct op level 1.' ?>
+                        </p>
                     </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
-<?php include 'admin_footer.php'; ?>
+<?php
+$extraJS = "
+<script>
+    function toggleSendLink() {
+        document.getElementById('send-link-row').style.display = document.getElementById('team-email').value.trim() !== '' ? 'flex' : 'none';
+    }
+    function copyTeamLink(btn, link) {
+        // Het klembord werkt alleen via https of localhost
+        if (!navigator.clipboard) { prompt('Kopieer de teamlink:', link); return; }
+        navigator.clipboard.writeText(link).then(() => {
+            btn.innerText = '✔';
+            setTimeout(() => { btn.innerText = '📋'; }, 1500);
+        }, () => { prompt('Kopieer de teamlink:', link); });
+    }
+</script>";
+include 'admin_footer.php'; ?>

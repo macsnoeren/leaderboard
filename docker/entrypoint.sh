@@ -27,8 +27,8 @@ define('BASE_URL', '$BASE_URL');
 define('REQUIRE_2FA_ADMIN', ${REQUIRE_2FA_ADMIN:-false});
 EOF
 
-# Database en artifact store (volumes)
-mkdir -p "$APP/database" "$APP/htdocs/artifacts"
+# Database, artifact store en logo-uploads (volumes)
+mkdir -p "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads"
 
 # Schema: setup.php maakt de basistabellen, migrate.php de latere kolommen (beide idempotent)
 (cd "$APP/htdocs" && php setup.php > /dev/null 2>&1) || true
@@ -62,6 +62,6 @@ EOF
     ) &
 fi
 
-chown -R www-data:www-data "$APP/database" "$APP/htdocs/artifacts"
+chown -R www-data:www-data "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads"
 
 exec apache2-foreground

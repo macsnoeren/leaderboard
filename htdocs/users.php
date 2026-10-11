@@ -97,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 flash('error', 'Deze gebruiker is al geactiveerd. Gebruik deactiveren of verwijderen.');
             } else {
                 $db->prepare("DELETE FROM user_tokens WHERE user_id = ?")->execute([$id]);
+                $db->prepare("DELETE FROM game_teachers WHERE teacher_id = ?")->execute([$id]);
                 $db->prepare("DELETE FROM teachers WHERE id = ?")->execute([$id]);
                 logAudit($db, $adminId, 'USER_INVITE_REVOKE', "Uitnodiging ingetrokken voor {$user['email']}");
                 flash('success', "Uitnodiging voor {$user['email']} is ingetrokken.");
@@ -164,6 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             } else {
                 $db->prepare("DELETE FROM user_tokens WHERE user_id = ?")->execute([$id]);
                 $db->prepare("DELETE FROM user_recovery_codes WHERE user_id = ?")->execute([$id]);
+                $db->prepare("DELETE FROM game_teachers WHERE teacher_id = ?")->execute([$id]);
                 $db->prepare("DELETE FROM teachers WHERE id = ?")->execute([$id]);
                 logAudit($db, $adminId, 'USER_DELETE', "Docent $label (ID $id) verwijderd");
                 flash('success', "$label is verwijderd.");
