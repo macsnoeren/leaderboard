@@ -197,6 +197,7 @@ function chatButton(int $teamId, array $fields, string $label, string $class, ?s
 /**
  * De chat van een level als HTML. Suggesties met een beoordeling (ai_evaluation_id) krijgen een vaste
  * opmaak; bij een open escalatie staat het teamantwoord naast het voorlopige oordeel, met de knoppen.
+ * Heeft de AI het team al geantwoord (reply/level_up), dan is het kader alleen ter informatie.
  */
 function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string {
     $evalIds = array_filter(array_map(function ($m) { return (int)$m['ai_evaluation_id']; }, $messages));
@@ -235,9 +236,12 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
         $escalation = $e['decision'] === 'escalate';
         $open = $escalation && $e['resolved_at'] === null;
         $levelUpAdvice = in_array($e['verdict'], ['voldoende', 'goed'], true);
-        $reply = (string)$e['reply_text'];
-        $html .= '<div class="message suggestion' . ($escalation ? ' escalation' : '') . '">';
-        $html .= '<small>' . ($escalation ? '🙋 Docent nodig' . ($open ? '' : ' (afgehandeld)') : '🤖 AI-suggestie') . ' - ' . htmlspecialchars($m['created_at']) . '</small>';
+        // De reactie staat dan al als AI-bericht in de chat
+        $sent = in_array($e['decision'], ['reply', 'level_up'], true);
+        $reply = $sent ? '' : (string)$e['reply_text'];
+        $title = $escalation ? '🙋 Docent nodig' . ($open ? '' : ' (afgehandeld)') : ($sent ? '🤖 AI ter info (reactie al verstuurd)' : '🤖 AI-suggestie');
+        $html .= '<div class="message suggestion' . ($escalation ? ' escalation' : '') . ($sent ? ' info' : '') . '">';
+        $html .= '<small>' . $title . ' - ' . htmlspecialchars($m['created_at']) . '</small>';
         $html .= '<dl class="ai-fields">';
         $html .= '<dt>Intentie</dt><dd>' . htmlspecialchars($e['intent']) . '</dd>';
         if ($e['verdict']) {
@@ -266,6 +270,13 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
             }
             $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'disagree'], 'Oneens → zelf antwoorden', 'btn-outline');
             $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'handled'], 'Afgehandeld', 'btn-outline');
+            $html .= '</div>';
+        } elseif ($sent) {
+            $html .= '<div class="ai-buttons">';
+            if ($levelUpAdvice) {
+                $html .= chatButton($teamId, ['action' => 'level_up'], 'Level up', 'btn-success', 'Dit team een level omhoog zetten?');
+            }
+            $html .= '<button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em;" onclick="rejectSuggestion(' . (int)$m['id'] . ')">Sluiten</button>';
             $html .= '</div>';
         } else {
             $html .= '<div class="ai-buttons">';
@@ -363,6 +374,7 @@ $extraCSS = '
     .message.ai small { color: #00695c; font-weight: bold; }
     .message.suggestion { background: #f3e5f5; border: 1px dashed #9c27b0; align-self: flex-start; color: #4a148c; }
     .message.suggestion.escalation { background: #fff3e0; border: 2px solid #ff9800; color: #5d4037; }
+    .message.suggestion.info { background: #f5f5f5; border: 1px dashed #9e9e9e; color: #424242; }
     .ai-fields { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 8px 0; font-size: 0.92em; }
     .ai-fields dt { font-weight: bold; }
     .ai-fields dd { margin: 0; }
