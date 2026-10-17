@@ -1,0 +1,193 @@
+"""T2.14–T2.16, T3.3, T4.1, T4.2: de agents met een FakeLLM."""
+import unittest
+
+from agentic.agents import assessor, designer, helper, intent, validator
+from agentic.llm import LLMError
+from tests.helpers import RUBRIC, SETTINGS, FakeLLM, assessment, helper_out, make_task, validator_answer, validator_question
+
+SECRET = ["CRITERIA-GEHEIM", "DIALOOG-ANTWOORD", '"aspecten"', "Gokschuld én de verduisterde kas", "TUSSENSTAND-GEHEIM"]
+
+
+class IntentTest(unittest.TestCase):
+    def run_intent(self, intentie, zeker):
+        llm = FakeLLM(intent={"intentie": intentie, "zeker": zeker, "toelichting": "x"})
+        return intent.classify(llm, SETTINGS, make_task())[0], llm
+
+    def test_code_rule(self):
+        self.assertEqual(self.run_intent("vraag", True)[0], "vraag")
+        self.assertEqual(self.run_intent("vraag", False)[0], "antwoord")
+        self.assertEqual(self.run_intent("overig", False)[0], "antwoord")
+        self.assertEqual(self.run_intent("overig", True)[0], "overig")
+        self.assertEqual(self.run_intent("antwoord", False)[0], "antwoord")
+
+    def test_prompt_contents(self):
+        messages = [{"id": 1, "sender": "team", "time": "t", "text": "EERSTE-BERICHT"},
+                    {"id": 2, "sender": "teacher", "time": "t", "text": "DOCENT-BERICHT"},
+                    {"id": 3, "sender": "team", "time": "t", "text": "Is het de conciërge?"}]
+        task = make_task(messages, progress={"aspects": [], "summary": "TUSSENSTAND-GEHEIM"})
+        _, llm = None, FakeLLM(intent={"intentie": "antwoord", "zeker": True, "toelichting": "x"})
+        intent.classify(llm, SETTINGS, task)
+        prompt = llm.prompts()[0]
+        for text in ["EERSTE-BERICHT", "DOCENT-BERICHT", "Is het de conciërge?", "INSTRUCTIE-TEKST"]:
+            self.assertIn(text, prompt)
+        for text in SECRET:
+            self.assertNotIn(text, prompt)
+        self.assertEqual(llm.calls[0]["model"], SETTINGS.INTENT_MODEL)
+        self.assertEqual(llm.calls[0]["think"], "low")
+
+
+class HelperTest(unittest.TestCase):
+    def test_prompt_has_only_question_info(self):
+        task = make_task(progress={"aspects": [{"naam": "Dader", "niveau": "goed", "bewijs": "x", "bericht": 11}], "summary": "TUSSENSTAND-GEHEIM"})
+        llm = FakeLLM(helper=helper_out())
+        helper.respond(llm, SETTINGS, task)
+        prompt = llm.prompts()[0]
+        for text in ["BESCHRIJVING-TEKST", "INSTRUCTIE-TEKST", "VERDUIDELIJKING-VRAAG", "Het was Jan, de conciërge."]:
+            self.assertIn(text, prompt)
+        for text in SECRET + ["Dader", "Motief", "De tuinman"]:
+            self.assertNotIn(text, prompt)
+
+    def test_cannot_answer_is_passed_on(self):
+        out, meta = helper.respond(FakeLLM(helper=helper_out("Vraag het je docent.", kan=False)), SETTINGS, make_task())
+        self.assertFalse(out["kan_beantwoorden"])
+        self.assertEqual(meta["thinking"], "denkwerk van helper")
+
+
+class AssessorTest(unittest.TestCase):
+    def test_prompt_contents(self):
+        task = make_task(progress={"aspects": [], "summary": "TUSSENSTAND-GEHEIM"})
+        llm = FakeLLM(assessor=assessment())
+        assessor.assess(llm, SETTINGS, task)
+        prompt = llm.prompts()[0]
+        for text in ["CRITERIA-GEHEIM", "DIALOOG-ANTWOORD", "TUSSENSTAND-GEHEIM", "Gokschuld én de verduisterde kas", "hagelschieten"]:
+            self.assertIn(text, prompt)
+
+    def test_valid_citation(self):
+        result = assessor.assess(FakeLLM(assessor=assessment()), SETTINGS, make_task())
+        self.assertTrue(result["citations_ok"])
+        self.assertEqual(result["verdict"], "goed")
+        self.assertTrue(result["unanimous"])
+        self.assertTrue(result["consistent"])
+
+    def test_invented_citation(self):
+        bad = assessment(aspects=[{"naam": "Dader", "niveau": "goed", "bewijs": "het was Jan de Vries, zeker weten", "bericht": 11},
+                                  {"naam": "Motief", "niveau": "onvoldoende", "bewijs": "", "bericht": 0}], oordeel="voldoende")
+        self.assertFalse(assessor.assess(FakeLLM(assessor=bad), SETTINGS, make_task())["citations_ok"])
+
+    def test_wrong_message_id(self):
+        bad = assessment(aspects=[{"naam": "Dader", "niveau": "goed", "bewijs": "het was Jan", "bericht": 99},
+                                  {"naam": "Motief", "niveau": "onvoldoende", "bewijs": "", "bericht": 0}], oordeel="voldoende")
+        self.assertFalse(assessor.assess(FakeLLM(assessor=bad), SETTINGS, make_task())["citations_ok"])
+
+    def test_citation_from_teacher_message_does_not_count(self):
+        task = make_task([{"id": 11, "sender": "team", "time": "t", "text": "Het was iemand."},
+                          {"id": 12, "sender": "teacher", "time": "t", "text": "Het was Jan"}])
+        bad = assessment(aspects=[{"naam": "Dader", "niveau": "goed", "bewijs": "Het was Jan", "bericht": 12}], oordeel="voldoende")
+        self.assertFalse(assessor.verify_citations(bad["aspecten"], task["messages"]))
+
+    def test_normalized_citation(self):
+        msgs = [{"id": 5, "sender": "team", "text": 'Het   was "Jan", de  Conciërge!'}]
+        self.assertTrue(assessor.verify_citations([{"naam": "Dader", "niveau": "goed", "bewijs": "“het was jan, de conciërge”", "bericht": 5}], msgs))
+
+    def test_inconsistent_verdict(self):
+        out = assessment(aspects=[{"naam": "Dader", "niveau": "onvoldoende", "bewijs": "", "bericht": 0},
+                                  {"naam": "Motief", "niveau": "goed", "bewijs": "het was Jan", "bericht": 11}], oordeel="voldoende")
+        self.assertFalse(assessor.assess(FakeLLM(assessor=out), SETTINGS, make_task())["consistent"])
+
+    def test_majority_and_disagreement(self):
+        settings = type(SETTINGS)(**dict(vars(SETTINGS), ASSESSOR_MODELS=["a", "b", "c"]))
+        voldoende = assessment("voldoende")
+        llm = FakeLLM(assessor=[assessment("goed"), voldoende, voldoende])
+        result = assessor.assess(llm, settings, make_task())
+        self.assertEqual(result["verdict"], "voldoende")
+        self.assertFalse(result["unanimous"])
+        self.assertEqual([c["model"] for c in llm.calls], ["a", "b", "c"])
+        self.assertEqual(len(result["runs"]), 3)
+        llm = FakeLLM(assessor=[assessment("goed"), assessment("goed")])
+        two = type(SETTINGS)(**dict(vars(SETTINGS), ASSESSOR_MODELS=["a", "b"]))
+        self.assertTrue(assessor.assess(llm, two, make_task())["unanimous"])
+        self.assertEqual(assessor.majority(["goed", "onvoldoende"]), "onvoldoende")  # gelijk = strengste
+
+
+class ValidatorTest(unittest.TestCase):
+    def test_answer_mode_parsed(self):
+        llm = FakeLLM(validator_answer=validator_answer("voldoende", akkoord=False, redenen=["motief ontbreekt"]))
+        out, meta = validator.check_answer(llm, SETTINGS, make_task(), assessment())
+        self.assertEqual(out["eigen_oordeel"], "voldoende")
+        self.assertFalse(out["akkoord"])
+        self.assertEqual(meta["model"], SETTINGS.VALIDATOR_MODEL)
+        prompt = llm.prompts()[0]
+        self.assertIn("CRITERIA-GEHEIM", prompt)
+        self.assertIn("UITKOMST BEOORDELAAR", prompt)
+
+    def test_invalid_output_raises(self):
+        with self.assertRaises(LLMError):
+            validator.check_answer(FakeLLM(validator_answer={"akkoord": "ja"}), SETTINGS, make_task(), assessment())
+
+    def test_question_mode_parsed(self):
+        llm = FakeLLM(validator_question=validator_question(was_vraag=False, verklapt=True, misleidend=True))
+        out, _ = validator.check_question(llm, SETTINGS, make_task(), helper_out())
+        self.assertEqual((out["was_vraag"], out["verklapt_antwoord"], out["misleidend"]), (False, True, True))
+        self.assertIn("REACTIE HULP-AGENT", llm.prompts()[0])
+
+
+class DesignerTest(unittest.TestCase):
+    def job(self, round_=1, **kw):
+        return dict({"assignment_id": 3, "title": "T", "description": "D", "instruction": "I", "criteria": "C",
+                     "has_attachment": True, "rubric": None, "round": round_, "max_rounds": 3,
+                     "dialog": [{"role": "ai", "message": "Vraag 1?"}, {"role": "teacher", "message": "Antwoord 1"}]}, **kw)
+
+    def test_questions(self):
+        llm = FakeLLM(designer={"soort": "vragen", "vragen": ["Welke naam staat in de bijlage?", " "], "rubric": {}})
+        result, _ = designer.design(llm, SETTINGS, self.job())
+        self.assertEqual(result, {"soort": "vragen", "vragen": ["Welke naam staat in de bijlage?"]})
+        prompt = llm.prompts()[0]
+        self.assertIn("bijlage", prompt)
+        self.assertIn("Antwoord 1", prompt)
+
+    def test_rubric(self):
+        result, _ = designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": RUBRIC}), SETTINGS, self.job())
+        self.assertEqual(result["soort"], "rubric")
+        self.assertEqual(result["rubric"]["kern"], RUBRIC["kern"])
+
+    def test_rubric_without_aspects_raises(self):
+        with self.assertRaises(LLMError):
+            designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": dict(RUBRIC, aspecten=[])}), SETTINGS, self.job())
+
+    def test_attachment_criteria_require_questions_first(self):
+        job = self.job(dialog=[], criteria="Zie de bijlage: het tijdstip op de camerabeelden.")
+        rubric = dict(RUBRIC, ook_goed=["het tijdstip uit de bijlage"])
+        with self.assertRaises(LLMError):
+            designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": rubric}), SETTINGS, job)
+        answered = dict(job, dialog=[{"role": "ai", "message": "Welk tijdstip?"}, {"role": "teacher", "message": "23:15"}])
+        self.assertEqual(designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": rubric}), SETTINGS, answered)[0]["soort"], "rubric")
+
+    def test_invented_facts_rejected(self):
+        job = self.job(dialog=[{"role": "teacher", "message": "Het was om 23:15."}], criteria="Het tijdstip van de inbraak.")
+        invented = dict(RUBRIC, ook_goed=["14:35"])
+        with self.assertRaises(LLMError):
+            designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": invented}), SETTINGS, job)
+        grounded = dict(RUBRIC, ook_goed=["23:15", "23.15 uur"])
+        self.assertEqual(designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": grounded}), SETTINGS, job)[0]["soort"], "rubric")
+
+    def test_revealing_clarifications_removed(self):
+        job = self.job(title="De vluchtauto", description="Een getuige zag een auto wegrijden.", instruction="Welke kleur had de vluchtauto?",
+                       criteria="Rood: een rode Opel Corsa. Alleen 'rood' is genoeg voor voldoende.", dialog=[])
+        rubric = dict(RUBRIC, verduidelijkingen_vraag=["We vragen naar de kleur van de auto.", "Met het merk (Opel Corsa) erbij is het goed.",
+                                                     "Een enkel woord (bijv. rood) is genoeg."])
+        result, meta = designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": rubric}), SETTINGS, job)
+        self.assertEqual(result["rubric"]["verduidelijkingen_vraag"], ["We vragen naar de kleur van de auto."])
+        self.assertEqual(len(meta["verwijderde_verduidelijkingen"]), 2)
+
+    def test_round_three_requires_rubric(self):
+        llm = FakeLLM(designer={"soort": "vragen", "vragen": ["Nog een vraag?"], "rubric": {}})
+        with self.assertRaises(LLMError):
+            designer.design(llm, SETTINGS, self.job(3))
+        self.assertIn("LAATSTE RONDE", llm.calls[0]["user"])
+        llm = FakeLLM(designer={"soort": "vragen", "vragen": ["Vraag?"], "rubric": {}})
+        designer.design(llm, SETTINGS, self.job(1))
+        self.assertNotIn("LAATSTE RONDE", llm.calls[0]["user"])
+
+
+if __name__ == "__main__":
+    unittest.main()

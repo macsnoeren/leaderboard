@@ -82,6 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             flash('success', 'De instellingen zijn opgeslagen.');
             break;
 
+        case 'update_ai':
+            $error = updateGameAiSettings($db, $gameId, (string)($_POST['ai_mode'] ?? ''),
+                (int)($_POST['ai_max_attempts'] ?? 0), (int)($_POST['ai_max_questions'] ?? 0), $userId);
+            flash($error ? 'error' : 'success', $error ?? 'De AI-instellingen zijn opgeslagen.');
+            break;
+
         case 'start':
             if (startGame($db, $gameId, $userId, $message)) {
                 flash('success', 'Het spel is gestart: alle teams staan op level 1.');
@@ -212,6 +218,35 @@ include 'admin_header.php';
         </div>
 
         <div>
+            <div class="card">
+                <div class="card-title" style="font-size: 1.2em; margin-bottom: 15px;">🤖 AI</div>
+                <form method="POST">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="update_ai">
+                    <div class="form-row">
+                        <label>Standaardmodus voor nieuwe teams</label>
+                        <select name="ai_mode">
+                            <?php foreach (AI_MODES as $mode): ?>
+                                <option value="<?= $mode ?>" <?= ($game['ai_mode'] ?: 'suggest') === $mode ? 'selected' : '' ?>><?= htmlspecialchars(aiModeLabel($mode) . ' – ' . AI_MODE_DESCRIPTIONS[$mode]) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="muted" style="margin-top: 4px;">Bestaande teams houden hun eigen modus; die zet je op het <a href="teacher.php" style="color: #667eea;">dashboard</a> (per team of voor alle teams).</div>
+                    </div>
+                    <div class="form-row" style="display: flex; gap: 15px;">
+                        <div style="flex: 1;">
+                            <label>Max. antwoorden per 10 min</label>
+                            <input type="number" name="ai_max_attempts" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_attempts'] ?? 5) ?>" required>
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Max. vragen per 10 min</label>
+                            <input type="number" name="ai_max_questions" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_questions'] ?? 5) ?>" required>
+                        </div>
+                    </div>
+                    <p class="muted" style="margin-bottom: 15px;">Per team per level. Daarboven beoordeelt de AI niet zelf meer, maar vraagt ze een docent (🙋).</p>
+                    <button type="submit" class="btn btn-primary">Opslaan</button>
+                </form>
+            </div>
+
             <div class="card">
                 <div class="card-title" style="font-size: 1.2em; margin-bottom: 10px;">📱 Zelf aanmelden</div>
                 <p>Registratie is <strong style="color: <?= (int)$game['registration_open'] ? '#2e7d32' : '#c62828' ?>;"><?= (int)$game['registration_open'] ? 'open' : 'dicht' ?></strong>.</p>

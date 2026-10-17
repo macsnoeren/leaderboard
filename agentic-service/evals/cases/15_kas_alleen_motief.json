@@ -1,0 +1,16 @@
+{
+  "name": "15_kas_alleen_motief",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het motief was gokschulden."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "onvoldoende",
+    "human": null
+  }
+}

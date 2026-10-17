@@ -53,7 +53,11 @@ def export_assignments(game_id, output_name=None):
                     'instruction': a.get('instruction', ''),
                     'criteria': a.get('criteria', ''),
                     'time_limit': a.get('time_limit', 0),
-                    'artifact_file': os.path.basename(a['artifact_file']) if a['artifact_file'] else None
+                    'artifact_file': os.path.basename(a['artifact_file']) if a['artifact_file'] else None,
+                    # Rubric voor de AI (JSON-tekst zoals in de database); de dialoog gaat niet mee
+                    'ai_rubric': a.get('ai_rubric'),
+                    'ai_rubric_status': a.get('ai_rubric_status') or 'none',
+                    'ai_auto_allowed': 1 if a.get('ai_auto_allowed', 1) in (None, 1, '1') else 0,
                 }
                 manifest.append(entry)
 

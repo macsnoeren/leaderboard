@@ -1,0 +1,16 @@
+{
+  "name": "24_plek_fout",
+  "assignment": "plek",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "In de kantine."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "onvoldoende",
+    "human": null
+  }
+}

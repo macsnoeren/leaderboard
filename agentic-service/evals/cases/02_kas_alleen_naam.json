@@ -1,0 +1,16 @@
+{
+  "name": "02_kas_alleen_naam",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het was Jan de Vries, de conciërge."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "voldoende",
+    "human": false
+  }
+}

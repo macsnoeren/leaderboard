@@ -1,0 +1,6 @@
+*
+!agentic-service/main.py
+!agentic-service/agentic
+agentic-service/agentic/**/__pycache__
+!docker/agent-config.py
+!docker/agent-entrypoint.sh

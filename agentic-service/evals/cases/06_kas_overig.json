@@ -1,0 +1,16 @@
+{
+  "name": "06_kas_overig",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "ok, we zijn er nog mee bezig"
+    }
+  ],
+  "expected": {
+    "intent": "overig",
+    "verdict": null,
+    "human": false
+  }
+}

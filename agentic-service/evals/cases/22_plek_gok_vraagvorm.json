@@ -1,0 +1,16 @@
+{
+  "name": "22_plek_gok_vraagvorm",
+  "assignment": "plek",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Zit het in de kelder?"
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "voldoende",
+    "human": null
+  }
+}

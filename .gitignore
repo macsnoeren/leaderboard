@@ -1,4 +1,5 @@
 bin/config.py
+agentic-service/config.py
 htdocs/artifacts
 htdocs/uploads
 database

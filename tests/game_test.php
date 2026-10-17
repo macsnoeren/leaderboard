@@ -19,19 +19,22 @@ function freshDb(): PDO {
     $db = new PDO('sqlite::memory:');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db->exec("CREATE TABLE teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, role TEXT DEFAULT 'user')");
-    $db->exec("CREATE TABLE games (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', join_code TEXT UNIQUE, registration_open INTEGER DEFAULT 0, logo_file TEXT, status_message TEXT, started_at DATETIME, ends_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_by INTEGER)");
+    $db->exec("CREATE TABLE games (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', join_code TEXT UNIQUE, registration_open INTEGER DEFAULT 0, logo_file TEXT, status_message TEXT, started_at DATETIME, ends_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_by INTEGER, ai_mode TEXT DEFAULT 'suggest', ai_max_attempts INTEGER DEFAULT 5, ai_max_questions INTEGER DEFAULT 5)");
     $db->exec("CREATE TABLE game_teachers (game_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL, PRIMARY KEY (game_id, teacher_id))");
-    $db->exec("CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE, ai_processing_by TEXT, ai_processing_at DATETIME)");
+    $db->exec("CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE, ai_processing_by TEXT, ai_processing_at DATETIME, ai_mode TEXT DEFAULT 'suggest')");
     $db->exec("CREATE UNIQUE INDEX idx_teams_game_name ON teams(game_id, team_name)");
-    $db->exec("CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT)");
+    $db->exec("CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT, ai_rubric TEXT, ai_rubric_status TEXT DEFAULT 'none', ai_design_status TEXT DEFAULT 'idle', ai_design_round INTEGER DEFAULT 0, ai_auto_allowed INTEGER DEFAULT 1, ai_processing_by TEXT, ai_processing_at DATETIME)");
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
     $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
-    $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
     $db->exec("CREATE TABLE download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
     $db->exec("CREATE TABLE team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
     $db->exec("CREATE TABLE team_presence (team_id INTEGER, username TEXT, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (team_id, username))");
     $db->exec("CREATE TABLE announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE ai_team_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, assignment_number INTEGER NOT NULL, aspects_json TEXT, summary TEXT, last_message_id INTEGER, updated_at DATETIME, UNIQUE (team_id, assignment_number))");
+    $db->exec("CREATE TABLE assignment_ai_dialog (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, role TEXT NOT NULL, message TEXT NOT NULL, teacher_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE ai_evaluations (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, team_name TEXT, assignment_number INTEGER NOT NULL, message_id INTEGER NOT NULL, intent TEXT, intent_json TEXT, helper_json TEXT, assessor_json TEXT, validator_json TEXT, verdict TEXT, decision TEXT, reason TEXT, reply_text TEXT, escalation_reason TEXT, resolved_by INTEGER, resolved_at DATETIME, teacher_verdict TEXT, agent_id TEXT, models TEXT, duration_ms INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     return $db;
 }
 
@@ -112,12 +115,13 @@ $team = addTeam($db, $game, 'De Speurders', 1);
 addMessage($db, $team, 1, 'team', 'Ons antwoord');
 addMessage($db, $team, 1, 'suggestion', 'AI vindt het goed');
 addMessage($db, $team, 1, 'teacher', 'Klopt!');
+addMessage($db, $team, 1, 'ai', 'Sterk speurwerk!');
 check('level-up lukt', levelUp($db, $team, 7));
 check('team staat op level 2', teamLevel($db, $team) === 2);
 $archive = $db->query("SELECT * FROM completed_assignments")->fetchAll(PDO::FETCH_ASSOC);
 check('één archiefregel met teamnaam, spel en level', count($archive) === 1 && $archive[0]['team_name'] === 'De Speurders' && (int)$archive[0]['game_id'] === $game && (int)$archive[0]['assignment_number'] === 1);
-check('archief bevat de chat zonder suggestie', $archive[0]['chat_history'] === "Team: Ons antwoord\nDocent: Klopt!");
-check('teamberichten blijven staan', (int)$db->query("SELECT COUNT(*) FROM team_messages WHERE team_id = $team AND assignment_number = 1 AND sender != 'suggestion'")->fetchColumn() === 2);
+check('archief bevat de chat met AI: … en zonder suggestie', $archive[0]['chat_history'] === "Team: Ons antwoord\nDocent: Klopt!\nAI: Sterk speurwerk!");
+check('teamberichten blijven staan', (int)$db->query("SELECT COUNT(*) FROM team_messages WHERE team_id = $team AND assignment_number = 1 AND sender != 'suggestion'")->fetchColumn() === 3);
 check('suggesties van dat level zijn weg', (int)$db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'suggestion'")->fetchColumn() === 0);
 check('audit-regel met user_id', (int)$db->query("SELECT user_id FROM audit_logs WHERE event_type = 'TEAM_LEVEL_UP'")->fetchColumn() === 7);
 levelUp($db, $team, 7);
@@ -189,6 +193,16 @@ check('lege naam geweigerd', is_string(createTeam($db, $running, '   ', null, 1)
 check('te lange naam geweigerd', is_string(createTeam($db, $running, str_repeat('x', 51), null, 1)));
 createTeam($db, $running, 'Zelf aangemeld', null, null);
 check('zelfaanmelding: TEAM_REGISTER zonder user_id', $db->query("SELECT COUNT(*) FROM audit_logs WHERE event_type = 'TEAM_REGISTER' AND user_id IS NULL")->fetchColumn() == 1);
+$t = createTeam($db, $running, 'Standaard', null, 1);
+check('nieuw team krijgt standaard ai_mode suggest', is_array($t) && $t['ai_mode'] === 'suggest');
+setAllTeamsAiMode($db, (int)$running['id'], 'reply', 1);
+// $running is van vóór de wijziging: createTeam() leest de standaard uit de database
+$t = createTeam($db, $running, 'Na alle teams', null, 1);
+check('team na setAllTeamsAiMode(reply) krijgt reply', is_array($t) && $t['ai_mode'] === 'reply');
+$t = createTeam($db, $running, 'Via join', null, null);
+check('ook via zelfaanmelding (join.php-pad) reply', is_array($t) && $t['ai_mode'] === 'reply');
+$t = createTeam($db, $draft, 'Ander spel', null, 1);
+check('team in een ander spel houdt de eigen standaard', is_array($t) && $t['ai_mode'] === 'suggest');
 
 echo "generateJoinCode\n";
 $db = freshDb();
@@ -259,7 +273,18 @@ check('bestand gekopieerd onder een nieuwe naam', $copyFile !== 'artifacts/bron.
 unlink("$dir/$copyFile");
 check('origineel blijft na verwijderen van de kopie', is_file("$dir/artifacts/bron.pdf"));
 check('kopie naar zichzelf doet niets', copyAssignments($db, $from, $from, 1, $dir) === 0);
-check('audit ASSIGNMENTS_COPY', auditCount($db, 'ASSIGNMENTS_COPY') === 2);
+$rubric = json_encode(['kern' => 'Dader', 'aspecten' => [['naam' => 'Dader', 'verplicht' => true, 'onvoldoende' => 'a', 'voldoende' => 'b', 'goed' => 'c']]]);
+$db->prepare("UPDATE assignments SET ai_rubric = ?, ai_rubric_status = 'approved', ai_auto_allowed = 0 WHERE game_id = ? AND assignment_number = 2")->execute([$rubric, $from]);
+$rubricTarget = addGame($db);
+copyAssignments($db, $from, $rubricTarget, 1, $dir);
+$copied = $db->query("SELECT ai_rubric, ai_rubric_status, ai_auto_allowed, ai_design_status FROM assignments WHERE game_id = $rubricTarget AND assignment_number = 2")->fetch(PDO::FETCH_ASSOC);
+check('kopie neemt rubric, status en ai_auto_allowed mee', $copied['ai_rubric'] === $rubric && $copied['ai_rubric_status'] === 'approved' && (int)$copied['ai_auto_allowed'] === 0);
+check('kopie zonder rubric: status none en auto_allowed 1', $db->query("SELECT ai_rubric_status || '/' || ai_auto_allowed FROM assignments WHERE game_id = $rubricTarget AND assignment_number = 1")->fetchColumn() === 'none/1');
+check('dialoogstatus begint opnieuw (idle)', $copied['ai_design_status'] === 'idle');
+foreach ($db->query("SELECT artifact_file FROM assignments WHERE game_id = $rubricTarget AND artifact_file IS NOT NULL")->fetchAll(PDO::FETCH_COLUMN) as $f) {
+    @unlink("$dir/$f");
+}
+check('audit ASSIGNMENTS_COPY', auditCount($db, 'ASSIGNMENTS_COPY') === 3);
 array_map('unlink', glob("$dir/artifacts/*"));
 rmdir("$dir/artifacts");
 rmdir($dir);

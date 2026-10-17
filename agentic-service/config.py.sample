@@ -1,0 +1,34 @@
+# config.py voor de AI-agent (agentic-service/main.py). Kopieer naar agentic-service/config.py
+# en vul API_KEY en BASE_URL in. Niet committen: config.py staat in .gitignore.
+# Alles wat je weglaat krijgt de standaard uit agentic/settings.py (DESIGN.md §10).
+
+# API-sleutel uit 🔑 API Keys in de webapplicatie
+API_KEY = "vul-hier-je-api-key-in"
+
+# URL van api.php van de webapplicatie
+BASE_URL = "https://leaderboard.example.nl/api.php"
+
+# Lokale Ollama; die stuurt de -cloud-modellen door (eenmalig: ollama signin)
+OLLAMA_URL = "http://localhost:11434/api/chat"
+
+# Seconden tussen twee rondes
+POLL_INTERVAL = 10
+
+# Boven deze grens (tekens / 4) vervangt de samenvatting de oudste berichten
+MAX_CHAT_TOKENS = 20000
+
+# Alleen Ollama-cloudmodellen (naam eindigt op -cloud of :cloud); de agent weigert lokale modellen
+CLOUD_ONLY = True
+
+# Model en denkniveau (low | medium | high) per agent
+INTENT_MODEL = "gpt-oss:20b-cloud"
+INTENT_THINK = "low"
+HELPER_MODEL = "gpt-oss:20b-cloud"
+HELPER_THINK = "low"
+# Meerdere modellen = meerderheidsstem; zijn ze het oneens, dan gaat het naar de docent
+ASSESSOR_MODELS = ["gpt-oss:20b-cloud"]
+ASSESSOR_THINK = "medium"
+VALIDATOR_MODEL = "gpt-oss:120b-cloud"
+VALIDATOR_THINK = "high"
+DESIGNER_MODEL = "gpt-oss:120b-cloud"
+DESIGNER_THINK = "high"

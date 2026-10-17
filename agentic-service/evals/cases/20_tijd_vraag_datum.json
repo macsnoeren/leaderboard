@@ -1,0 +1,16 @@
+{
+  "name": "20_tijd_vraag_datum",
+  "assignment": "tijd",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Moeten we ook de datum noemen, of alleen de tijd?"
+    }
+  ],
+  "expected": {
+    "intent": "vraag",
+    "verdict": null,
+    "human": false
+  }
+}

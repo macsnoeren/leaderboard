@@ -1,0 +1,16 @@
+{
+  "name": "23_plek_vraag",
+  "assignment": "plek",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Bedoelen jullie met 'de plek' een gebouw of een kamer?"
+    }
+  ],
+  "expected": {
+    "intent": "vraag",
+    "verdict": null,
+    "human": false
+  }
+}

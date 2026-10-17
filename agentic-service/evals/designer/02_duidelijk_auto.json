@@ -1,0 +1,16 @@
+{
+  "name": "02_duidelijk_auto",
+  "job": {
+    "assignment_id": 0,
+    "title": "De vluchtauto",
+    "description": "Een getuige zag een auto wegrijden.",
+    "instruction": "Welke kleur had de vluchtauto?",
+    "criteria": "Rood: een rode Opel Corsa. Alleen 'rood' is genoeg voor voldoende; met het merk erbij is het goed.",
+    "has_attachment": false,
+    "rubric": null,
+    "round": 1,
+    "max_rounds": 3,
+    "dialog": []
+  },
+  "expected": "rubric"
+}

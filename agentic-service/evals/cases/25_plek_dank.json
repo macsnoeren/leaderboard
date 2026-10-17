@@ -1,0 +1,26 @@
+{
+  "name": "25_plek_dank",
+  "assignment": "plek",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "In het archief in de kelder, achter de dossierkasten."
+    },
+    {
+      "id": 101,
+      "sender": "ai",
+      "text": "Uitstekend!"
+    },
+    {
+      "id": 102,
+      "sender": "team",
+      "text": "dank je!"
+    }
+  ],
+  "expected": {
+    "intent": "overig",
+    "verdict": null,
+    "human": false
+  }
+}

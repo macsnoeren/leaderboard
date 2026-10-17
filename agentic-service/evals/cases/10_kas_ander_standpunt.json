@@ -1,0 +1,26 @@
+{
+  "name": "10_kas_ander_standpunt",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het was Jan de Vries."
+    },
+    {
+      "id": 101,
+      "sender": "ai",
+      "text": "Goed genoeg, maar waarom deed hij het?"
+    },
+    {
+      "id": 102,
+      "sender": "team",
+      "text": "Nee wacht, we denken toch dat het Piet de tuinman was, voor het geld."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "onvoldoende",
+    "human": null
+  }
+}

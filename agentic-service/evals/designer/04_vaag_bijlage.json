@@ -1,0 +1,16 @@
+{
+  "name": "04_vaag_bijlage",
+  "job": {
+    "assignment_id": 0,
+    "title": "Het dossier",
+    "description": "Lees het dossier in de bijlage.",
+    "instruction": "Wie is de getuige die liegt?",
+    "criteria": "Zie bijlage.",
+    "has_attachment": true,
+    "rubric": null,
+    "round": 1,
+    "max_rounds": 3,
+    "dialog": []
+  },
+  "expected": "vragen"
+}

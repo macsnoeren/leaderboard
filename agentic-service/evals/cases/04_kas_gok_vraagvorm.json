@@ -1,0 +1,16 @@
+{
+  "name": "04_kas_gok_vraagvorm",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Is het de conciërge?"
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "voldoende",
+    "human": null
+  }
+}

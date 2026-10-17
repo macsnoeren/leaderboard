@@ -58,7 +58,13 @@ $max_downloads = 10;
 // Haal chatberichten op voor dit level
 $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
 $stmt->execute([$team['id'], $level]);
-$messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// AI-berichten zien er voor het team precies uit als docentberichten (DESIGN §11, beslissing 2)
+$messages = array_map(function ($m) {
+    if ($m['sender'] === 'ai') {
+        $m['sender'] = 'teacher';
+    }
+    return $m;
+}, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
 // Mededelingen voor alle teams van het spel of voor dit team
 $stmt = $db->prepare("SELECT id, message, created_at FROM announcements WHERE game_id = ? AND (team_id IS NULL OR team_id = ?) ORDER BY id ASC");
@@ -191,6 +197,7 @@ if (isset($_GET['ajax'])) {
         
         .chat-input-area { padding: 20px; border-top: 1px solid #eee; flex-shrink: 0; }
         .chat-form { display: flex; flex-direction: column; gap: 10px; }
+        .privacy-notice { font-size: 0.75em; color: #888; line-height: 1.4; margin: 0; }
         textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; min-height: 80px; max-height: 400px; font-family: inherit; font-size: 0.95em; }
         textarea:focus { outline: 2px solid #667eea; border-color: transparent; }
 
@@ -361,6 +368,7 @@ if (isset($_GET['ajax'])) {
                     <form method="POST" class="chat-form">
                         <input type="hidden" name="action" value="send_message">
                         <textarea name="message" rows="3" placeholder="Typ hier je antwoord of vraag..." required></textarea>
+                        <p class="privacy-notice">🔒 <?= htmlspecialchars(PRIVACY_NOTICE) ?></p>
                         <button type="submit" class="download-btn" style="width:100%; margin:0;">Bericht versturen</button>
                     </form>
                 </div>

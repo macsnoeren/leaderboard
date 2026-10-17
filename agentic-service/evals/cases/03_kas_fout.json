@@ -1,0 +1,16 @@
+{
+  "name": "03_kas_fout",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het was de tuinman, hij was als laatste in de school."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "onvoldoende",
+    "human": null
+  }
+}

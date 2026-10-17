@@ -23,16 +23,54 @@ services:
       FROM_EMAIL: ${FROM_EMAIL:-}
       FROM_NAME: ${FROM_NAME:-Assignment System}
       REQUIRE_2FA_ADMIN: ${REQUIRE_2FA_ADMIN:-false}
+      # Maakt de API key 'docker-agent' aan voor de agent-container
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
-      AI_MODELS: ${AI_MODELS:-qwen2.5:1.5b}
-      AI_POLL_INTERVAL: ${AI_POLL_INTERVAL:-30}
-      OLLAMA_URL: ${OLLAMA_URL:-http://localhost:11434/api/generate}
     volumes:
       - database:/var/www/leaderboard/database
       - artifacts:/var/www/leaderboard/htdocs/artifacts
       - uploads:/var/www/leaderboard/htdocs/uploads
       # Live wijzigingen in de PHP-pagina's zonder rebuild:
       # - ../htdocs:/var/www/leaderboard/htdocs
+
+  # AI-agent: haalt teamberichten en design-taken op via api.php en gebruikt de Ollama op de host
+  agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    # Host-netwerk: Ollama luistert op de host alleen op localhost:11434
+    network_mode: host
+    init: true
+    restart: unless-stopped
+    # SIGINT: de agent meldt zich dan netjes af (unregister_agent)
+    stop_signal: SIGINT
+    depends_on:
+      - leaderboard
+    environment:
+      APP_PORT: ${APP_PORT:-8088}
+      AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
+      # Model en denkniveau per agent; leeg = de standaard (gpt-oss:20b-cloud / gpt-oss:120b-cloud, zie DESIGN.md §10)
+      AI_INTENT_MODEL: ${AI_INTENT_MODEL:-}
+      AI_INTENT_THINK: ${AI_INTENT_THINK:-}
+      AI_HELPER_MODEL: ${AI_HELPER_MODEL:-}
+      AI_HELPER_THINK: ${AI_HELPER_THINK:-}
+      AI_ASSESSOR_MODELS: ${AI_ASSESSOR_MODELS:-}
+      AI_ASSESSOR_THINK: ${AI_ASSESSOR_THINK:-}
+      AI_VALIDATOR_MODEL: ${AI_VALIDATOR_MODEL:-}
+      AI_VALIDATOR_THINK: ${AI_VALIDATOR_THINK:-}
+      AI_DESIGNER_MODEL: ${AI_DESIGNER_MODEL:-}
+      AI_DESIGNER_THINK: ${AI_DESIGNER_THINK:-}
+      AI_POLL_INTERVAL: ${AI_POLL_INTERVAL:-10}
+      # 1 = alleen Ollama-cloudmodellen (-cloud/:cloud); de agent weigert lokale modellen
+      AI_CLOUD_ONLY: ${AI_CLOUD_ONLY:-1}
+      AI_MAX_CHAT_TOKENS: ${AI_MAX_CHAT_TOKENS:-}
+      AI_LLM_TIMEOUT: ${AI_LLM_TIMEOUT:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://localhost:11434/api/chat}
+      # Leeg = de key 'docker-agent' uit de database en api.php van de webcontainer
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+    volumes:
+      # Alleen lezen: voor de API key die de webcontainer aanmaakt
+      - database:/data:ro
 
   # Vangt alle uitgaande mail op: SMTP op localhost:1025, webinterface op http://localhost:8025
   mailpit:

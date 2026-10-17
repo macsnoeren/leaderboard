@@ -174,6 +174,34 @@ try {
     // 18. Centrale mededelingen (team_id NULL = alle teams van het spel)
     $db->exec("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
+    // 19. Agentic AI (agentic-service/DESIGN.md §7). Elke kolom apart: een bestaande kolom houdt de rest
+    //     niet tegen. Constante defaults vullen ook de bestaande rijen (suggest, none, 1).
+    $aiColumns = [
+        "teams ADD COLUMN ai_mode TEXT DEFAULT 'suggest'",
+        "games ADD COLUMN ai_mode TEXT DEFAULT 'suggest'",
+        'games ADD COLUMN ai_max_attempts INTEGER DEFAULT 5',
+        'games ADD COLUMN ai_max_questions INTEGER DEFAULT 5',
+        'assignments ADD COLUMN ai_rubric TEXT',
+        "assignments ADD COLUMN ai_rubric_status TEXT DEFAULT 'none'",
+        "assignments ADD COLUMN ai_design_status TEXT DEFAULT 'idle'",
+        'assignments ADD COLUMN ai_design_round INTEGER DEFAULT 0',
+        'assignments ADD COLUMN ai_auto_allowed INTEGER DEFAULT 1',
+        'assignments ADD COLUMN ai_processing_by TEXT',
+        'assignments ADD COLUMN ai_processing_at DATETIME',
+        'team_messages ADD COLUMN ai_evaluation_id INTEGER',
+        'ai_service_status ADD COLUMN model_ok INTEGER DEFAULT 1',
+    ];
+    foreach ($aiColumns as $column) {
+        try {
+            $db->exec("ALTER TABLE $column");
+        } catch (PDOException $e) {}
+    }
+    $db->exec("CREATE TABLE IF NOT EXISTS ai_team_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, assignment_number INTEGER NOT NULL, aspects_json TEXT, summary TEXT, last_message_id INTEGER, updated_at DATETIME, UNIQUE (team_id, assignment_number))");
+    $db->exec("CREATE TABLE IF NOT EXISTS assignment_ai_dialog (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, role TEXT NOT NULL, message TEXT NOT NULL, teacher_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE IF NOT EXISTS ai_evaluations (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, team_name TEXT, assignment_number INTEGER NOT NULL, message_id INTEGER NOT NULL, intent TEXT, intent_json TEXT, helper_json TEXT, assessor_json TEXT, validator_json TEXT, verdict TEXT, decision TEXT, reason TEXT, reply_text TEXT, escalation_reason TEXT, resolved_by INTEGER, resolved_at DATETIME, teacher_verdict TEXT, agent_id TEXT, models TEXT, duration_ms INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE INDEX IF NOT EXISTS idx_ai_evaluations_team ON ai_evaluations(team_id, assignment_number)");
+    $db->exec("CREATE INDEX IF NOT EXISTS idx_assignment_ai_dialog ON assignment_ai_dialog(assignment_id)");
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

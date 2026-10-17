@@ -1,21 +1,35 @@
 <?php
 /**
- * API voor externe applicaties (zoals de Python AI bot)
+ * API voor de AI-agent (agentic-service/main.py). Authenticatie met de header X-API-Token of ?token=,
+ * gecontroleerd tegen api_keys. De logica staat in conf/ai.php; zie agentic-service/DESIGN.md §10.
  */
 require_once '../conf/config.php';
 require_once '../conf/database.php';
-require_once '../conf/game.php';
+require_once '../conf/ai.php';
 
 header('Content-Type: application/json');
 
-// Authenticatie check via Headers of Query Parameter
-$headers = getallheaders();
-$receivedToken = $headers['X-API-Token'] ?? $_GET['token'] ?? '';
-
-if (empty($receivedToken)) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized: Geen API token opgegeven.']);
+function respond(int $status, array $body): void {
+    http_response_code($status);
+    echo json_encode($body, JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+// JSON-body van een POST; een ongeldige body geeft 400
+function jsonInput(): array {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($input)) {
+        respond(400, ['error' => 'Ongeldige JSON-body']);
+    }
+    return $input;
+}
+
+// Authenticatie check via Headers of Query Parameter
+$headers = function_exists('getallheaders') ? array_change_key_case(getallheaders(), CASE_LOWER) : [];
+$receivedToken = $headers['x-api-token'] ?? $_GET['token'] ?? '';
+
+if (empty($receivedToken) || !is_string($receivedToken)) {
+    respond(401, ['error' => 'Unauthorized: Geen API token opgegeven.']);
 }
 
 $db = getDB();
@@ -24,145 +38,76 @@ $db = getDB();
 $stmt = $db->prepare("SELECT id FROM api_keys WHERE api_key = ?");
 $stmt->execute([$receivedToken]);
 if (!$stmt->fetch()) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized: Ongeldige API token.']);
-    exit;
+    respond(401, ['error' => 'Unauthorized: Ongeldige API token.']);
 }
 
 $action = $_GET['action'] ?? '';
+$method = $_SERVER['REQUEST_METHOD'];
 
-// Actie: Haal alle team-antwoorden op die nog geen AI suggestie hebben voor hun laatste bericht
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_pending') {
-    $query = "
-        SELECT 
-            t.id as team_id, t.team_name, t.current_level,
-            a.title as assignment_title, a.description, a.instruction, a.criteria, a.time_limit,
-            tm.created_at as message_time,
-            (
-                SELECT GROUP_CONCAT(msg, CHAR(10))
-                FROM (
-                    SELECT (CASE WHEN sender = 'team' THEN 'Team: ' ELSE 'Docent: ' END) || message as msg
-                    FROM team_messages 
-                    WHERE team_id = t.id 
-                    AND assignment_number = t.current_level 
-                    AND sender IN ('team', 'teacher')
-                    ORDER BY created_at ASC
-                )
-            ) as chat_history
-        FROM teams t
-        JOIN games g ON g.id = t.game_id
-        JOIN assignments a ON a.game_id = t.game_id AND a.assignment_number = t.current_level
-        JOIN team_messages tm ON t.id = tm.team_id AND t.current_level = tm.assignment_number
-        WHERE tm.sender = 'team'
-        -- Alleen spellen die bezig of gepauzeerd zijn (niet concept of afgelopen)
-        AND " . effectiveStatusSql('g') . " IN ('running', 'paused')
-        -- Pak alleen het allerlaatste bericht van het team voor dit level
-        AND tm.id IN (SELECT MAX(id) FROM team_messages WHERE sender = 'team' GROUP BY team_id, assignment_number)
-        -- Controleer of er nog geen AI suggestie of docent-reactie bestaat die nieuwer is dan dit teambericht
-        AND NOT EXISTS (
-            SELECT 1 FROM team_messages 
-            WHERE team_id = t.id AND assignment_number = t.current_level 
-            AND sender IN ('suggestion', 'teacher') AND id > tm.id
-        )
-        -- Filter teams die momenteel door een andere agent worden verwerkt (met 5 min timeout)
-        AND (t.ai_processing_at IS NULL OR t.ai_processing_at <= datetime('now', '-5 minutes'))
-        ORDER BY tm.created_at DESC
-    ";
-    $stmt = $db->query($query);
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
-    exit;
+// Teams waarvan het laatste bericht nog door de AI bekeken moet worden, met alles wat de agent nodig heeft
+if ($method === 'GET' && $action === 'get_pending') {
+    respond(200, aiPendingTasks($db));
 }
 
-// Actie: Claim een taak voor een specifieke agent
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'claim_task') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $team_id = (int)($input['team_id'] ?? 0);
-    $agent_id = trim($input['agent_id'] ?? 'unknown');
-
-    // Atomische update: claim alleen als er geen actieve lock is
-    $stmt = $db->prepare("
-        UPDATE teams 
-        SET ai_processing_by = ?, ai_processing_at = CURRENT_TIMESTAMP 
-        WHERE id = ? 
-        AND (ai_processing_at IS NULL OR ai_processing_at <= datetime('now', '-5 minutes') OR ai_processing_by = ?)
-    ");
-    $stmt->execute([$agent_id, $team_id, $agent_id]);
-
-    if ($stmt->rowCount() > 0) {
-        echo json_encode(['status' => 'success', 'message' => 'Task claimed']);
-    } else {
-        http_response_code(409);
-        echo json_encode(['error' => 'Task already claimed or not found']);
+// Claim een team voor een agent (lock van 5 minuten)
+if ($method === 'POST' && $action === 'claim_task') {
+    $input = jsonInput();
+    $agentId = trim((string)($input['agent_id'] ?? ''));
+    if ($agentId === '' || claimTeam($db, (int)($input['team_id'] ?? 0), $agentId) === false) {
+        respond(409, ['error' => 'Task already claimed or not found']);
     }
-    exit;
+    respond(200, ['status' => 'success', 'message' => 'Task claimed']);
 }
 
-// Actie: Ontvang een suggestie van de AI en zet deze in de docenten-chat
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'send_suggestion') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $team_id = (int)($input['team_id'] ?? 0);
-    $message = trim($input['message'] ?? '');
-    $suggest_level_up = (bool)($input['level_up'] ?? false);
+// Beoordeling van de agent: de server controleert opnieuw wat mag en voert dat uit
+if ($method === 'POST' && $action === 'submit_evaluation') {
+    $result = submitEvaluation($db, jsonInput());
+    $status = $result['status'];
+    unset($result['status']);
+    respond($status, $status === 200 ? ['status' => 'success'] + $result : $result);
+}
 
-    if ($team_id <= 0 || empty($message)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing team_id or message']);
-        exit;
+// Opdrachten waar de opdracht-assistent naar moet kijken
+if ($method === 'GET' && $action === 'get_design_jobs') {
+    respond(200, pendingDesignJobs($db));
+}
+
+if ($method === 'POST' && $action === 'claim_design') {
+    $input = jsonInput();
+    $agentId = trim((string)($input['agent_id'] ?? ''));
+    if ($agentId === '' || !claimDesign($db, (int)($input['assignment_id'] ?? 0), $agentId)) {
+        respond(409, ['error' => 'Design job already claimed or not found']);
     }
+    respond(200, ['status' => 'success', 'message' => 'Design job claimed']);
+}
 
-    $stmt = $db->prepare("SELECT current_level FROM teams WHERE id = ?");
-    $stmt->execute([$team_id]);
-    $current_level = $stmt->fetchColumn();
+// Vragen, een rubric-voorstel of een fout van de opdracht-assistent
+if ($method === 'POST' && $action === 'submit_design') {
+    $result = submitDesign($db, jsonInput());
+    $status = $result['status'];
+    unset($result['status']);
+    respond($status, $status === 200 ? ['status' => 'success'] + $result : $result);
+}
 
-    if ($current_level === false) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Team not found']);
-        exit;
+// Heartbeat van de agent, met model_ok: lukte de laatste modelaanroep?
+if ($method === 'POST' && $action === 'heartbeat') {
+    $input = jsonInput();
+    $agentId = trim((string)($input['agent_id'] ?? ''));
+    if ($agentId === '') {
+        respond(400, ['error' => 'agent_id ontbreekt']);
     }
-
-    $prefix = $suggest_level_up ? "🤖 [ADVIES: LEVEL UP] " : "🤖 [SUGGESTIE] ";
-    $full_message = $prefix . $message;
-
-    // Sla de suggestie op (is_read = 0 zorgt voor de rode badge bij de docent)
-    $stmt = $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message, is_read) VALUES (?, ?, 'suggestion', ?, 0)");
-    $stmt->execute([$team_id, $current_level, $full_message]);
-
-    // Unlock het team
-    $db->prepare("UPDATE teams SET ai_processing_by = NULL, ai_processing_at = NULL WHERE id = ?")->execute([$team_id]);
-
-    echo json_encode(['status' => 'success', 'message' => 'Suggestion added to database']);
-    exit;
+    recordHeartbeat($db, $agentId, !array_key_exists('model_ok', $input) || (bool)$input['model_ok']);
+    respond(200, ['status' => 'success', 'message' => 'Heartbeat received']);
 }
 
-// Actie: Ontvang een heartbeat van de AI service
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'heartbeat') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $agent_id = trim($input['agent_id'] ?? 'unknown');
-
-    // Gebruik REPLACE INTO voor betere SQLite compatibiliteit en sla tijd op als Unix timestamp
-    $stmt = $db->prepare("REPLACE INTO ai_service_status (agent_id, last_heartbeat) VALUES (?, strftime('%s', 'now'))");
-    $stmt->execute([$agent_id]);
-
-    // Verwijder hartslagen ouder dan 10 minuten om de tabel schoon te houden
-    $db->exec("DELETE FROM ai_service_status WHERE last_heartbeat < (strftime('%s', 'now') - 600)");
-
-    echo json_encode(['status' => 'success', 'message' => 'Heartbeat received']);
-    exit;
-}
-
-// Actie: Meld een AI agent af (bij afsluiten)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'unregister_agent') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $agent_id = trim($input['agent_id'] ?? '');
-
-    if (!empty($agent_id)) {
-        $db->prepare("DELETE FROM ai_service_status WHERE agent_id = ?")->execute([$agent_id]);
+// Meld een AI agent af (bij afsluiten)
+if ($method === 'POST' && $action === 'unregister_agent') {
+    $input = jsonInput();
+    $agentId = trim((string)($input['agent_id'] ?? ''));
+    if ($agentId !== '') {
+        $db->prepare("DELETE FROM ai_service_status WHERE agent_id = ?")->execute([$agentId]);
     }
-    echo json_encode(['status' => 'success', 'message' => 'Agent unregistered']);
-    exit;
+    respond(200, ['status' => 'success', 'message' => 'Agent unregistered']);
 }
 
-http_response_code(404);
-echo json_encode(['error' => 'Invalid action or method']);
-exit;
+respond(404, ['error' => 'Invalid action or method']);

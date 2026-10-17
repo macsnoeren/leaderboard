@@ -77,6 +77,7 @@ $logo = $game ? gameLogoUrl($game) : null;
         input.code { font-family: monospace; font-size: 1.6em; text-align: center; letter-spacing: 6px; text-transform: uppercase; }
         button { width: 100%; padding: 14px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1.05em; }
         button:hover { background: #5568d3; }
+        .privacy { margin-top: 18px; font-size: 0.8em; color: #777; line-height: 1.4; text-align: center; }
         .error { background: #ffebee; color: #c62828; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f44336; }
     </style>
 </head>
@@ -102,6 +103,7 @@ $logo = $game ? gameLogoUrl($game) : null;
             </div>
             <button type="submit">🚀 Meedoen</button>
         </form>
+        <p class="privacy">🔒 <?= htmlspecialchars(PRIVACY_NOTICE) ?></p>
     </div>
 </body>
 </html>

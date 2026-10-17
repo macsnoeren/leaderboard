@@ -68,11 +68,20 @@ def import_assignments(game_id, archive_path):
                     except KeyError:
                         print(f"Waarschuwing: Bestand {a['artifact_file']} niet in archief gevonden.")
 
+                # Rubric: een oud archief zonder deze velden krijgt de standaardwaarden
+                rubric = a.get('ai_rubric')
+                if isinstance(rubric, (dict, list)):
+                    rubric = json.dumps(rubric, ensure_ascii=False)
+                rubric_status = a.get('ai_rubric_status') or 'none'
+                if rubric_status not in ('none', 'draft', 'approved') or not rubric:
+                    rubric_status = 'none' if not rubric else 'draft'
+
                 # Database vullen
                 cursor.execute("""
                     INSERT INTO assignments 
-                    (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file,
+                     ai_rubric, ai_rubric_status, ai_auto_allowed)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     game_id,
                     a['assignment_number'],
@@ -81,7 +90,10 @@ def import_assignments(game_id, archive_path):
                     a.get('instruction', ''),
                     a.get('criteria', ''),
                     a.get('time_limit', 0),
-                    new_file_path
+                    new_file_path,
+                    rubric or None,
+                    rubric_status,
+                    0 if a.get('ai_auto_allowed', 1) in (0, '0', False) else 1,
                 ))
                 print(f"Geïmporteerd: #{a['assignment_number']} - {a['title']}")
 

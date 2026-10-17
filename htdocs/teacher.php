@@ -23,14 +23,10 @@ $db = getDB();
 $user = requireTeacher($db);
 $userId = (int)$user['id'];
 
-// AJAX endpoint voor AI Agent status heartbeat check (geldt voor alle spellen)
+// AJAX endpoint voor AI Agent status heartbeat check (geldt voor alle spellen): active (n), model_down (n) of inactive
 if (isset($_GET['ajax_ai_status'])) {
-    if (!defined('POLL_INTERVAL')) define('POLL_INTERVAL', 30);
-    // Gebruik Unix timestamp vergelijking en verruim de marge naar 120 seconden (2 min)
-    $stmt = $db->query("SELECT COUNT(*) FROM ai_service_status WHERE last_heartbeat > (strftime('%s', 'now') - 120)");
-    $count = (int)$stmt->fetchColumn();
-    
-    echo $count > 0 ? "active ($count)" : "inactive";
+    $agentStatus = aiAgentStatus($db);
+    echo $agentStatus['status'] === 'inactive' ? 'inactive' : "{$agentStatus['status']} ({$agentStatus['count']})";
     exit;
 }
 
@@ -40,6 +36,12 @@ $gameId = (int)$game['id'];
 // AJAX endpoint voor live unread count updates (alleen het huidige level van elk team)
 if (isset($_GET['ajax_unread'])) {
     echo countUnread($db, $gameId);
+    exit;
+}
+
+// AJAX endpoint voor het aantal teams met een open AI-escalatie ("🙋 Docent nodig")
+if (isset($_GET['ajax_escalations'])) {
+    echo countOpenEscalations($db, $gameId);
     exit;
 }
 
@@ -76,6 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         redirect('teacher.php');
     }
 
+    if ($action === 'set_all_ai_mode') {
+        $mode = (string)($_POST['ai_mode'] ?? '');
+        $count = setAllTeamsAiMode($db, $gameId, $mode, $userId);
+        if ($count === null) {
+            flash('error', 'Kies een geldige AI-modus.');
+        } else {
+            flash('success', "AI-modus '" . aiModeLabel($mode) . "' ingesteld voor alle $count teams; nieuwe teams krijgen deze modus ook.");
+        }
+        redirect('teacher.php');
+    }
+
     // Alle andere acties werken op een team van het actieve spel
     $team = findTeamInGame($db, (int)($_POST['team_id'] ?? 0), $gameId);
     if (!$team) {
@@ -108,6 +121,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 flash('success', isEmailEnabled() ? "Teamlink gemaild naar {$team['email']}." : 'Testmodus: er is geen mail verstuurd.');
             }
         }
+    } elseif ($action === 'set_ai_mode') {
+        $mode = (string)($_POST['ai_mode'] ?? '');
+        if (setTeamAiMode($db, (int)$team['id'], $gameId, $mode, $userId)) {
+            flash('success', "AI-modus van team '{$team['team_name']}' is nu '" . aiModeLabel($mode) . "'.");
+        } else {
+            flash('error', 'Kies een geldige AI-modus.');
+        }
     } elseif ($action === 'delete_team') {
         deleteTeam($db, (int)$team['id']);
         logAudit($db, $userId, 'TEAM_DELETE', "Team '{$team['team_name']}' (ID {$team['id']}) verwijderd uit spel #$gameId");
@@ -121,6 +141,16 @@ $teams = rankedTeams($db, $gameId);
 $total_assignments = totalAssignments($db, $gameId);
 $unread_total = countUnread($db, $gameId);
 $canAddTeam = initialLevel($game) !== null;
+$escalations = openEscalationsByTeam($db, $gameId);
+
+// Keuzelijst voor de AI-modus; $submitOnChange voor de keuze per team
+function aiModeSelect(string $current, bool $submitOnChange): string {
+    $html = '<select name="ai_mode" class="ai-mode-select"' . ($submitOnChange ? ' onchange="this.form.submit()"' : '') . ' aria-label="AI-modus">';
+    foreach (AI_MODES as $mode) {
+        $html .= '<option value="' . $mode . '"' . ($mode === $current ? ' selected' : '') . ' title="' . htmlspecialchars(AI_MODE_DESCRIPTIONS[$mode]) . '">🤖 ' . htmlspecialchars(aiModeLabel($mode)) . '</option>';
+    }
+    return $html . '</select>';
+}
 
 // Knop in een eigen POST-formulier met CSRF-token
 function teamButton(string $action, int $teamId, string $label, string $class, string $title, bool $disabled = false, ?string $confirm = null): string {
@@ -136,6 +166,9 @@ $pageTitle = 'Dashboard';
 $extraCSS = '<style>
     .disabled-btn { opacity: 0.4; pointer-events: none; }
     .btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+    .stats-overview { grid-template-columns: repeat(4, 1fr); }
+    .ai-mode-select { padding: 4px 6px; font-size: 0.8em; width: auto; border-radius: 6px; }
+    .needs-teacher { background: #fff3e0; color: #e65100; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold; text-decoration: none; white-space: nowrap; }
 </style>';
 include 'admin_header.php';
 ?>
@@ -165,6 +198,10 @@ include 'admin_header.php';
                 <div class="stat-label">Unread Messages</div>
                 <div class="stat-value" id="unread-stat"><?= $unread_total ?></div>
             </div>
+            <div class="stat-card" title="Teams waarbij de AI een docent nodig heeft">
+                <div class="stat-label">🙋 Docent nodig</div>
+                <div class="stat-value" id="escalation-stat" style="color: #e65100;"><?= count($escalations) ?></div>
+            </div>
         </div>
         
         <div class="dashboard-grid">
@@ -178,6 +215,7 @@ include 'admin_header.php';
                                 <th>Team Details</th>
                                 <th style="text-align: center;">Level</th>
                                 <th>Progress</th>
+                                <th>AI</th>
                                 <th style="text-align: right;">Acties</th>
                             </tr>
                         </thead>
@@ -201,6 +239,9 @@ include 'admin_header.php';
                                                     <span class="team-email" style="font-size: 0.85em; color: #666;">📧 <?= htmlspecialchars($team['email']) ?></span>
                                                 <?php endif; ?>
                                                 <span style="font-size: 0.75em; color: #aaa;">🕒 <?= htmlspecialchars(substr(formatDateTime($team['level_updated_at']), -5)) ?></span>
+                                                <?php if (isset($escalations[(int)$team['id']])): ?>
+                                                    <a href="messages.php?team_id=<?= (int)$team['id'] ?>" class="needs-teacher">🙋 Docent nodig</a>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </td>
@@ -217,6 +258,15 @@ include 'admin_header.php';
                                             <div class="progress-text" style="font-size: 0.75em; font-weight: 600; color: #888;"><?= $finished ? 'Voltooid!' : round($progress) . '% voltooid' ?></div>
                                         </div>
                                     </td>
+                                    <td style="vertical-align: middle;">
+                                        <form method="POST" style="margin: 0;">
+                                            <?= csrfField() ?>
+                                            <input type="hidden" name="action" value="set_ai_mode">
+                                            <input type="hidden" name="team_id" value="<?= (int)$team['id'] ?>">
+                                            <?= aiModeSelect($team['ai_mode'] ?: 'suggest', true) ?>
+                                            <noscript><button type="submit" class="btn btn-outline" style="padding: 4px 8px;">OK</button></noscript>
+                                        </form>
+                                    </td>
                                     <td style="text-align: right; vertical-align: middle;">
                                         <div class="action-btns" style="justify-content: flex-end; display: flex; gap: 4px; flex-wrap: wrap;">
                                             <?= teamButton('level_up', (int)$team['id'], '⬆️', 'btn-success', 'Level omhoog', $level < 1 || $finished) ?>
@@ -232,7 +282,7 @@ include 'admin_header.php';
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (empty($teams)): ?>
-                                <tr><td colspan="5" style="text-align: center; color: #999; padding: 40px;">Nog geen teams in dit spel.</td></tr>
+                                <tr><td colspan="6" style="text-align: center; color: #999; padding: 40px;">Nog geen teams in dit spel.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -265,6 +315,22 @@ include 'admin_header.php';
                         </p>
                     </form>
                     <?php endif; ?>
+                </div>
+
+                <div class="card" style="border-top: 5px solid #9c27b0;">
+                    <div class="card-title" style="color: #6a1b9a; font-size: 1.2em;">🤖 AI voor alle teams</div>
+                    <form method="POST" onsubmit="return confirm('Alle teams van dit spel op deze AI-modus zetten? Nieuwe teams krijgen hem ook.');" style="display: flex; gap: 8px; margin-top: 10px;">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="action" value="set_all_ai_mode">
+                        <?= aiModeSelect($game['ai_mode'] ?: 'suggest', false) ?>
+                        <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Voor alle teams</button>
+                    </form>
+                    <ul style="margin: 12px 0 0 18px; font-size: 0.8em; color: #777; line-height: 1.5;">
+                        <?php foreach (AI_MODES as $mode): ?>
+                            <li><strong><?= htmlspecialchars(aiModeLabel($mode)) ?></strong>: <?= htmlspecialchars(AI_MODE_DESCRIPTIONS[$mode]) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                    <p style="margin-top: 8px; font-size: 0.8em; color: #999;">Antwoorden en Automatisch werken alleen bij opdrachten met een goedgekeurde rubric (📘 Assignments); anders blijft het bij suggesties.</p>
                 </div>
             </div>
         </div>

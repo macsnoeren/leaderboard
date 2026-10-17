@@ -1,0 +1,26 @@
+{
+  "name": "08_kas_in_stukjes",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het was Jan de Vries, de conciërge."
+    },
+    {
+      "id": 101,
+      "sender": "teacher",
+      "text": "De dader klopt, nu het motief nog."
+    },
+    {
+      "id": 102,
+      "sender": "team",
+      "text": "Hij had gokschulden en verduisterde daarom de kas."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "goed",
+    "human": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "01_duidelijk_kas",
+  "job": {
+    "assignment_id": 0,
+    "title": "De verdwenen kas",
+    "description": "Uit de kas van de school is geld verdwenen.",
+    "instruction": "Wie heeft het geld gestolen, en waarom?",
+    "criteria": "Jan de Vries, de conciërge. Motief: gokschulden; hij verduisterde de kas om zijn schuld af te lossen. 'De conciërge' zonder naam is voldoende.",
+    "has_attachment": false,
+    "rubric": null,
+    "round": 1,
+    "max_rounds": 3,
+    "dialog": []
+  },
+  "expected": "rubric"
+}

@@ -22,6 +22,7 @@ if (!$headerGame) {
     }
 }
 $unread_total = $headerGame ? countUnread($db, (int)$headerGame['id']) : 0;
+$escalations_total = $headerGame ? countOpenEscalations($db, (int)$headerGame['id']) : 0;
 $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
@@ -53,6 +54,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         .nav-item:hover { background: #f0f2f5; color: #667eea; }
         .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
         .badge { background: #f44336; color: white; padding: 2px 7px; border-radius: 10px; font-size: 0.75em; margin-left: auto; }
+        .badge-escalation { background: #ff9800; margin-left: 4px; }
 
         .main-content { margin-left: 260px; flex: 1; padding: 40px; min-width: 0; }
         header.content-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
@@ -131,7 +133,13 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                         <span class="badge"><?= $unread_total ?></span>
                     <?php endif; ?>
                 </span>
+                <span id="escalation-badge-container">
+                    <?php if ($escalations_total > 0): ?>
+                        <span class="badge badge-escalation" title="Docent nodig">🙋 <?= $escalations_total ?></span>
+                    <?php endif; ?>
+                </span>
             </a>
+            <a href="ai_log.php" class="nav-item <?= $currentPage == 'ai_log.php' ? 'active' : '' ?>">🤖 AI-logboek</a>
             <a href="announcements.php" class="nav-item <?= $currentPage == 'announcements.php' ? 'active' : '' ?>">📣 Mededelingen</a>
             <?php if (($_SESSION['teacher_role'] ?? 'user') === 'admin'): ?>
             <a href="games.php" class="nav-item <?= $currentPage == 'games.php' ? 'active' : '' ?>">🎮 Spellen</a>
@@ -157,10 +165,18 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             .then(status => {
                 const el = document.getElementById('ai-agent-status');
                 if (!el || !status) return;
-                
-                el.innerText = status.charAt(0).toUpperCase() + status.slice(1);
-                // Gebruik startsWith om verwarring met 'inactive' te voorkomen
-                el.style.color = status.startsWith('active') ? '#2e7d32' : '#c62828';
+                // active (n) | model_down (n) | inactive; startsWith voorkomt verwarring met 'inactive'
+                const count = (status.match(/\((\d+)\)/) || ['', ''])[1];
+                if (status.startsWith('active')) {
+                    el.innerText = 'Actief (' + count + ')';
+                    el.style.color = '#2e7d32';
+                } else if (status.startsWith('model_down')) {
+                    el.innerText = 'AI-agent actief, model niet bereikbaar';
+                    el.style.color = '#e65100';
+                } else {
+                    el.innerText = 'Inactief';
+                    el.style.color = '#c62828';
+                }
             });
     }
     updateAIStatus();

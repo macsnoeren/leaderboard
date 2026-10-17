@@ -1,9 +1,9 @@
-# Testomgeving: Apache + PHP (webapp) en de Python AI-agent in één container.
+# Testomgeving: Apache + PHP (webapp). De AI-agent draait in een eigen container (Dockerfile.agent).
 # Bouwen vanuit de repo-root: docker compose -f docker/docker-compose.yml up --build
 FROM php:8.3-apache
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-requests sqlite3 \
+ && apt-get install -y --no-install-recommends sqlite3 \
  && rm -rf /var/lib/apt/lists/*
 
 # Ontwikkel-instellingen (foutmeldingen zichtbaar) en ruimte voor artifact-uploads
@@ -20,7 +20,6 @@ COPY htdocs htdocs
 COPY conf conf
 COPY bin bin
 COPY lib lib
-COPY agentic-service agentic-service
 
 # PHPMailer ophalen als de submodule lokaal niet geïnitialiseerd is
 RUN [ -f lib/PHPMailer/src/PHPMailer.php ] || ( \

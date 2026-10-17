@@ -1,0 +1,19 @@
+{
+  "name": "13_kas_synoniem",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Meneer De Vries, de huismeester. Hij zat diep in de schulden door gokken en pakte daarom het geld uit de kas."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": [
+      "voldoende",
+      "goed"
+    ],
+    "human": null
+  }
+}

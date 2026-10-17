@@ -1,0 +1,16 @@
+{
+  "name": "05_vaag_analyse",
+  "job": {
+    "assignment_id": 0,
+    "title": "Het motief",
+    "description": "Er zijn meerdere verdachten.",
+    "instruction": "Analyseer het motief.",
+    "criteria": "Een goede analyse van het motief.",
+    "has_attachment": false,
+    "rubric": null,
+    "round": 1,
+    "max_rounds": 3,
+    "dialog": []
+  },
+  "expected": "vragen"
+}

@@ -34,32 +34,11 @@ mkdir -p "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads"
 (cd "$APP/htdocs" && php setup.php > /dev/null 2>&1) || true
 php "$APP/bin/migrate.php"
 
-# AI-agent: eigen API key in de database en config.py naast het script
+# API key voor de AI-agent; die draait in een eigen container (service 'agent')
 if [ "${AI_AGENT_ENABLED:-1}" = "1" ]; then
     sqlite3 "$DB" "INSERT INTO api_keys (key_name, api_key)
                    SELECT 'docker-agent', lower(hex(randomblob(32)))
                    WHERE NOT EXISTS (SELECT 1 FROM api_keys WHERE key_name = 'docker-agent');"
-    API_KEY=$(sqlite3 "$DB" "SELECT api_key FROM api_keys WHERE key_name = 'docker-agent' LIMIT 1;")
-    MODELS=$(echo "${AI_MODELS:-qwen2.5:1.5b}" | tr -d ' ' | sed 's/[^,][^,]*/"&"/g; s/,/, /g')
-
-    cat > "$APP/agentic-service/config.py" <<EOF
-API_KEY = "$API_KEY"
-BASE_URL = "http://localhost:$APP_PORT/api.php"
-OLLAMA_URL = "${OLLAMA_URL:-http://localhost:11434/api/generate}"
-LLM_MODELS = [$MODELS]
-POLL_INTERVAL = ${AI_POLL_INTERVAL:-30}
-EOF
-
-    # Agent op de achtergrond, herstart automatisch als hij stopt
-    (
-        sleep 3
-        cd "$APP/agentic-service"
-        while true; do
-            python3 -u process_ai_feedback.py || true
-            echo "AI-agent gestopt, herstart over 10s..."
-            sleep 10
-        done
-    ) &
 fi
 
 chown -R www-data:www-data "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads"

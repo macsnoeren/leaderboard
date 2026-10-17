@@ -28,6 +28,8 @@ const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_LENGTH = 6;
 const TEAM_NAME_MAX_LENGTH = 50;
 const LOGO_DIR = 'uploads';
+// Privacytekst op join.php en team.php (DESIGN §11, aandachtspunt AVG)
+const PRIVACY_NOTICE = 'Deel geen persoonsgegevens of andere gevoelige informatie in de chat (zoals adressen, telefoonnummers, wachtwoorden of gegevens over gezondheid). Berichten kunnen met hulp van AI worden verwerkt.';
 
 // ---------------------------------------------------------------------------
 // Spel ophalen, status en toegang
@@ -220,6 +222,12 @@ function totalAssignments(PDO $db, int $gameId): int {
     return (int)$stmt->fetchColumn();
 }
 
+function findAssignmentInGame(PDO $db, int $id, int $gameId): ?array {
+    $stmt = $db->prepare("SELECT * FROM assignments WHERE id = ? AND game_id = ?");
+    $stmt->execute([$id, $gameId]);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
 function findTeamInGame(PDO $db, int $teamId, int $gameId): ?array {
     $stmt = $db->prepare("SELECT * FROM teams WHERE id = ? AND game_id = ?");
     $stmt->execute([$teamId, $gameId]);
@@ -286,8 +294,9 @@ function teamNameTaken(PDO $db, int $gameId, string $name): bool {
 }
 
 /**
- * Voegt een team toe aan een spel, met het startlevel van initialLevel(). Geeft het team terug,
- * of een foutmelding. Zonder $userId is het een zelfaanmelding (audit TEAM_REGISTER).
+ * Voegt een team toe aan een spel, met het startlevel van initialLevel() en de standaard AI-modus van
+ * het spel (games.ai_mode). Geeft het team terug, of een foutmelding. Zonder $userId is het een
+ * zelfaanmelding (audit TEAM_REGISTER).
  */
 function createTeam(PDO $db, array $game, string $name, ?string $email, ?int $userId) {
     $name = trim($name);
@@ -301,9 +310,14 @@ function createTeam(PDO $db, array $game, string $name, ?string $email, ?int $us
     if (teamNameTaken($db, (int)$game['id'], $name)) {
         return 'Er is in dit spel al een team met deze naam. Kies een andere naam.';
     }
+    // Uit de database, niet uit $game: dat kan van vóór een wijziging van de standaard zijn
+    $stmt = $db->prepare("SELECT ai_mode FROM games WHERE id = ?");
+    $stmt->execute([(int)$game['id']]);
+    $aiMode = $stmt->fetchColumn();
+    $aiMode = isValidAiMode($aiMode) ? $aiMode : 'suggest';
     try {
-        $stmt = $db->prepare("INSERT INTO teams (game_id, team_name, email, current_level, level_updated_at, access_token) VALUES (?, ?, ?, ?, datetime('now'), ?)");
-        $stmt->execute([(int)$game['id'], $name, $email, $level, bin2hex(random_bytes(32))]);
+        $stmt = $db->prepare("INSERT INTO teams (game_id, team_name, email, current_level, level_updated_at, access_token, ai_mode) VALUES (?, ?, ?, ?, datetime('now'), ?, ?)");
+        $stmt->execute([(int)$game['id'], $name, $email, $level, bin2hex(random_bytes(32)), $aiMode]);
     } catch (PDOException $e) {
         // Unieke index: tegelijk dezelfde naam aangemeld
         return 'Er is in dit spel al een team met deze naam. Kies een andere naam.';
@@ -314,10 +328,10 @@ function createTeam(PDO $db, array $game, string $name, ?string $email, ?int $us
 }
 
 /**
- * Verwijdert een team met zijn berichten en downloads. Het archief blijft (met teamnaam).
+ * Verwijdert een team met zijn berichten, downloads en AI-gegevens. Het archief blijft (met teamnaam).
  */
 function deleteTeam(PDO $db, int $teamId): void {
-    foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence'] as $table) {
+    foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
         $db->prepare("DELETE FROM $table WHERE team_id = ?")->execute([$teamId]);
     }
     $db->prepare("DELETE FROM announcements WHERE team_id = ?")->execute([$teamId]);
@@ -325,9 +339,10 @@ function deleteTeam(PDO $db, int $teamId): void {
 }
 
 /**
- * Level omhoog: archiveert de chat van het huidige level (zonder AI-suggesties) met teamnaam,
- * verwijdert alleen de suggesties van dat level en verhoogt het level. De berichten zelf blijven
- * staan, zodat ze bij een level terug weer zichtbaar zijn. Stopt bij N+1 (Finish).
+ * Level omhoog: archiveert de chat van het huidige level (zonder AI-suggesties; AI-berichten als
+ * "AI: …") met teamnaam, verwijdert alleen de suggesties van dat level, sluit open escalaties en
+ * verhoogt het level. De berichten zelf blijven staan, zodat ze bij een level terug weer zichtbaar
+ * zijn. Stopt bij N+1 (Finish). $userId null = de AI (submitEvaluation()).
  */
 function levelUp(PDO $db, int $teamId, ?int $userId): bool {
     $db->beginTransaction();
@@ -346,12 +361,14 @@ function levelUp(PDO $db, int $teamId, ?int $userId): bool {
         $msgs->execute([$teamId, $level]);
         $history = [];
         foreach ($msgs->fetchAll(PDO::FETCH_ASSOC) as $m) {
-            $history[] = ($m['sender'] === 'team' ? 'Team: ' : 'Docent: ') . $m['message'];
+            $prefix = ['team' => 'Team: ', 'ai' => 'AI: '][$m['sender']] ?? 'Docent: ';
+            $history[] = $prefix . $m['message'];
         }
         $db->prepare("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
            ->execute([(int)$team['game_id'], $teamId, $team['team_name'], $level, implode("\n", $history)]);
 
         $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'")->execute([$teamId, $level]);
+        resolveEscalations($db, $teamId, $level, $userId);
         $db->prepare("UPDATE teams SET current_level = ?, level_updated_at = datetime('now'), ai_processing_by = NULL, ai_processing_at = NULL WHERE id = ?")
            ->execute([$level + 1, $teamId]);
 
@@ -379,6 +396,7 @@ function levelDown(PDO $db, int $teamId, ?int $userId): bool {
             return false;
         }
         $newLevel = (int)$team['current_level'] - 1;
+        resolveEscalations($db, $teamId, (int)$team['current_level'], $userId);
 
         $db->prepare("DELETE FROM completed_assignments WHERE id = (SELECT id FROM completed_assignments WHERE team_id = ? AND assignment_number = ? ORDER BY id DESC LIMIT 1)")
            ->execute([$teamId, $newLevel]);
@@ -445,14 +463,14 @@ function utcToLocalInput(?string $utc): string {
 }
 
 /**
- * Maakt een spel leeg: teams met hun berichten, downloads en de mededelingen gaan weg; archief,
- * opdrachten en instellingen blijven. Het spel gaat terug naar concept.
+ * Maakt een spel leeg: teams met hun berichten, downloads, AI-gegevens en de mededelingen gaan weg;
+ * archief, opdrachten en instellingen blijven. Het spel gaat terug naar concept.
  */
 function resetGame(PDO $db, int $gameId, ?int $userId): void {
     $db->beginTransaction();
     try {
         $teamIds = "SELECT id FROM teams WHERE game_id = ?";
-        foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence'] as $table) {
+        foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
             $db->prepare("DELETE FROM $table WHERE team_id IN ($teamIds)")->execute([$gameId]);
         }
         $db->prepare("DELETE FROM announcements WHERE game_id = ?")->execute([$gameId]);
@@ -468,8 +486,9 @@ function resetGame(PDO $db, int $gameId, ?int $userId): void {
 }
 
 /**
- * Kopieert de opdrachten van een ander spel, met een eigen kopie van elk bestand. De nummering
- * loopt door na het hoogste bestaande nummer. Geeft het aantal gekopieerde opdrachten terug.
+ * Kopieert de opdrachten van een ander spel, met een eigen kopie van elk bestand en de rubric
+ * (zonder de dialoog van de opdracht-assistent). De nummering loopt door na het hoogste bestaande
+ * nummer. Geeft het aantal gekopieerde opdrachten terug.
  */
 function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = null, ?string $htdocsDir = null): int {
     $htdocsDir = $htdocsDir ?? __DIR__ . '/../htdocs';
@@ -484,7 +503,7 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
     $stmt->execute([$toGame]);
     $number = (int)$stmt->fetchColumn();
 
-    $insert = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $insert = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file, ai_rubric, ai_rubric_status, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $copied = [];
     $db->beginTransaction();
     try {
@@ -499,7 +518,8 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
                 }
                 $copied[] = $htdocsDir . '/' . $file;
             }
-            $insert->execute([$toGame, $number, $a['title'], $a['description'], $a['instruction'], $a['criteria'], $a['time_limit'], $file]);
+            $insert->execute([$toGame, $number, $a['title'], $a['description'], $a['instruction'], $a['criteria'], $a['time_limit'], $file,
+                              $a['ai_rubric'] ?? null, $a['ai_rubric_status'] ?? 'none', (int)($a['ai_auto_allowed'] ?? 1)]);
         }
         logAudit($db, $userId, 'ASSIGNMENTS_COPY', count($source) . " opdrachten gekopieerd van spel #$fromGame naar spel #$toGame");
         $db->commit();
@@ -519,3 +539,6 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
 function teamDashboardUrl(string $token): string {
     return BASE_URL . '/team.php?token=' . $token;
 }
+
+// AI-functies (resolveEscalations(), isValidAiMode(), …). Onderaan, omdat ai.php zelf game.php nodig heeft.
+require_once __DIR__ . '/ai.php';

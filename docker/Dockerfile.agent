@@ -1,0 +1,18 @@
+# AI-agent (agentic-service/main.py): beoordeelt teamberichten en helpt met rubrics, via Ollama.
+# Bouwen vanuit de repo-root: docker compose -f docker/docker-compose.yml up --build agent
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir requests==2.32.3 \
+ && useradd --create-home --uid 10001 agent
+
+WORKDIR /app
+COPY agentic-service/main.py .
+COPY agentic-service/agentic agentic
+# config.py leest alles uit de environment (main.py doet "import config")
+COPY docker/agent-config.py config.py
+COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint
+RUN chmod +x /usr/local/bin/agent-entrypoint
+
+USER agent
+ENV PYTHONUNBUFFERED=1
+ENTRYPOINT ["agent-entrypoint"]

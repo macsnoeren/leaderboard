@@ -1,0 +1,16 @@
+{
+  "name": "03_duidelijk_alibi",
+  "job": {
+    "assignment_id": 0,
+    "title": "De alibi's",
+    "description": "Drie mensen hebben een alibi.",
+    "instruction": "Noem de drie mensen met een alibi en hun alibi.",
+    "criteria": "De tuinman (camera 3), de directeur (op reis in Spanje) en de kok (ziek thuis, briefje van de huisarts). Twee van de drie met alibi is voldoende, alle drie is goed.",
+    "has_attachment": false,
+    "rubric": null,
+    "round": 1,
+    "max_rounds": 3,
+    "dialog": []
+  },
+  "expected": "rubric"
+}

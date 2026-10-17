@@ -1,0 +1,16 @@
+{
+  "name": "01_kas_compleet",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het was Jan de Vries, de conciërge. Hij had gokschulden en heeft daarom geld uit de kas verduisterd."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "goed",
+    "human": false
+  }
+}

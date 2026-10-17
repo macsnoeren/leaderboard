@@ -1,0 +1,55 @@
+{
+  "kas": {
+    "assignment_title": "De verdwenen kas",
+    "description": "Uit de kas van de school is 2.000 euro verdwenen. Onderzoek de verklaringen en de camerabeelden.",
+    "instruction": "Wie heeft het geld uit de kas gestolen, en waarom?",
+    "criteria": "Jan de Vries, de conciërge. Motief: gokschulden; hij verduisterde de kas om zijn schuld af te lossen.",
+    "rubric": {
+      "kern": "Het team moet de dader én het motief noemen.",
+      "aspecten": [
+        {"naam": "Dader", "verplicht": true, "onvoldoende": "Geen of een verkeerde persoon genoemd, of meerdere personen tegelijk.", "voldoende": "De conciërge genoemd, zonder naam.", "goed": "Jan de Vries (de conciërge) genoemd."},
+        {"naam": "Motief", "verplicht": false, "onvoldoende": "Geen of een verkeerd motief.", "voldoende": "Geldproblemen of schulden genoemd.", "goed": "Gokschulden en het verduisteren van de kas verbonden."}
+      ],
+      "ook_goed": ["meneer De Vries", "de conciërge", "de huismeester (zo noemen leerlingen de conciërge)"],
+      "veelgemaakte_fouten": ["De tuinman: alibi bevestigd op camera 3", "De directeur: was op reis"],
+      "verduidelijkingen_vraag": ["Met 'motief' bedoelen we: waarom deed de dader het?", "Jullie hoeven geen bewijs te leveren, alleen te noemen wie en waarom."],
+      "niveau_regel": "voldoende = alle verplichte aspecten minimaal voldoende; goed = alle aspecten goed"
+    },
+    "clarifications": [{"role": "ai", "message": "Is 'de conciërge' zonder naam ook goed?"}, {"role": "teacher", "message": "Dat is voldoende; met de naam Jan de Vries is het goed."}]
+  },
+  "tijd": {
+    "assignment_title": "Het tijdstip",
+    "description": "Op de camerabeelden van de hal is de inbraak te zien.",
+    "instruction": "Hoe laat vond de inbraak plaats?",
+    "criteria": "Zie de bijlage: het tijdstip op de camerabeelden.",
+    "rubric": {
+      "kern": "Het team moet het tijdstip van de inbraak noemen.",
+      "aspecten": [
+        {"naam": "Tijdstip", "verplicht": true, "onvoldoende": "Geen tijdstip, een tijd buiten 23:10–23:20, of een ruim tijdvak.", "voldoende": "Een tijdstip tussen 23:10 en 23:20.", "goed": "Precies 23:15 (ook als 23.15 uur of kwart over elf 's avonds)."}
+      ],
+      "ook_goed": ["23.15 uur", "kwart over elf 's avonds"],
+      "veelgemaakte_fouten": ["22:00: toen ging alleen het alarm uit", "Een tijdvak als 'tussen 22 en 1 uur'"],
+      "verduidelijkingen_vraag": ["We vragen het tijdstip in uren en minuten; de datum hoeft niet."],
+      "niveau_regel": "voldoende = alle verplichte aspecten minimaal voldoende; goed = alle aspecten goed"
+    },
+    "clarifications": [{"role": "ai", "message": "Welk tijdstip staat op de camerabeelden?"}, {"role": "teacher", "message": "23:15. Een marge van 5 minuten mag."}]
+  },
+  "plek": {
+    "assignment_title": "De verstopplek",
+    "description": "Het geld is niet meer in de school gevonden, behalve een deel ervan op één plek.",
+    "instruction": "Waar heeft de dader het geld verstopt?",
+    "criteria": "In het archief in de kelder, achter de oude dossierkasten.",
+    "rubric": {
+      "kern": "Het team moet de plek noemen waar het geld verstopt was.",
+      "aspecten": [
+        {"naam": "Plek", "verplicht": true, "onvoldoende": "Geen of een verkeerde plek.", "voldoende": "De kelder genoemd.", "goed": "Het archief in de kelder genoemd."},
+        {"naam": "Detail", "verplicht": false, "onvoldoende": "Geen detail.", "voldoende": "Bij de kasten genoemd.", "goed": "Achter de oude dossierkasten genoemd."}
+      ],
+      "ook_goed": ["de archiefruimte beneden"],
+      "veelgemaakte_fouten": ["De kantine", "Het kantoor van de conciërge"],
+      "verduidelijkingen_vraag": ["Met 'de plek' bedoelen we een ruimte in de school."],
+      "niveau_regel": "voldoende = alle verplichte aspecten minimaal voldoende; goed = alle aspecten goed"
+    },
+    "clarifications": []
+  }
+}

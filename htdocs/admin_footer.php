@@ -18,9 +18,24 @@
                 });
         }
 
+        // Teams waarbij de AI een docent nodig heeft: badge bij Messages en de teller op het dashboard
+        function updateEscalationBadge() {
+            fetch('teacher.php?ajax_escalations=1')
+                .then(r => r.text())
+                .then(count => {
+                    const container = document.getElementById('escalation-badge-container');
+                    const statDisplay = document.getElementById('escalation-stat'); // Alleen in het dashboard
+                    if (statDisplay) statDisplay.innerText = count;
+                    if (container) {
+                        container.innerHTML = parseInt(count) > 0 ? `<span class="badge badge-escalation" title="Docent nodig">🙋 ${parseInt(count)}</span>` : '';
+                    }
+                });
+        }
+
         // De AI Status wordt al afgehandeld in admin_header.php
-        setInterval(() => { updateUnreadBadge(); }, 10000);
+        setInterval(() => { updateUnreadBadge(); updateEscalationBadge(); }, 10000);
         updateUnreadBadge();
+        updateEscalationBadge();
     </script>
     <?php if (isset($extraJS)) echo $extraJS; ?>
 </body>
