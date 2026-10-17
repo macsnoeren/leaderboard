@@ -20,7 +20,10 @@
   ],
   "expected": {
     "intent": "overig",
-    "verdict": null,
+    "verdict": [
+      "voldoende",
+      "goed"
+    ],
     "human": false
   }
 }

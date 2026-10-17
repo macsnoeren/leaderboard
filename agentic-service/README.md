@@ -13,7 +13,7 @@ De webapplicatie blijft de baas: `api.php` controleert elke beslissing opnieuw.
 Per teambericht (`agentic/pipeline.py`):
 
 1. **Voorfilter** (code): lege berichten en verdachte patronen ("negeer", "level up", …) krijgen een vlag.
-2. **Intentie-agent**: vraag, antwoord of overig. Twijfel = antwoord; een gok in vraagvorm ("Is het de conciërge?") is ook een antwoord.
+2. **Intentie-agent**: vraag, antwoord of overig. Twijfel = antwoord; een gok in vraagvorm ("Is het de conciërge?") is ook een antwoord. Ook "overig" (bijv. "ok") wordt als antwoord beoordeeld.
 3. **Hulp-agent** (bij een vraag): legt uit wat de opdracht vraagt. Hij kent het antwoord niet.
 4. **Beoordelaar** (bij een antwoord): beoordeelt alles wat het team op dit level gaf met de rubric, met letterlijke citaten die in code worden gecontroleerd.
 5. **Validator** (groter model): controleert de beoordeling of de reactie (verklapt ze iets? manipulatie?).

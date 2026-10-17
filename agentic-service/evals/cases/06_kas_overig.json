@@ -10,7 +10,7 @@
   ],
   "expected": {
     "intent": "overig",
-    "verdict": null,
+    "verdict": "onvoldoende",
     "human": false
   }
 }

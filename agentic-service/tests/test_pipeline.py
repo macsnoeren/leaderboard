@@ -56,14 +56,17 @@ class PipelineTest(unittest.TestCase):
         payload = run(FakeLLM(intent=LLMError("timeout")), make_task())
         self.assertEqual((payload["decision"], payload["intent"]), ("escalate", "antwoord"))
 
-    def test_other_no_assessment(self):
-        # (4) 'overig': geen beoordeling en niets voor team of docent (decision 'ignored')
-        llm = FakeLLM(intent=intent("overig", True))
+    def test_other_is_assessed(self):
+        # (4) 'overig' wordt ook beoordeeld, als antwoord; intent_json houdt 'overig'
+        llm = FakeLLM(intent=intent("overig", True), assessor=assessment("onvoldoende"),
+                      validator_answer=validator_answer("onvoldoende"))
         payload = run(llm, make_task([{"id": 11, "sender": "team", "time": "t", "text": "ok, wacht even"}]))
-        self.assertEqual(payload["decision"], "ignored")
-        self.assertEqual(payload["intent"], "overig")
-        self.assertEqual(llm.agents_called(), ["intent"])
-        self.assertIsNone(payload["verdict"])
+        self.assertEqual(payload["intent"], "antwoord")
+        self.assertEqual(payload["intent_json"]["effective"], "overig")
+        self.assertEqual(llm.agents_called(), ["intent", "assessor", "validator_answer"])
+        self.assertEqual(payload["verdict"], "onvoldoende")
+        self.assertNotEqual(payload["decision"], "ignored")
+        self.assertIn("Intentie overig", payload["reason"])
 
     def test_unsure_other_is_assessed(self):
         llm = FakeLLM(intent=intent("overig", False), assessor=assessment("goed"), validator_answer=validator_answer("goed"))

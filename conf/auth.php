@@ -333,7 +333,11 @@ function requireTeacher(PDO $db): array {
         && (int)$user['session_version'] === (int)($_SESSION['session_version'] ?? -1);
 
     if (!$valid) {
-        endSession();
+        // Alleen een ingelogde sessie beëindigen: een oude tab die blijft pollen mag de
+        // CSRF-token van een login- of setupformulier in dezelfde sessie niet wissen
+        if ($loggedIn) {
+            endSession();
+        }
         denyRequest('login.php' . ($loggedIn ? '?expired=1' : ''), 401);
     }
 

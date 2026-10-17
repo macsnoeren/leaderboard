@@ -35,8 +35,8 @@ class Pipeline:
         self.keepalive = keepalive or (lambda task: None)
 
     def process(self, task, agent_id):
-        """Payload voor submit_evaluation. 'overig' geeft decision 'ignored': er gaat niets naar team of
-        docent, maar de server legt vast dat dit bericht bekeken is (en geeft de claim vrij)."""
+        """Payload voor submit_evaluation. 'overig' wordt als antwoord beoordeeld (intent 'antwoord');
+        de oorspronkelijke intentie staat in intent_json."""
         start = time.monotonic()
         state = {"task": task, "jsons": {}, "models": [], "intent": None}
         message = context.new_message(task)
@@ -88,7 +88,12 @@ class Pipeline:
         state["jsons"]["intent_json"] = dict(meta, effective=effective)
         state["intent"] = effective
         if effective == "overig":
-            return {"decision": "ignored", "reason": f"Geen vraag of antwoord: {raw.get('toelichting', '')}"}
+            # Ook "ok" of "hoi" wordt beoordeeld: de beoordelaar kijkt naar alles wat het team op dit level gaf
+            state["intent"] = "antwoord"
+            answer = self._answer(state, ctx)
+            answer["reason"] = (f"Intentie overig ({raw.get('toelichting', '')}); toch beoordeeld als antwoord. "
+                                + answer["reason"])
+            return answer
         if effective == "vraag":
             result = self._question(state, ctx)
             if result is not None:

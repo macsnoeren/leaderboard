@@ -102,7 +102,8 @@ def run_pipeline(filters):
 
         marks = [
             tally("intentie-agent", raw_intent == exp["intent"]),
-            tally("intentie (na validator)", payload["intent"] == exp["intent"]),
+            # Een overig-bericht wordt als antwoord beoordeeld
+            tally("intentie (na validator)", payload["intent"] == ("antwoord" if exp["intent"] == "overig" else exp["intent"])),
             tally("beoordelaar", check(exp["verdict"], assessor_verdict), exp["verdict"] is not None),
             tally("validator", check(exp["verdict"], validator_verdict), exp["verdict"] is not None and validator_verdict is not None),
             tally("mens nodig", human == exp["human"], exp["human"] is not None),

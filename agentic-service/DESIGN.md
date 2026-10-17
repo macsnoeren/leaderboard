@@ -203,7 +203,9 @@ docent ziet geen JSON.
      aan de hulp-agent ontfutselen.
    - Een **gemengd bericht** (een antwoord plus een vraag) telt als `antwoord`. De
      beoordelaar mag in zijn feedback ook op de vraag ingaan, binnen dezelfde verklap-regels.
-   - `overig` ("ok", "wacht even", "dank je"): niets doen, geen beoordeling en geen poging.
+   - `overig` ("ok", "wacht even", "dank je"): wordt **toch beoordeeld als antwoord** (zie §13). De
+     beoordelaar kijkt naar alles wat het team op dit level gaf, dus ook een eerder antwoord dat nog
+     geen reactie kreeg.
    - **`zeker = false` → het bericht telt als `antwoord`** en gaat naar de beoordelaar. Dat
      is de veilige kant: een antwoord wordt streng gecontroleerd (beoordelaar + validator),
      terwijl de hulp-agent juist niets mag beoordelen. Twijfel over `overig` valt ook onder
@@ -329,7 +331,7 @@ alsnog als antwoord beoordeeld (één keer, daarna escalatie).
 | voldoende/goed | nee | suggestie (level-up-advies) | escalatie | escalatie |
 | vraag | ja | suggestie (voorgestelde reactie) | reactie aan team | reactie aan team |
 | vraag | nee | suggestie (voorgestelde reactie) | escalatie | escalatie |
-| overig | n.v.t. | niets | niets | niets |
+| overig | n.v.t. | als antwoord (rijen hierboven) | als antwoord | als antwoord |
 
 Een vraag leidt **nooit** tot een oordeel of een level-up, in geen enkele modus.
 
@@ -635,10 +637,10 @@ Antwoorden van Maurice op de eerste versie van dit ontwerp (2026-10-17):
 
 ## 13. Afwijkingen bij de implementatie
 
-- **`overig` wordt wel ingediend**, met `decision = 'ignored'`: team en docent krijgen niets, maar de
-  server legt vast dat het bericht bekeken is. Zonder die rij bood `get_pending` hetzelfde bericht elke
-  ronde opnieuw aan (en bleef het team 5 minuten geclaimd). `get_pending` slaat daarom elk teambericht
-  over dat al een beoordeling heeft; zo leidt ook een verworpen suggestie niet tot een nieuwe.
+- **`overig` wordt ook beoordeeld** (op verzoek van de docent): de pijplijn behandelt het als een
+  antwoord (`intent = antwoord`, in `intent_json` blijft `overig` zichtbaar). Het telt daardoor ook als
+  poging voor `ai_max_attempts`. `get_pending` slaat elk teambericht over dat al een beoordeling heeft;
+  zo leidt een verworpen suggestie niet tot een nieuwe.
 - **Harde vlaggen escaleren in elke modus**: `flag_injection`, `manipulatie_gedetecteerd` en elke
   modelfout geven `escalate`, ook in `suggest`. Gewone twijfel volgt de tabel in §6 (in `suggest`
   een suggestie). Ook de pogingen- en vragenlimiet tellen als twijfel.
