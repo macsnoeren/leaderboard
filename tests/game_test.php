@@ -365,6 +365,17 @@ $db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_coun
 check('downloads tellen mee', assignmentLockLevel($db, $game) === 2);
 $db->exec("INSERT INTO ai_team_progress (game_id, team_id, assignment_number) VALUES ($game, $team, 3)");
 check('AI-voortgang telt mee', assignmentLockLevel($db, $game) === 3);
+$db = freshDb();
+$game = addGame($db, 'running');
+addAssignments($db, $game, 3);
+$team = addTeam($db, $game, 'Vorige ronde', 1);
+levelUp($db, $team, 1);
+levelUp($db, $team, 1);
+check('voor de reset: team en archief → 3', assignmentLockLevel($db, $game) === 3);
+resetGame($db, $game, 1);
+check('na resetGame: archief blijft, maar niets ligt vast', (int)$db->query("SELECT COUNT(*) FROM completed_assignments WHERE game_id = $game")->fetchColumn() === 2 && assignmentLockLevel($db, $game) === 0);
+$ids = assignmentOrder($db, $game);
+check('na resetGame: volgorde wijzigen mag', reorderAssignments($db, $game, array_reverse($ids), 1) === null);
 
 echo "reorderAssignments\n";
 $db = freshDb();

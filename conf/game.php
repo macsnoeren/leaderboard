@@ -631,18 +631,19 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
 }
 
 /**
- * Hoogste opdrachtnummer waar teamdata aan hangt (level, berichten, downloads, archief, AI).
- * Opdrachten 1..K liggen vast: verplaatsen of verwijderen zou een team aan een andere opdracht
- * koppelen. 0 = alles mag; kan N+1 zijn als een team op Finish staat.
+ * Hoogste opdrachtnummer waar data van de huidige teams van het spel aan hangt (level, berichten,
+ * downloads, archief, AI). Opdrachten 1..K liggen vast: verplaatsen of verwijderen zou een team aan
+ * een andere opdracht koppelen. 0 = alles mag; kan N+1 zijn als een team op Finish staat.
+ * Archiefregels van verwijderde teams (bijv. na resetGame()) tellen niet: die horen bij geen team meer.
  */
 function assignmentLockLevel(PDO $db, int $gameId): int {
     $stmt = $db->prepare("SELECT MAX(n) FROM (
         SELECT MAX(current_level) AS n FROM teams WHERE game_id = :g
-        UNION ALL SELECT MAX(tm.assignment_number) FROM team_messages tm JOIN teams t ON t.id = tm.team_id WHERE t.game_id = :g
-        UNION ALL SELECT MAX(td.assignment_number) FROM team_downloads td JOIN teams t ON t.id = td.team_id WHERE t.game_id = :g
-        UNION ALL SELECT MAX(assignment_number) FROM completed_assignments WHERE game_id = :g
-        UNION ALL SELECT MAX(assignment_number) FROM ai_evaluations WHERE game_id = :g
-        UNION ALL SELECT MAX(assignment_number) FROM ai_team_progress WHERE game_id = :g)");
+        UNION ALL SELECT MAX(x.assignment_number) FROM team_messages x JOIN teams t ON t.id = x.team_id WHERE t.game_id = :g
+        UNION ALL SELECT MAX(x.assignment_number) FROM team_downloads x JOIN teams t ON t.id = x.team_id WHERE t.game_id = :g
+        UNION ALL SELECT MAX(x.assignment_number) FROM completed_assignments x JOIN teams t ON t.id = x.team_id WHERE t.game_id = :g
+        UNION ALL SELECT MAX(x.assignment_number) FROM ai_evaluations x JOIN teams t ON t.id = x.team_id WHERE t.game_id = :g
+        UNION ALL SELECT MAX(x.assignment_number) FROM ai_team_progress x JOIN teams t ON t.id = x.team_id WHERE t.game_id = :g)");
     $stmt->execute([':g' => $gameId]);
     return max(0, (int)$stmt->fetchColumn());
 }
