@@ -121,7 +121,7 @@ check('level-up lukt', levelUp($db, $team, 7));
 check('team staat op level 2', teamLevel($db, $team) === 2);
 $archive = $db->query("SELECT * FROM completed_assignments")->fetchAll(PDO::FETCH_ASSOC);
 check('één archiefregel met teamnaam, spel en level', count($archive) === 1 && $archive[0]['team_name'] === 'De Speurders' && (int)$archive[0]['game_id'] === $game && (int)$archive[0]['assignment_number'] === 1);
-check('archief bevat de chat met AI: … en zonder suggestie', $archive[0]['chat_history'] === "Team: Ons antwoord\nDocent: Klopt!\nAI: Sterk speurwerk!");
+check('archief bevat de chat met AI: … en zonder suggestie', $archive[0]['chat_history'] === "Team: Ons antwoord\nOperator: Klopt!\nAI: Sterk speurwerk!");
 check('teamberichten blijven staan', (int)$db->query("SELECT COUNT(*) FROM team_messages WHERE team_id = $team AND assignment_number = 1 AND sender != 'suggestion'")->fetchColumn() === 3);
 check('suggesties van dat level zijn weg', (int)$db->query("SELECT COUNT(*) FROM team_messages WHERE sender = 'suggestion'")->fetchColumn() === 0);
 check('audit-regel met user_id', (int)$db->query("SELECT user_id FROM audit_logs WHERE event_type = 'TEAM_LEVEL_UP'")->fetchColumn() === 7);

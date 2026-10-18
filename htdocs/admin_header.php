@@ -53,7 +53,7 @@ if ($isAdminUser) {
 function navBadges(int $unread, int $escalations): array {
     return [
         $unread > 0 ? '<span class="count" title="Ongelezen berichten">' . $unread . '<span class="sr-only"> ongelezen</span></span>' : '',
-        $escalations > 0 ? '<span class="count count-warning" title="Docent nodig">' . icon('hand') . $escalations . '<span class="sr-only"> keer docent nodig</span></span>' : '',
+        $escalations > 0 ? '<span class="count count-warning" title="Operator nodig">' . icon('hand') . $escalations . '<span class="sr-only"> keer operator nodig</span></span>' : '',
     ];
 }
 [$unreadBadge, $escalationBadge] = navBadges($unread_total, $escalations_total);
@@ -131,7 +131,7 @@ function navBadges(int $unread, int $escalations): array {
         <?php if ($headerGame): ?><span class="game"><?= htmlspecialchars($headerGame['name']) ?></span><?php endif; ?>
     </header>
     <nav class="sidebar" id="sidebar" data-theme="ops" aria-label="Hoofdmenu">
-        <a href="teacher.php" class="sidebar-brand"><?= brandMark(30) ?><span>OperationRoom<small>Docenten</small></span></a>
+        <a href="teacher.php" class="sidebar-brand"><?= brandMark(30) ?><span>OperationRoom<small>Operators</small></span></a>
         <div class="sidebar-zebra" aria-hidden="true"></div>
         <div class="game-picker">
             <div class="field-label" id="game-picker-label">Actief spel</div>
@@ -178,8 +178,8 @@ function navBadges(int $unread, int $escalations): array {
             <div class="user-block">
                 <span class="avatar"><?= icon('user') ?></span>
                 <span class="who">
-                    <strong><?= htmlspecialchars($_SESSION['teacher_display_name'] ?? $_SESSION['teacher_username'] ?? 'Docent') ?></strong>
-                    <span><?= $isAdminUser ? 'Beheerder' : 'Docent' ?></span>
+                    <strong><?= htmlspecialchars($_SESSION['teacher_display_name'] ?? $_SESSION['teacher_username'] ?? 'Operator') ?></strong>
+                    <span><?= $isAdminUser ? 'Beheerder' : 'Operator' ?></span>
                 </span>
             </div>
             <a href="profile.php" class="nav-item<?= in_array($currentPage, ['profile.php', 'password.php'], true) ? ' active' : '' ?>"><?= icon('user') ?><span>Profiel</span></a>

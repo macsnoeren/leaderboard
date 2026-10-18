@@ -221,10 +221,10 @@ include 'admin_header.php';
                 <div class="stat-value" id="unread-stat"><?= $unread_total ?></div>
                 <div class="stat-hint"><a href="messages.php">Naar berichten</a></div>
             </div>
-            <div class="stat<?= $escalationCount > 0 ? ' is-warning' : '' ?>" title="Teams waarbij de AI een docent nodig heeft">
-                <div class="stat-label"><?= icon('hand') ?>Docent nodig</div>
+            <div class="stat<?= $escalationCount > 0 ? ' is-warning' : '' ?>" title="Teams waarbij de AI een operator nodig heeft">
+                <div class="stat-label"><?= icon('hand') ?>Operator nodig</div>
                 <div class="stat-value" id="escalation-stat"><?= $escalationCount ?></div>
-                <div class="stat-hint">Teams die op een docent wachten</div>
+                <div class="stat-hint">Teams die op een operator wachten</div>
             </div>
         </div>
 
@@ -264,7 +264,7 @@ include 'admin_header.php';
                                                 <?php if ($team['email']): ?><span><?= icon('mail') ?><?= htmlspecialchars($team['email']) ?></span><?php endif; ?>
                                                 <span title="Laatste levelwissel"><?= icon('clock') ?><?= htmlspecialchars(substr(formatDateTime($team['level_updated_at']), -5)) ?></span>
                                                 <?php if (isset($escalations[$teamId])): ?>
-                                                    <a href="messages.php?team_id=<?= $teamId ?>" class="badge badge-warning needs-teacher"><?= icon('hand') ?>Docent nodig</a>
+                                                    <a href="messages.php?team_id=<?= $teamId ?>" class="badge badge-warning needs-teacher"><?= icon('hand') ?>Operator nodig</a>
                                                 <?php endif; ?>
                                             </div>
                                         </div>

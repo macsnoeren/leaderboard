@@ -171,7 +171,7 @@ if ($selected_team_id) {
 // Check Presence: Wie kijkt er nog meer? (korter dan 15 seconden geleden)
 $other_teachers = [];
 if ($selected_team_id) {
-    $current_teacher = $_SESSION['teacher_username'] ?? 'Onbekende Docent';
+    $current_teacher = $_SESSION['teacher_username'] ?? 'Onbekende operator';
 
     // Opschonen oude sessies en eigen aanwezigheid registreren
     $db->exec("DELETE FROM team_presence WHERE last_seen < datetime('now', '-30 seconds')");
@@ -245,7 +245,7 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
         // De reactie staat dan al als AI-bericht in de chat
         $sent = in_array($e['decision'], ['reply', 'level_up'], true);
         $reply = $sent ? '' : (string)$e['reply_text'];
-        $title = $escalation ? icon('hand') . '<strong>Docent nodig' . ($open ? '' : ' (afgehandeld)') . '</strong>'
+        $title = $escalation ? icon('hand') . '<strong>Operator nodig' . ($open ? '' : ' (afgehandeld)') . '</strong>'
             : icon('bot') . '<strong>' . ($sent ? 'AI ter info (reactie al verstuurd)' : 'AI-suggestie') . '</strong>';
         $html .= '<div class="bubble bubble-suggestion' . ($escalation ? ' bubble-escalation' : '') . ($sent ? ' bubble-info' : '') . '">';
         $html .= '<div class="bubble-meta">' . $title . chatTime($m['created_at']) . '</div>';
@@ -333,7 +333,7 @@ function renderSidebar(array $teams, ?int $selectedId, array $escalations): stri
             $html .= '<span class="count" title="Ongelezen berichten">' . (int)$t['unread_count'] . '<span class="sr-only"> ongelezen</span></span>';
         }
         if (isset($escalations[(int)$t['id']])) {
-            $html .= '<span class="count count-warning" title="Docent nodig">' . icon('hand') . '<span class="sr-only">Docent nodig</span></span>';
+            $html .= '<span class="count count-warning" title="Operator nodig">' . icon('hand') . '<span class="sr-only">Operator nodig</span></span>';
         }
         $html .= '</span>';
         $html .= '<span class="team-item-level">Level ' . (int)$t['current_level'] . '</span>';
@@ -457,7 +457,7 @@ include 'admin_header.php';
 
         <?php if ($selected_team): ?>
         <details class="msg-ai" open>
-            <summary><?= icon('bot') ?>AI-paneel<?= $hasOpenEscalation ? ' <span class="badge badge-warning">' . icon('hand') . 'Docent nodig</span>' : '' ?><?= icon('chevron-down', 'chev') ?></summary>
+            <summary><?= icon('bot') ?>AI-paneel<?= $hasOpenEscalation ? ' <span class="badge badge-warning">' . icon('hand') . 'Operator nodig</span>' : '' ?><?= icon('chevron-down', 'chev') ?></summary>
             <div class="msg-ai-inner">
                 <section>
                     <h2><?= icon('bot') ?>AI-modus</h2>
@@ -465,7 +465,7 @@ include 'admin_header.php';
                     <p class="small muted" style="margin-top: 6px;">Wijzigen doe je op het <a href="teacher.php">dashboard</a>.</p>
                 </section>
                 <?php if ($hasOpenEscalation): ?>
-                    <?= alertBox('warning', '<strong>Docent nodig.</strong> De AI wacht op jou: gebruik de knoppen bij de melding in de chat, of antwoord het team zelf.') ?>
+                    <?= alertBox('warning', '<strong>Operator nodig.</strong> De AI wacht op jou: gebruik de knoppen bij de melding in de chat, of antwoord het team zelf.') ?>
                 <?php endif; ?>
                 <section>
                     <h2><?= icon('trending-up') ?>Tussenstand van dit level</h2>
@@ -551,7 +551,7 @@ include 'admin_header.php';
                     <div class="panel markdown" data-md><?= htmlspecialchars($assignment['instruction']) ?></div>
                 <?php endif; ?>
                 <?php if (!empty($assignment['criteria'])): ?>
-                    <div class="section-label">Beoordelingscriteria (alleen voor docenten)</div>
+                    <div class="section-label">Beoordelingscriteria (alleen voor operators)</div>
                     <div class="panel panel-danger markdown" data-md><?= htmlspecialchars($assignment['criteria']) ?></div>
                 <?php endif; ?>
                 <?php if (!empty($assignment['artifact_file'])): ?>

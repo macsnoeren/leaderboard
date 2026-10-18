@@ -40,7 +40,7 @@ $extraCSS = '<style>
 </style>';
 include 'admin_header.php';
 ?>
-    <?= pageHeader('Auditlog', '<span>Alle acties van docenten en de AI, nieuwste eerst</span>') ?>
+    <?= pageHeader('Auditlog', '<span>Alle acties van operators en de AI, nieuwste eerst</span>') ?>
 
     <div class="card">
         <?php if (empty($logs)): ?>

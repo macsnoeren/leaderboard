@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<?= authPageStart('Inloggen', ['subtitle' => 'Voor docenten en beheerders', 'icon' => 'login']) ?>
+<?= authPageStart('Inloggen', ['subtitle' => 'Voor operators en beheerders', 'icon' => 'login']) ?>
         <?php if ($notice): ?>
             <?= alertBox('success', htmlspecialchars($notice)) ?>
         <?php endif; ?>

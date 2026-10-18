@@ -1,8 +1,8 @@
 # Agentic AI service
 
-De AI-agent van OperationRoom. Hij ondersteunt de docent: elk teambericht gaat door een pijplijn van
+De AI-agent van OperationRoom. Hij ondersteunt de operator: elk teambericht gaat door een pijplijn van
 kleine agents, en de opdracht-assistent helpt bij het maken van een rubric. Wat de AI zelf mag
-(alleen suggesties, het team antwoorden, of zelf een level omhoog zetten) stelt de docent per team in.
+(alleen suggesties, het team antwoorden, of zelf een level omhoog zetten) stelt de operator per team in.
 De webapplicatie blijft de baas: `api.php` controleert elke beslissing opnieuw, dus een kapotte of
 gestolen agent kan nooit meer dan het spel toestaat.
 
@@ -13,8 +13,8 @@ Uitgangspunten:
 - **Alles via `api.php` en polling**: geen Ollama-aanroep vanuit PHP, geen websockets. De agent kan op een
   andere machine draaien, en er kunnen er meerdere tegelijk draaien.
 - **De AI is onzichtbaar voor teams**: op `team.php` ziet een AI-bericht (`sender = 'ai'`) eruit als een
-  docentbericht. De docent, het archief en `ai_log.php` laten wel zien wat van de AI kwam.
-- **Bij twijfel naar de docent.** Elke modelfout (timeout, HTTP 429/5xx, ongeldige JSON na één retry)
+  operatorbericht. De operator, het archief en `ai_log.php` laten wel zien wat van de AI kwam.
+- **Bij twijfel naar de operator.** Elke modelfout (timeout, HTTP 429/5xx, ongeldige JSON na één retry)
   wordt een escalatie, nooit een automatische actie.
 
 ## AI-modi
@@ -25,14 +25,14 @@ De modus staat per team in `teams.ai_mode` (keuzelijst in `teacher.php`, of *Voo
 | Modus | AI-uitkomst | AI antwoordt team | AI zet level omhoog |
 |---|---|---|---|
 | `off` | agent slaat het team over | nee | nee |
-| `suggest` (standaard) | suggestie voor de docent | nee | nee |
-| `reply` | team krijgt feedback en reacties op vragen; docent krijgt het level-up-advies | ja | nee |
+| `suggest` (standaard) | suggestie voor de operator | nee | nee |
+| `reply` | team krijgt feedback en reacties op vragen; operator krijgt het level-up-advies | ja | nee |
 | `auto` | team krijgt feedback, level-up gebeurt automatisch | ja | ja |
 
 - `reply` en `auto` vragen een **goedgekeurde rubric** (`ai_rubric_status = 'approved'`); anders valt de
-  opdracht terug op `suggest`. Wijzigt de docent `instruction` of `criteria`, dan gaat de rubric terug naar
+  opdracht terug op `suggest`. Wijzigt de operator `instruction` of `criteria`, dan gaat de rubric terug naar
   `draft`.
-- Per opdracht kan de docent "altijd door een mens" kiezen (`ai_auto_allowed = 0`): `auto` wordt dan `reply`.
+- Per opdracht kan de operator "altijd door een mens" kiezen (`ai_auto_allowed = 0`): `auto` wordt dan `reply`.
 - Zet `auto` pas aan in een echt spel als de evals en de overeenstemming in `ai_log.php` (na minstens één
   spel in `suggest` of `reply`) dat rechtvaardigen; richtlijn: ≥ 90 % overeenstemming en **0** onterechte
   level-ups in de evals.
@@ -62,11 +62,11 @@ Per teambericht (`agentic/pipeline.py`):
 ### Context
 
 Teams geven hun antwoord vaak in stukjes, dus elke agent krijgt de hele chat van het level (berichten van
-team, docent en AI, geen suggesties), met het nieuwe bericht gemarkeerd. Boven `MAX_CHAT_TOKENS` worden de
+team, operator en AI, geen suggesties), met het nieuwe bericht gemarkeerd. Boven `MAX_CHAT_TOKENS` worden de
 oudste berichten vervangen door de samenvatting uit de **tussenstand** (`ai_team_progress`: per aspect het
 hoogste bereikte niveau met citaat; de server werkt hem bij na elke geldige beoordeling).
 
-- Eerder gegeven goede delen tellen mee; een bevestiging van de docent ("de dader klopt") telt als bereikt.
+- Eerder gegeven goede delen tellen mee; een bevestiging van de operator ("de dader klopt") telt als bereikt.
 - Het laatste standpunt per aspect telt; meerdere tegenstrijdige antwoorden tegelijk = onvoldoende.
 - Alleen wat echt in de chat staat telt; een tussenstand zonder geldig citaat wordt genegeerd.
 - De hulp-agent krijgt de tussenstand **niet** (die verraadt de rubric-aspecten).
@@ -82,7 +82,7 @@ verklappends of misleidends ziet.
 |---|---|---|---|---|
 | onvoldoende | ja | suggestie | feedback aan team | feedback aan team |
 | onvoldoende | nee | suggestie | escalatie | escalatie |
-| voldoende/goed | ja | suggestie (level-up-advies) | feedback + level-up-advies voor docent | `levelUp()` + bericht aan team |
+| voldoende/goed | ja | suggestie (level-up-advies) | feedback + level-up-advies voor operator | `levelUp()` + bericht aan team |
 | voldoende/goed | nee | suggestie (level-up-advies) | escalatie | escalatie |
 | vraag | ja | suggestie (voorgestelde reactie) | reactie aan team | reactie aan team |
 | vraag | nee | suggestie (voorgestelde reactie) | escalatie | escalatie |
@@ -90,9 +90,9 @@ verklappends of misleidends ziet.
 - **Harde vlaggen escaleren in elke modus**, ook in `suggest`: `flag_injection`, manipulatie en elke
   modelfout. De pogingen- en vragenlimiet (`ai_max_attempts`, `ai_max_questions` per team per level per
   10 minuten) tellen als twijfel.
-- **Escalatie**: de docent ziet een suggestie met het voorlopige oordeel en de reden, en "Docent nodig"
+- **Escalatie**: de operator ziet een suggestie met het voorlopige oordeel en de reden, en "Operator nodig"
   in `teacher.php`. Het team krijgt niets, en zolang de escalatie openstaat stuurt de AI niets en zet ze
-  geen level. Ze is afgehandeld als de docent antwoordt, het level verandert, of een escalatieknop in
+  geen level. Ze is afgehandeld als de operator antwoordt, het level verandert, of een escalatieknop in
   `messages.php` gebruikt wordt (ook *Verwerpen*).
 - Feedback die de validator als verklappend markeert, gaat nooit naar het team.
 - `goed` en `voldoende` geven allebei een level-up; het verschil wordt bewaard en kleurt de feedback. Bij
@@ -111,14 +111,14 @@ met `user_id` NULL (`AI_SUGGEST`, `AI_REPLY`, `AI_LEVEL_UP`, `AI_ESCALATE`).
 `agents/designer.py`, gestart met *Laat AI meekijken* in `assignments.php` (`ai_design_status`
 `idle` → `pending` → `questions`/`draft`). De assistent stelt 1–5 vragen of stelt een rubric voor; na
 3 vraagrondes geeft hij altijd een rubric. De vragen en antwoorden (`assignment_ai_dialog`) gaan als
-verduidelijkingen mee naar de beoordelaar. De AI schrijft nooit in `criteria` (het antwoord van de docent).
+verduidelijkingen mee naar de beoordelaar. De AI schrijft nooit in `criteria` (het antwoord van de operator).
 
-De AI leest geen bijlagen. Verwijzen de criteria naar de bijlage en heeft de docent nog niets beantwoord,
-dan vraagt de assistent eerst; tijden en getallen in de rubric moeten in de tekst van de docent staan, en
+De AI leest geen bijlagen. Verwijzen de criteria naar de bijlage en heeft de operator nog niets beantwoord,
+dan vraagt de assistent eerst; tijden en getallen in de rubric moeten in de tekst van de operator staan, en
 regels in `verduidelijkingen_vraag` met antwoordtermen worden weggehaald (code-controles, omdat het model
 ze in de praktijk oversloeg).
 
-Rubric (`assignments.ai_rubric`, JSON; de docent ziet een tabel, geen JSON):
+Rubric (`assignments.ai_rubric`, JSON; de operator ziet een tabel, geen JSON):
 
 ```json
 {
@@ -215,7 +215,7 @@ de veilige kant (onvoldoende of een escalatie bij twijfel over voldoende/goed). 
 ## Privacy
 
 Naar het model gaan alleen de opdracht, de rubric en de berichten. Teamnamen, e-mailadressen, tokens en
-docentnamen niet: in de prompt heet het team "Team" en de docent "Docent" (`tests/test_context.py`
+operatornamen niet: in de prompt heet het team "Team" en de operator "Docent" (`tests/test_context.py`
 controleert dat). Teamtekst staat in afgebakende data-blokken.
 
 Met cloudmodellen gaan berichten van studenten wel naar de servers van Ollama, en studenten kunnen zelf

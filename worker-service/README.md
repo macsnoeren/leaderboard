@@ -10,7 +10,7 @@ kunnen lezen en vervangen). Er is ook een commandoregel voor beheer en noodgeval
 
 ```
  Website (PHP)                               worker-service (Python)
- docent/admin klikt "Exporteren",            main.py: lus
+ operator/admin klikt "Exporteren",            main.py: lus
  "Backup maken", uploadt een archief …         1. heartbeat → worker_status
         │                                      2. planner: tijd voor de nachtelijke backup? → taak
         ▼                                      3. claim oudste 'queued' taak (atomair)
@@ -24,8 +24,8 @@ kunnen lezen en vervangen). Er is ook een commandoregel voor beheer en noodgeval
 
 | Taak (`type`) | Wie | Resultaat |
 |---|---|---|
-| `game_export` | docent van het spel, admin (`game.php`) | `operationroom-spel-<naam>-<datum>.tar.gz`, als sjabloon of met teams en voortgang |
-| `report` | docent van het spel, admin (`game.php`, snelknop in `archive.php`) | `operationroom-rapport-<naam>-<datum>.pdf` |
+| `game_export` | operator van het spel, admin (`game.php`) | `operationroom-spel-<naam>-<datum>.tar.gz`, als sjabloon of met teams en voortgang |
+| `report` | operator van het spel, admin (`game.php`, snelknop in `archive.php`) | `operationroom-rapport-<naam>-<datum>.pdf` |
 | `game_import` | admin (`games.php`): een import maakt een spel | nieuw spel (`result_game_id`), de admin wordt eraan gekoppeld |
 | `backup` | admin (`backups.php`), of de planner (`created_by` NULL) | `storage/backups/operationroom-backup-<datum>.tar.gz` |
 | `backup_upload` | admin | geüploade backup, eerst volledig gecontroleerd, daarna in de lijst |
@@ -92,7 +92,7 @@ progress.json      alleen bij "met teams en voortgang"
   opdracht-assistent (de goedgekeurde rubric wel).
 - `progress.json` gebruikt eigen refs in plaats van id's: teams (zonder e-mail, token of
   `ai_processing_*`), berichten, archiefregels (ook van verwijderde teams; bij wie goedkeurde alleen
-  `leveled_by_kind` `teacher`/`ai`, geen docentnamen), AI-beoordelingen, tussenstanden, mededelingen en
+  `leveled_by_kind` `teacher`/`ai`, geen operatornamen), AI-beoordelingen, tussenstanden, mededelingen en
   downloads.
 
 ### Oude archieven (v1, v2)
@@ -173,7 +173,7 @@ Per spel één PDF (fpdf2, lettertype DejaVu Sans; zonder valt het terug op Helv
 buiten Latin-1 een '?'), gelezen uit een momentopname van de database:
 
 - **Goedgekeurde antwoorden per opdracht**: modelantwoord en rubric, daarna per team wanneer, welk
-  antwoord, door wie (docent of AI met oordeel) en na hoeveel pogingen. Zo zie je in één keer of alle
+  antwoord, door wie (operator of AI met oordeel) en na hoeveel pogingen. Zo zie je in één keer of alle
   goedgekeurde antwoorden echt goed zijn.
 - **Verloop per team** (ook verwijderde teams, uit het archief): eindlevel, rang en per opdracht start,
   goedkeuring, duur, pogingen, vragen en wie goedkeurde.

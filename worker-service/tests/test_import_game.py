@@ -115,7 +115,7 @@ class ImportTest(unittest.TestCase):
         self.assertEqual(msg["message"], "De conciërge")
         archive = self.conn.execute("SELECT * FROM completed_assignments WHERE game_id = ? ORDER BY id", (game_id,)).fetchall()
         self.assertEqual(len(archive), 2)
-        self.assertEqual(archive[0]["leveled_by_name"], "Docent")
+        self.assertEqual(archive[0]["leveled_by_name"], "Operator")
         self.assertEqual(self.conn.execute("SELECT message FROM team_messages WHERE id = ?", (archive[0]["accepted_message_id"],)).fetchone()[0],
                          "De conciërge")
         self.assertIsNone(archive[1]["team_id"])

@@ -104,6 +104,8 @@ class ReportDataTest(unittest.TestCase):
     def test_parse_chat(self):
         self.assertEqual(data.parse_chat("Team: a\nb\nAI: c\nDocent: d"), [("team", "a\nb"), ("ai", "c"), ("teacher", "d")])
         self.assertIsNone(data.last_team_message("Docent: alleen ik"))
+        self.assertEqual(data.parse_chat("Team: a\nOperator: b"), [("team", "a"), ("teacher", "b")])
+        self.assertIsNone(data.last_team_message("Operator: alleen ik"))
 
 
 if __name__ == "__main__":

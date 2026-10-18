@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt->execute([$name, generateJoinCode($db), $adminId]);
         $newId = (int)$db->lastInsertId();
         logAudit($db, $adminId, 'GAME_CREATE', "Spel '$name' (#$newId) aangemaakt");
-        flash('success', "Spel '$name' is aangemaakt. Koppel docenten en kies het spel om opdrachten en teams toe te voegen.");
+        flash('success', "Spel '$name' is aangemaakt. Koppel operators en kies het spel om opdrachten en teams toe te voegen.");
         redirect('games.php');
     }
 
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($action === 'add_teacher' || $action === 'remove_teacher') {
         $teacher = findTeacher($db, (int)($_POST['teacher_id'] ?? 0));
         if (!$teacher) {
-            flash('error', 'Docent niet gevonden.');
+            flash('error', 'Operator niet gevonden.');
             redirect('games.php');
         }
         $label = teacherLabel($teacher);
@@ -115,7 +115,7 @@ $extraCSS = '<style>
 </style>';
 include 'admin_header.php';
 ?>
-    <?= pageHeader('Spellen', '<span>Beheerders kunnen elk spel besturen; docenten alleen de spellen waaraan ze gekoppeld zijn</span>') ?>
+    <?= pageHeader('Spellen', '<span>Beheerders kunnen elk spel besturen; operators alleen de spellen waaraan ze gekoppeld zijn</span>') ?>
 
     <?= renderFlash() ?>
 
@@ -177,20 +177,20 @@ include 'admin_header.php';
                             <button type="submit" class="btn btn-sm btn-secondary"><?= icon('sliders') ?>Openen</button>
                         </form>
                     </div>
-                    <div class="section-label" style="margin-top: 0;">Docenten</div>
+                    <div class="section-label" style="margin-top: 0;">Operators</div>
                     <?php foreach ($linked[$rowId] ?? [] as $t): ?>
                         <span class="chip">
                             <?= htmlspecialchars(teacherLabel($t)) ?><?= $t['role'] === 'admin' ? ' <span class="muted">(admin)</span>' : '' ?>
-                            <?= gameButton('remove_teacher', $rowId, ['teacher_id' => $t['id']], icon('x'), 'btn-ghost btn-icon', 'Docent ontkoppelen van dit spel?', 'Ontkoppelen') ?>
+                            <?= gameButton('remove_teacher', $rowId, ['teacher_id' => $t['id']], icon('x'), 'btn-ghost btn-icon', 'Operator ontkoppelen van dit spel?', 'Ontkoppelen') ?>
                         </span>
                     <?php endforeach; ?>
-                    <?php if (empty($linked[$rowId])): ?><p class="muted small">Nog geen docenten gekoppeld (beheerders hebben altijd toegang).</p><?php endif; ?>
+                    <?php if (empty($linked[$rowId])): ?><p class="muted small">Nog geen operators gekoppeld (beheerders hebben altijd toegang).</p><?php endif; ?>
                     <?php if ($unlinked): ?>
                         <form method="POST" class="add-teacher">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="add_teacher">
                             <input type="hidden" name="game_id" value="<?= $rowId ?>">
-                            <select name="teacher_id" required aria-label="Docent om te koppelen">
+                            <select name="teacher_id" required aria-label="Operator om te koppelen">
                                 <?php foreach ($unlinked as $t): ?>
                                     <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars(teacherLabel($t)) ?><?= $t['role'] === 'admin' ? ' (admin)' : '' ?></option>
                                 <?php endforeach; ?>

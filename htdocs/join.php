@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($game['effective_status'] === 'finished') {
         $error = 'Dit spel is afgelopen; aanmelden kan niet meer.';
     } elseif (!(int)$game['registration_open']) {
-        $error = 'De registratie voor dit spel is gesloten. Vraag de docent om hem te openen.';
+        $error = 'De registratie voor dit spel is gesloten. Vraag de operator om hem te openen.';
     } elseif ($emailInput !== '' && $email === null) {
         $error = 'Vul een geldig e-mailadres in, of laat het veld leeg.';
     } else {

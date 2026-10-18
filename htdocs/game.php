@@ -278,7 +278,7 @@ include 'admin_header.php';
                             <input type="number" name="ai_max_questions" id="g-q" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_questions'] ?? 5) ?>" required>
                         </div>
                     </div>
-                    <p class="muted small" style="margin: -6px 0 16px;">Per team per level. Daarboven beoordeelt de AI niet zelf meer, maar vraagt ze een docent.</p>
+                    <p class="muted small" style="margin: -6px 0 16px;">Per team per level. Daarboven beoordeelt de AI niet zelf meer, maar vraagt ze een operator.</p>
                     <button type="submit" class="btn btn-primary"><?= icon('save') ?>Opslaan</button>
                 </form>
             </div>
@@ -361,7 +361,7 @@ include 'admin_header.php';
 
         <?php if ($user['role'] === 'admin'): ?>
             <div class="section-label">Spel verwijderen</div>
-            <p class="text-sm" style="margin-bottom: 16px;">Verwijdert het hele spel: alle <?= $teamCount ?> teams met hun chats, de opdrachten met bijlagen, het archief, de mededelingen, het logo en de exports en rapporten van dit spel. Docenten verliezen de toegang. Dit kan niet ongedaan worden gemaakt; maak eerst een export (met teams en voortgang) of een backup als je het later nog wilt terugzien.</p>
+            <p class="text-sm" style="margin-bottom: 16px;">Verwijdert het hele spel: alle <?= $teamCount ?> teams met hun chats, de opdrachten met bijlagen, het archief, de mededelingen, het logo en de exports en rapporten van dit spel. Operators verliezen de toegang. Dit kan niet ongedaan worden gemaakt; maak eerst een export (met teams en voortgang) of een backup als je het later nog wilt terugzien.</p>
             <?php if (in_array($status, ['running', 'paused'], true)): ?>
                 <?= alertBox('info', 'Dit spel is ' . htmlspecialchars(gameStatusLabel($status)) . '. Beëindig het spel eerst; daarna kun je het verwijderen.') ?>
             <?php else: ?>

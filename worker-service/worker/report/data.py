@@ -8,7 +8,8 @@ import json
 import re
 from datetime import datetime, timezone
 
-PREFIXES = (("Team: ", "team"), ("AI: ", "ai"), ("Docent: ", "teacher"))
+# "Docent: " staat in archiefregels van vóór de rolnaam Operator
+PREFIXES = (("Team: ", "team"), ("AI: ", "ai"), ("Operator: ", "teacher"), ("Docent: ", "teacher"))
 AUDIT_WINDOW_SECONDS = 5
 
 
@@ -45,8 +46,8 @@ def last_team_message(chat):
 def _teacher_label(conn, user_id):
     row = conn.execute("SELECT display_name, username, email FROM teachers WHERE id = ?", (user_id,)).fetchone()
     if row is None:
-        return f"docent #{user_id}"
-    return row[0] or row[1] or row[2] or f"docent #{user_id}"
+        return f"operator #{user_id}"
+    return row[0] or row[1] or row[2] or f"operator #{user_id}"
 
 
 def approver(conn, row):

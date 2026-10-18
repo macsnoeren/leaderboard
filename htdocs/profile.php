@@ -195,7 +195,7 @@ include 'admin_header.php';
                 <dl class="details">
                     <dt>Gebruikersnaam</dt><dd><?= htmlspecialchars($user['username']) ?></dd>
                     <dt>E-mailadres</dt><dd><?= $user['email'] ? htmlspecialchars($user['email']) : '<span class="muted">nog niet ingesteld</span>' ?></dd>
-                    <dt>Rol</dt><dd><?= $user['role'] === 'admin' ? 'Beheerder' : 'Docent' ?></dd>
+                    <dt>Rol</dt><dd><?= $user['role'] === 'admin' ? 'Beheerder' : 'Operator' ?></dd>
                     <dt>Laatst ingelogd</dt><dd><?= formatDateTime($user['last_login_at']) ?></dd>
                 </dl>
                 <form method="POST">

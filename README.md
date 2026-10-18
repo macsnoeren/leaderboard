@@ -1,7 +1,7 @@
 # OperationRoom
 
 Omgeving voor teamspellen, hackathons en opdrachten voor studenten, met een live leaderboard. Teams zien hun
-opdracht op hun eigen dashboard en sturen hun antwoord via de chat; een docent beoordeelt het en zet het team
+opdracht op hun eigen dashboard en sturen hun antwoord via de chat; een operator beoordeelt het en zet het team
 een level omhoog. Alles hoort bij een **spel**: teams, opdrachten, het archief en mededelingen.
 
 Het begon als het detectivespel Zebrawave. Exports en backups van vóór de naamswijziging
@@ -10,9 +10,9 @@ Het begon als het detectivespel Zebrawave. Exports en backups van vóór de naam
 Onderdelen:
 
 - **Webapplicatie** (`htdocs/`, `conf/`): PHP + SQLite, zonder framework. Publiek leaderboard en beamer,
-  teamdashboard, docentenomgeving.
+  teamdashboard, omgeving voor operators en beheerders.
 - **AI-agent** (optioneel, [agentic-service/](agentic-service/README.md)): leest elk teambericht mee en doet,
-  afhankelijk van de AI-modus van het team, een suggestie aan de docent, antwoordt het team of zet het zelf
+  afhankelijk van de AI-modus van het team, een suggestie aan de operator, antwoordt het team of zet het zelf
   een level omhoog. Werkt met Ollama-cloudmodellen.
 - **Worker** ([worker-service/](worker-service/README.md)): taken in de achtergrond: spel exporteren en
   importeren, backups en restores, en een rapport (PDF) per spel.

@@ -130,7 +130,7 @@ function sendAccountEmail($to, $subject, $heading, array $paragraphs, $buttonTex
 function sendInviteEmail($to, $link, $invitedBy) {
     return sendAccountEmail(
         $to,
-        'Uitnodiging voor het OperationRoom docentenaccount',
+        'Uitnodiging voor OperationRoom',
         'Je bent uitgenodigd',
         [
             "$invitedBy heeft je uitgenodigd voor een account op het OperationRoom leaderboard. Klik op de knop om je gebruikersnaam en wachtwoord te kiezen.",
@@ -150,7 +150,7 @@ function sendPasswordResetEmail($to, $link) {
         'Wachtwoord opnieuw instellen',
         'Nieuw wachtwoord instellen',
         [
-            'Er is gevraagd om het wachtwoord van je OperationRoom docentenaccount opnieuw in te stellen. Klik op de knop om een nieuw wachtwoord te kiezen.',
+            'Er is gevraagd om het wachtwoord van je OperationRoom-account opnieuw in te stellen. Klik op de knop om een nieuw wachtwoord te kiezen.',
             'Deze link is 60 minuten geldig en werkt één keer.',
             'Heb je dit niet aangevraagd? Dan kun je deze mail negeren.',
         ],
@@ -168,7 +168,7 @@ function sendEmailChangeConfirmation($to, $link) {
         'Bevestig je nieuwe e-mailadres',
         'Nieuw e-mailadres bevestigen',
         [
-            'Je hebt gevraagd om dit adres te gebruiken voor je OperationRoom docentenaccount. Klik op de knop om dat te bevestigen.',
+            'Je hebt gevraagd om dit adres te gebruiken voor je OperationRoom-account. Klik op de knop om dat te bevestigen.',
             'Deze link is 24 uur geldig en werkt één keer. Tot je bevestigt, blijft je oude adres in gebruik.',
             'Heb je dit niet aangevraagd? Dan kun je deze mail negeren.',
         ],
@@ -186,7 +186,7 @@ function sendEmailChangedNotice($to, $newEmail) {
         'Je e-mailadres is gewijzigd',
         'E-mailadres gewijzigd',
         [
-            "Het e-mailadres van je OperationRoom docentenaccount is gewijzigd naar $newEmail. Mails over je account gaan voortaan naar dat adres.",
+            "Het e-mailadres van je OperationRoom-account is gewijzigd naar $newEmail. Mails over je account gaan voortaan naar dat adres.",
             'Heb je dit niet zelf gedaan? Neem dan direct contact op met de beheerder.',
         ]
     );
@@ -202,7 +202,7 @@ function sendTeamLinkEmail($to, $teamName, $gameName, $link) {
         "$teamName: jullie teamdashboard",
         "Welkom, team $teamName!",
         [
-            "Jullie doen mee aan $gameName. Via de knop komen jullie op het teamdashboard met de opdrachten en de chat met de docenten.",
+            "Jullie doen mee aan $gameName. Via de knop komen jullie op het teamdashboard met de opdrachten en de chat met de operators.",
             'Bewaar deze mail: met deze link komen jullie altijd weer terug op het dashboard. Deel hem alleen binnen je team.',
             'Heel veel succes!',
         ],

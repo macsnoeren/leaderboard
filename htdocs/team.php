@@ -89,7 +89,7 @@ function teamChatHtml(array $messages): string {
         $mine = $m['sender'] === 'team';
         $when = formatDateTime($m['created_at']);
         $html .= '<div class="bubble bubble-' . ($mine ? 'team' : 'teacher') . '">'
-            . '<div class="bubble-meta"><strong>' . ($mine ? 'Jullie' : 'Docent') . '</strong><time title="' . $when . '">' . substr($when, -5) . '</time></div>'
+            . '<div class="bubble-meta"><strong>' . ($mine ? 'Jullie' : 'Operator') . '</strong><time title="' . $when . '">' . substr($when, -5) . '</time></div>'
             . '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div></div>';
     }
     return $html;
@@ -285,7 +285,7 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
                         <a href="<?= htmlspecialchars($leaderboardUrl) ?>" target="_leaderboard" class="btn btn-primary"><?= icon('trophy') ?>Naar het leaderboard</a>
                     </div>
                 <?php else: ?>
-                    <?= emptyState('file', 'Er is nog geen dossier. Wacht op instructies van de docent.') ?>
+                    <?= emptyState('file', 'Er is nog geen dossier. Wacht op instructies van de operator.') ?>
                 <?php endif; ?>
             </div>
         </section>
@@ -499,7 +499,7 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
                         scrollToBottom();
                         if (data.message_count > messageCount && data.last_sender && data.last_sender !== 'team') {
                             // Voorlezen en, op mobiel in het dossier, een badge op de chat-tab
-                            document.getElementById('chat-live').textContent = 'Nieuw bericht van de docent: ' + data.last_message;
+                            document.getElementById('chat-live').textContent = 'Nieuw bericht van de operator: ' + data.last_message;
                             if (isMobile() && document.getElementById('team-main').dataset.tab !== 'chat') document.getElementById('chat-badge').hidden = false;
                         }
                         messageCount = data.message_count;

@@ -367,7 +367,7 @@ function levelUp(PDO $db, int $teamId, ?int $userId): bool {
         $history = [];
         $accepted = null; // laatste teambericht: het goedgekeurde antwoord
         foreach ($msgs->fetchAll(PDO::FETCH_ASSOC) as $m) {
-            $prefix = ['team' => 'Team: ', 'ai' => 'AI: '][$m['sender']] ?? 'Docent: ';
+            $prefix = ['team' => 'Team: ', 'ai' => 'AI: '][$m['sender']] ?? 'Operator: ';
             $history[] = $prefix . $m['message'];
             if ($m['sender'] === 'team') {
                 $accepted = $m;

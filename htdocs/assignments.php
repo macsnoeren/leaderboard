@@ -51,7 +51,7 @@ function renderDialog(array $dialog): string {
     $html = '<div class="chat">';
     foreach ($dialog as $d) {
         $ai = $d['role'] === 'ai';
-        $html .= '<div class="bubble ' . ($ai ? 'bubble-suggestion' : 'bubble-teacher') . '"><div class="bubble-meta">' . ($ai ? icon('bot') . '<strong>AI</strong>' : '<strong>Docent</strong>')
+        $html .= '<div class="bubble ' . ($ai ? 'bubble-suggestion' : 'bubble-teacher') . '"><div class="bubble-meta">' . ($ai ? icon('bot') . '<strong>AI</strong>' : '<strong>Operator</strong>')
             . '<time>' . htmlspecialchars(formatDateTime($d['created_at'])) . '</time></div>'
             . '<div>' . nl2br(htmlspecialchars($d['message'])) . '</div></div>';
     }
@@ -346,7 +346,7 @@ include 'admin_header.php';
                     <div class="field">
                         <label for="f-crit">Beoordelingscriteria (het antwoord)</label>
                         <textarea name="criteria" id="f-crit" rows="3" placeholder="Waar moet het antwoord aan voldoen?"><?= htmlspecialchars($edit_assignment['criteria'] ?? '') ?></textarea>
-                        <div class="hint">Alleen voor docenten en de AI; teams zien dit nooit.</div>
+                        <div class="hint">Alleen voor operators en de AI; teams zien dit nooit.</div>
                     </div>
                     <div class="field">
                         <label for="f-file">Bestand (PDF, ZIP, TXT, JPG of PNG)</label>
@@ -394,7 +394,7 @@ include 'admin_header.php';
                     <div class="card-title"><?= icon('clipboard') ?>Rubric</div>
                     <span id="rubric-badge"><?= rubricStatusBadge($edit_assignment['ai_rubric_status'] ?: 'none') ?></span>
                 </div>
-                <p class="muted text-sm" style="margin-bottom: 14px;">Hiermee beoordeelt de AI de antwoorden van teams. Zonder goedgekeurde rubric doet de AI alleen suggesties aan de docent.</p>
+                <p class="muted text-sm" style="margin-bottom: 14px;">Hiermee beoordeelt de AI de antwoorden van teams. Zonder goedgekeurde rubric doet de AI alleen suggesties aan de operator.</p>
                 <div class="alert alert-info" id="rubric-notice" role="status"><?= icon('info') ?><div>Er is een nieuw rubric-voorstel. <a href="assignments.php?edit=<?= (int)$edit_assignment['id'] ?>#rubric"><strong>Herlaad</strong></a> om het te zien (je niet-opgeslagen wijzigingen gaan dan verloren).</div></div>
                 <form method="POST" id="rubric-form">
                     <?= csrfField() ?>
@@ -536,7 +536,7 @@ include 'admin_header.php';
             <div id="v-desc" class="markdown" data-md></div>
             <div class="section-label">Instructie (de echte opdracht)</div>
             <div id="v-instr" class="panel markdown" data-md></div>
-            <div class="section-label">Beoordelingscriteria (alleen voor docenten)</div>
+            <div class="section-label">Beoordelingscriteria (alleen voor operators)</div>
             <div id="v-crit" class="panel panel-danger markdown" data-md></div>
             <div id="v-file-wrap" hidden>
                 <div class="section-label">Bijlage</div>

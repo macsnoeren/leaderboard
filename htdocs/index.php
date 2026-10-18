@@ -215,7 +215,7 @@ $needsQr = $game && ($data['registration_open'] || $status === 'draft');
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
-        <div class="screen-foot"><a href="login.php">Inloggen voor docenten</a></div>
+        <div class="screen-foot"><a href="login.php">Inloggen voor operators</a></div>
     </main>
 <?php elseif ($status === 'draft'): ?>
     <main class="screen is-draft">

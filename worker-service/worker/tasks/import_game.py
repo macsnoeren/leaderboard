@@ -211,7 +211,7 @@ def import_progress(conn, game_id, progress, total):
             "leveled_by_name, ai_evaluation_id, accepted_message_id, accepted_answer, level_started_at) "
             "VALUES (?, ?, ?, ?, ?, COALESCE(?, datetime('now')), NULL, ?, ?, ?, ?, ?)",
             (game_id, _ref(teams, c.get("team_ref"), "team", required=False), c.get("team_name"), c.get("assignment_number"),
-             c.get("chat_history") or "", c.get("created_at"), "Docent" if kind == "teacher" else None,
+             c.get("chat_history") or "", c.get("created_at"), "Operator" if kind == "teacher" else None,
              _ref(evaluations, c.get("evaluation_ref"), "beoordeling", required=False),
              _ref(messages, c.get("accepted_message_ref"), "bericht", required=False), c.get("accepted_answer"),
              c.get("level_started_at")))

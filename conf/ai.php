@@ -22,8 +22,8 @@ const AI_MODE_LABELS = [
 ];
 const AI_MODE_DESCRIPTIONS = [
     'off' => 'De AI slaat het team over.',
-    'suggest' => 'Alleen suggesties voor de docent.',
-    'reply' => 'De AI antwoordt het team; level-up blijft bij de docent.',
+    'suggest' => 'Alleen suggesties voor de operator.',
+    'reply' => 'De AI antwoordt het team; level-up blijft bij de operator.',
     'auto' => 'De AI antwoordt en zet zelf een level omhoog als alles klopt.',
 ];
 const AI_VERDICTS = ['onvoldoende', 'voldoende', 'goed'];
@@ -272,7 +272,7 @@ function rubricFromForm(array $post): ?array {
  * Slaat een rubric op als concept. Null als rubric haalt hem weg (status none). Geeft een foutmelding
  * terug, of null. `criteria` (het antwoord van de docent) wordt nooit aangeraakt.
  */
-function saveRubric(PDO $db, int $assignmentId, int $gameId, ?array $rubric, ?int $userId, string $source = 'docent'): ?string {
+function saveRubric(PDO $db, int $assignmentId, int $gameId, ?array $rubric, ?int $userId, string $source = 'operator'): ?string {
     $assignment = findAssignmentInGame($db, $assignmentId, $gameId);
     if (!$assignment) {
         return 'Deze opdracht hoort niet bij het actieve spel.';
@@ -593,7 +593,7 @@ function aiJson($value): ?string {
  * ai_evaluation_id; deze tekst is het spoor in de database en de terugval.
  */
 function formatSuggestion(array $e): string {
-    $lines = [$e['decision'] === 'escalate' ? '🙋 Docent nodig (AI)' : '🤖 AI-suggestie'];
+    $lines = [$e['decision'] === 'escalate' ? '🙋 Operator nodig (AI)' : '🤖 AI-suggestie'];
     $lines[] = 'Intentie: ' . $e['intent'];
     if ($e['verdict']) {
         $lines[] = 'Oordeel: ' . $e['verdict'] . (in_array($e['verdict'], ['voldoende', 'goed'], true) ? ' → level-up-advies' : '');
@@ -829,7 +829,7 @@ function addTeacherAnswer(PDO $db, int $assignmentId, int $gameId, string $messa
     $db->prepare("INSERT INTO assignment_ai_dialog (assignment_id, role, message, teacher_id) VALUES (?, 'teacher', ?, ?)")
        ->execute([$assignmentId, textCut($message, AI_TEXT_MAX_LENGTH), $userId]);
     $db->prepare("UPDATE assignments SET ai_design_status = 'pending' WHERE id = ?")->execute([$assignmentId]);
-    logAudit($db, $userId, 'ASSIGNMENT_AI_ANSWER', "Docent beantwoordde de vragen van de AI bij opdracht #{$a['assignment_number']} (ID $assignmentId)");
+    logAudit($db, $userId, 'ASSIGNMENT_AI_ANSWER', "Operator beantwoordde de vragen van de AI bij opdracht #{$a['assignment_number']} (ID $assignmentId)");
     return null;
 }
 

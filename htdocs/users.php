@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 flash('error', 'Je kunt je eigen account status niet wijzigen.');
             } else {
                 $db->prepare("UPDATE teachers SET is_active = 1 WHERE id = ?")->execute([$id]);
-                logAudit($db, $adminId, 'USER_ENABLE', "Admin heeft docent $label (ID $id) geactiveerd.");
+                logAudit($db, $adminId, 'USER_ENABLE', "Admin heeft operator $label (ID $id) geactiveerd.");
                 flash('success', "$label is geactiveerd.");
             }
             break;
@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             } else {
                 $db->prepare("UPDATE teachers SET is_active = 0 WHERE id = ?")->execute([$id]);
                 bumpSessionVersion($db, $id);
-                logAudit($db, $adminId, 'USER_DISABLE', "Admin heeft docent $label (ID $id) gedeactiveerd.");
+                logAudit($db, $adminId, 'USER_DISABLE', "Admin heeft operator $label (ID $id) gedeactiveerd.");
                 flash('success', "$label is gedeactiveerd en uitgelogd.");
             }
             break;
@@ -167,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $db->prepare("DELETE FROM user_recovery_codes WHERE user_id = ?")->execute([$id]);
                 $db->prepare("DELETE FROM game_teachers WHERE teacher_id = ?")->execute([$id]);
                 $db->prepare("DELETE FROM teachers WHERE id = ?")->execute([$id]);
-                logAudit($db, $adminId, 'USER_DELETE', "Docent $label (ID $id) verwijderd");
+                logAudit($db, $adminId, 'USER_DELETE', "Operator $label (ID $id) verwijderd");
                 flash('success', "$label is verwijderd.");
             }
             break;
@@ -215,12 +215,12 @@ $extraCSS = '<style>
 </style>';
 include 'admin_header.php';
 ?>
-    <?= pageHeader('Gebruikers', '<span>Docenten en beheerders</span>') ?>
+    <?= pageHeader('Gebruikers', '<span>Operators en beheerders</span>') ?>
 
         <?= renderFlash() ?>
 
         <div class="card">
-            <div class="card-title"><?= icon('mail') ?>Docent uitnodigen</div>
+            <div class="card-title"><?= icon('mail') ?>Operator uitnodigen</div>
             <form method="POST" class="invite-form">
                 <?= csrfField() ?>
                 <input type="hidden" name="action" value="invite">
@@ -235,17 +235,17 @@ include 'admin_header.php';
                 <div class="field">
                     <label for="u-role">Rol</label>
                     <select name="role" id="u-role">
-                        <option value="user">Docent</option>
+                        <option value="user">Operator</option>
                         <option value="admin">Beheerder</option>
                     </select>
                 </div>
                 <button type="submit" class="btn btn-primary"><?= icon('send') ?>Uitnodigen</button>
             </form>
-            <p class="muted small" style="margin-top: 10px;">De docent krijgt een link (72 uur geldig) om zelf een gebruikersnaam en wachtwoord te kiezen.</p>
+            <p class="muted small" style="margin-top: 10px;">De nieuwe gebruiker krijgt een link (72 uur geldig) om zelf een gebruikersnaam en wachtwoord te kiezen.</p>
         </div>
 
         <div class="card">
-            <div class="card-title"><?= icon('users') ?>Docenten en beheerders</div>
+            <div class="card-title"><?= icon('users') ?>Operators en beheerders</div>
             <div class="table-scroll">
             <table class="table">
                 <thead>
@@ -273,7 +273,7 @@ include 'admin_header.php';
                             </td>
                             <td><?= $u['username'] !== null ? '<strong>' . htmlspecialchars($u['username']) . '</strong>' : '<span class="muted">nog niet gekozen</span>' ?></td>
                             <td><?= $u['email'] !== null ? htmlspecialchars($u['email']) : '<span class="muted">—</span>' ?></td>
-                            <td><span class="badge<?= $u['role'] === 'admin' ? ' badge-brand' : '' ?>"><?= $u['role'] === 'admin' ? 'Beheerder' : 'Docent' ?></span></td>
+                            <td><span class="badge<?= $u['role'] === 'admin' ? ' badge-brand' : '' ?>"><?= $u['role'] === 'admin' ? 'Beheerder' : 'Operator' ?></span></td>
                             <td>
                                 <div class="user-badges">
                                     <span class="badge <?= $statusClass ?>"><span class="dot"></span><?= $statusLabel ?></span>

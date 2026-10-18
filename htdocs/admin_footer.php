@@ -61,7 +61,7 @@
                         stat.closest('.stat')?.classList.toggle('is-warning', n > 0);
                     }
                     const container = document.getElementById('escalation-badge-container');
-                    if (container) container.innerHTML = n > 0 ? `<span class="count count-warning" title="Docent nodig">${handIcon}${n}<span class="sr-only"> keer docent nodig</span></span>` : '';
+                    if (container) container.innerHTML = n > 0 ? `<span class="count count-warning" title="Operator nodig">${handIcon}${n}<span class="sr-only"> keer operator nodig</span></span>` : '';
                 });
         }
 

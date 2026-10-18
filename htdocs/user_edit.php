@@ -148,7 +148,7 @@ $extraCSS = '<style>
 include 'admin_header.php';
 ?>
     <a href="users.php" class="back-link"><?= icon('arrow-left') ?>Terug naar gebruikers</a>
-    <?= pageHeader($label, '<span class="badge' . ($user['role'] === 'admin' ? ' badge-brand' : '') . '">' . ($user['role'] === 'admin' ? 'Beheerder' : 'Docent') . '</span>') ?>
+    <?= pageHeader($label, '<span class="badge' . ($user['role'] === 'admin' ? ' badge-brand' : '') . '">' . ($user['role'] === 'admin' ? 'Beheerder' : 'Operator') . '</span>') ?>
 
     <?= renderFlash() ?>
     <?php if ($error): ?>
@@ -176,7 +176,7 @@ include 'admin_header.php';
                 <div class="field">
                     <label for="e-role">Rol</label>
                     <select name="role" id="e-role" <?= $isSelf ? 'disabled' : '' ?>>
-                        <option value="user" <?= $form['role'] === 'user' ? 'selected' : '' ?>>Docent</option>
+                        <option value="user" <?= $form['role'] === 'user' ? 'selected' : '' ?>>Operator</option>
                         <option value="admin" <?= $form['role'] === 'admin' ? 'selected' : '' ?>>Beheerder</option>
                     </select>
                     <?php if ($isSelf): ?>
