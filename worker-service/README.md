@@ -2,15 +2,192 @@
 
 Python-worker voor Zebrawave die taken in de achtergrond uitvoert: spellen exporteren en importeren (ook
 archieven van de eerste versie van `bin/export_assignments.py`), volledige backups (handmatig en elke nacht)
-en restores, en een rapport (PDF) per spel. Ontwerp: [DESIGN.md](DESIGN.md); uitwerking in taken:
-[TASKS.md](TASKS.md).
+en restores, en een rapport (PDF) per spel.
 
 De website zet taken in de wachtrij (`worker_jobs`, pagina **Taken**) en controleert de rechten; de worker
-voert ze uit, direct op de database en de bestanden. Er is ook een commandoregel voor beheer en noodgevallen.
+voert ze uit, direct op de database en de bestanden (niet via `api.php`: backup en restore moeten alles
+kunnen lezen en vervangen). Er is ook een commandoregel voor beheer en noodgevallen.
+
+```
+ Website (PHP)                               worker-service (Python)
+ docent/admin klikt "Exporteren",            main.py: lus
+ "Backup maken", uploadt een archief …         1. heartbeat → worker_status
+        │                                      2. planner: tijd voor de nachtelijke backup? → taak
+        ▼                                      3. claim oudste 'queued' taak (atomair)
+ enqueueJob(): worker_jobs + audit_logs ─────► 4. handler voert uit, meldt voortgang
+        ▲                                      5. resultaat → storage/jobs/<id>/, status done|failed
+        │ polling jobs.php?ajax=jobs           6. elk uur opruimen: verlopen resultaten, oude backups
+ jobs.php, job_download.php (rechten) ◄──────
+```
+
+## Taken en rechten
+
+| Taak (`type`) | Wie | Resultaat |
+|---|---|---|
+| `game_export` | docent van het spel, admin (`game.php`) | `zebrawave-spel-<naam>-<datum>.tar.gz`, als sjabloon of met teams en voortgang |
+| `report` | docent van het spel, admin (`game.php`, snelknop in `archive.php`) | `zebrawave-rapport-<naam>-<datum>.pdf` |
+| `game_import` | admin (`games.php`): een import maakt een spel | nieuw spel (`result_game_id`), de admin wordt eraan gekoppeld |
+| `backup` | admin (`backups.php`), of de planner (`created_by` NULL) | `storage/backups/zebrawave-backup-<datum>.tar.gz` |
+| `backup_upload` | admin | geüploade backup, eerst volledig gecontroleerd, daarna in de lijst |
+| `restore` | admin, met het eigen wachtwoord (fout telt mee in `login_attempts`, scope `restore`) | omgeving vervangen |
+
+Downloaden mag alleen wie de taak mocht starten (`jobDownloadAllowed()`); backups downloaden alleen admins
+via `backups.php?download=`. Audit: `GAME_EXPORT`, `GAME_IMPORT`, `REPORT_CREATE`, `BACKUP_CREATE`,
+`BACKUP_DOWNLOAD`, `BACKUP_PIN`, `BACKUP_DELETE`, `BACKUP_RESTORE`, `JOB_DOWNLOAD`; de worker logt het eind
+van een taak met `user_id` NULL (`JOB_DONE`/`JOB_FAILED`). Nooit wachtwoorden of tokens in `params_json`.
+
+Een nieuw soort taak is één handler met `@register` in `worker/tasks/` plus een knop die `enqueueJob()`
+aanroept; wachtrij, status, downloads en opruimen zijn gedeeld.
+
+## Wachtrij
+
+```
+queued ──claim──► running ──► done      (resultaat te downloaden tot expires_at)
+   │                 └──────► failed    (message = leesbare fout; details in de worker-log)
+   └─ annuleren ──► cancelled           (alleen zolang queued, door de aanvrager of een admin)
+```
+
+- **Claimen is atomair** (`UPDATE … WHERE id = (oudste queued) AND status = 'queued'`); twee workers
+  pakken nooit dezelfde taak. Eén worker per installatie is genoeg.
+- **Exclusief**: `restore` en `backup` draaien alleen als er niets anders draait, en zolang er een
+  `restore` in de wachtrij staat, claimt de worker niets anders.
+- Een lopende taak werkt `heartbeat_at` bij. Een taak die `running` is zonder recente heartbeat wordt bij
+  de start van de worker `failed` ("onderbroken"). **Er is geen automatische herhaling**: een import of
+  restore twee keer uitvoeren is erger dan opnieuw klikken.
+- De website toont "Worker actief" bij een heartbeat in `worker_status` van minder dan 120 s. Taken van de
+  CLI melden geen heartbeat.
+
+## Opslag (`storage/`)
+
+Buiten de webroot, gedeeld door website en worker (in Docker een eigen volume):
+
+```
+storage/
+  incoming/          uploads voor import/restore (willekeurige naam; weg na afloop van de taak)
+  jobs/<id>/         resultaten van export en rapport (weg na RESULT_TTL_DAYS; de rij blijft, "verlopen")
+  backups/           backups met een .json met metadata (trigger, tellingen, vastgezet) ernaast
+  tmp/               werkmap van de worker
+  maintenance.json   alleen aanwezig tijdens een restore
+```
+
+## Archieven
+
+Alle archieven zijn `tar.gz` met `manifest.json` in de root. Ze zijn onbetrouwbare invoer en worden alleen
+via `worker/archive.py` gelezen: nooit `extractall`, alleen bekende namen, alleen gewone bestanden (geen
+links, `..` of absolute paden), limieten op grootte en aantal (`MAX_ARCHIVE_MB`, `MAX_ARCHIVE_FILES`),
+checksums controleren, en geïmporteerde bestanden krijgen altijd een eigen naam met een extensie uit een
+allowlist.
+
+### Spel-export (v3)
+
+```
+manifest.json      {"format": "zebrawave-game", "format_version": 3, "game": {…}, "assignments": [...], "files": {pad: {size, sha256}}}
+files/<naam>       bijlagen van opdrachten
+logo/<naam>        logo van het spel (optioneel)
+progress.json      alleen bij "met teams en voortgang"
+```
+
+- Opdrachten hebben dezelfde veldnamen als in v1/v2; `ai_rubric` is een object in plaats van JSON-tekst.
+- Alleen spelinformatie: geen `join_code`, status, tijden, `game_teachers`, en geen dialoog van de
+  opdracht-assistent (de goedgekeurde rubric wel).
+- `progress.json` gebruikt eigen refs in plaats van id's: teams (zonder e-mail, token of
+  `ai_processing_*`), berichten, archiefregels (ook van verwijderde teams; bij wie goedkeurde alleen
+  `leveled_by_kind` `teacher`/`ai`, geen docentnamen), AI-beoordelingen, tussenstanden, mededelingen en
+  downloads.
+
+### Oude archieven (v1, v2)
+
+Van `bin/export_assignments.py`, herkenbaar aan een manifest dat een **lijst** is. v1 (eerste versie,
+commit `c249ede`, vóór spellen) heeft per opdracht `assignment_number`, `title`, `description`,
+`instruction`, `criteria`, `time_limit`, `artifact_file`; v2 (vlak voor de worker) daarbij `ai_rubric`
+(JSON-tekst), `ai_rubric_status` en `ai_auto_allowed`. Wat ontbreekt krijgt de standaard van een nieuw spel.
+De fixtures staan in [tests/fixtures/](tests/fixtures/README.md).
+
+### Import
+
+Elk formaat wordt eerst vertaald naar één `ImportModel` (`worker/formats/`); de import kent maar één pad.
+
+- **Altijd een nieuw spel**: status `draft`, nieuwe `join_code`, `registration_open = 0`. Met voortgang
+  wordt het `paused` (of `finished`), zodat de AI-agent niet meteen antwoordt. Bestaat de naam al, dan
+  komt er " (2)" achter.
+- Opdrachten moeten 1..N zijn; gaten of dubbele nummers worden hernummerd met een melding, behalve bij een
+  import met voortgang (dan kloppen de levels niet meer: geweigerd).
+- Teams krijgen nieuwe `access_token`s en hebben geen e-mailadres; links opnieuw mailen na het invullen
+  van een adres.
+- Alles in één transactie; bij een fout worden de al geschreven bestanden weer verwijderd.
+- Het oude "wis de opdrachten van spel X en importeer" bestaat niet meer: importeer als nieuw spel en
+  verwijder het oude.
+
+### Backup
+
+```
+manifest.json            {"format": "zebrawave-backup", "format_version": 1, "trigger", "schema", "counts", "files", "job_id"}
+database/leaderboard.db  momentopname via de online backup-API van SQLite (consistent, ook tijdens schrijven)
+htdocs/artifacts/…
+htdocs/uploads/…
+```
+
+Bevat wachtwoordhashes, TOTP-secrets, API-sleutels en team-tokens: alleen in `storage/backups/`, alleen
+voor admins, elke download in de audit-log. Niet in de backup: `conf/config.php`, `config.py`, `storage/`.
+
+## Bewaartermijnen
+
+De planner zet elke dag om `BACKUP_TIME` (tijdzone van de worker, `TZ`) een backup in de wachtrij; een
+gemiste backup van vandaag wordt na een herstart ingehaald. Onder `BACKUP_MIN_FREE_MB` vrije ruimte faalt
+de backup.
+
+| Soort | Bewaard |
+|---|---|
+| automatisch (`scheduled`) | de laatste `BACKUP_KEEP` (14) |
+| handmatig en geüpload (`manual`, `uploaded`) | `BACKUP_MANUAL_DAYS` (90 dagen) |
+| veiligheid (`pre_restore`) | `BACKUP_PRE_RESTORE_DAYS` (30 dagen) |
+
+De nieuwste backup wordt nooit verwijderd, en een vastgezette backup ("bewaren") valt buiten elke termijn.
+`0` bij een termijn = nooit automatisch verwijderen.
+
+## Restore
+
+1. **Controleren, nog niets aanraken**: archief veilig openen, checksums, `PRAGMA integrity_check` op de
+   uitgepakte database; een backup van een nieuwere app-versie (onbekende tabellen/kolommen) wordt geweigerd.
+2. **Onderhoudsmodus aan** (`storage/maintenance.json`), `RESTORE_GRACE_SECONDS` wachten.
+3. **Veiligheidsbackup** van de huidige staat (`pre_restore`).
+4. **Vervangen**: database via een tijdelijk bestand en `os.replace()` (atomair); de inhoud van
+   `artifacts/` en `uploads/` (niet de mappen zelf: in Docker zijn dat mount points).
+5. `php bin/migrate.php`, zodat een oudere backup de nieuwe kolommen krijgt.
+6. **Nazorg**: taken die in de backup `queued`/`running` stonden worden `failed` (de backup-taak zelf
+   `done`); de restore-taak wordt opnieuw ingevoegd; `BACKUP_RESTORE` in de audit-log.
+7. **Onderhoudsmodus uit.**
+
+Een fout in stap 4–6 zet automatisch de veiligheidsbackup terug; lukt ook dat niet, dan blijft de
+onderhoudsmodus aan met de oorzaak in `maintenance.json` en de log.
+
+De onderhoudsmodus is een bestand, geen databasevlag, omdat de database wordt vervangen. `getDB()` geeft
+dan een 503: een pagina die zichzelf ververst, leeg bij `?ajax…`, JSON bij `api.php` (de AI-agent wacht).
+De commandoregel slaat de controle over. Na een restore blijft iedereen ingelogd zolang `session_version`
+in de backup klopt; een admin die niet in de backup staat, is uitgelogd. Is de `docker-agent`-key anders,
+herstart dan de agent-container.
+
+## Rapport
+
+Per spel één PDF (fpdf2, lettertype DejaVu Sans; zonder valt het terug op Helvetica en worden tekens
+buiten Latin-1 een '?'), gelezen uit een momentopname van de database:
+
+- **Goedgekeurde antwoorden per opdracht**: modelantwoord en rubric, daarna per team wanneer, welk
+  antwoord, door wie (docent of AI met oordeel) en na hoeveel pogingen. Zo zie je in één keer of alle
+  goedgekeurde antwoorden echt goed zijn.
+- **Verloop per team** (ook verwijderde teams, uit het archief): eindlevel, rang en per opdracht start,
+  goedkeuring, duur, pogingen, vragen en wie goedkeurde.
+
+`levelUp()` vult daarvoor `leveled_by`, `leveled_by_name`, `ai_evaluation_id`, `accepted_message_id`,
+`accepted_answer` en `level_started_at` in `completed_assignments`. Voor oudere archiefregels leidt het
+rapport het af (antwoord = laatste `Team: …`-regel uit `chat_history`, "door" = de dichtstbijzijnde
+`TEAM_LEVEL_UP`/`AI_LEVEL_UP` in `audit_logs`) en markeert de rij als *afgeleid*. Pogingen en vragen komen
+uit `ai_evaluations` (`antwoord`/`vraag`), anders telt elk teambericht als poging.
 
 ## Draaien met Docker
 
-De service `worker` in `docker/docker-compose.yml` start mee met `docker/start.sh`. Zie
+De service `worker` in `docker/docker-compose.yml` start mee met `docker/start.sh` (image op basis van
+`php:8.3-cli` met Python en `fonts-dejavu-core`, draait als `www-data`). Zie
 [docker/README.md](../docker/README.md) voor de instellingen (`WORKER_*` en `TZ`).
 
 ## Draaien zonder Docker
@@ -46,7 +223,7 @@ groep met schrijfrechten), omdat ze dezelfde bestanden lezen en schrijven.
 | `BACKUP_MANUAL_DAYS` | `90` | handmatige en geüploade backups (0 = nooit verwijderen) |
 | `BACKUP_PRE_RESTORE_DAYS` | `30` | veiligheidsbackups (0 = nooit verwijderen) |
 | `BACKUP_MIN_FREE_MB` | `500` | minder vrij = geen backup |
-| `MAX_ARCHIVE_MB`, `MAX_ARCHIVE_FILES` | `500`, `10000` | grenzen voor archieven (uitgepakt) |
+| `MAX_ARCHIVE_MB`, `MAX_ARCHIVE_FILES` | `500`, `10000` | grenzen voor archieven (uitgepakt); `MAX_ARCHIVE_MB` ook in `conf/config.php` |
 | `RESTORE_GRACE_SECONDS` | `5` | wachttijd na het aanzetten van de onderhoudsmodus |
 | `REPORT_FONT`, `REPORT_FONT_BOLD` | DejaVu Sans | Unicode-lettertype; zonder valt de PDF terug op Helvetica (Latin-1) |
 
@@ -65,16 +242,6 @@ python3 -m worker report --game 3 [--sections answers,teams] [-o rapport.pdf]
 
 Elk commando (behalve `inspect`) maakt een rij in `worker_jobs` voor de historie en voert de taak direct
 uit, zonder wachtrij. Exitcode 0 = gelukt, 1 = mislukt, 2 = verkeerd gebruik (bijv. `restore` zonder `--yes`).
-
-## Archieven
-
-- **Spel-export (v3)**: `tar.gz` met `manifest.json` (object met `format: zebrawave-game`,
-  `format_version: 3`), `files/`, `logo/` en optioneel `progress.json` (teams en voortgang, zonder
-  e-mailadressen, tokens of docentnamen). Zie DESIGN §6.
-- **Oude archieven** van `bin/export_assignments.py` (v1 zonder spel en AI-velden, v2 met rubric) worden
-  herkend aan het manifest als lijst en krijgen standaardwaarden voor wat ontbreekt.
-- **Backup**: `tar.gz` met `manifest.json` (`format: zebrawave-backup`), `database/leaderboard.db` en
-  `htdocs/artifacts|uploads/`. Bevat ook wachtwoordhashes, TOTP-secrets en API-sleutels: veilig bewaren.
 
 ## Testen
 

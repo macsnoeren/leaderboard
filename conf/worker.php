@@ -1,6 +1,6 @@
 <?php
 /**
- * Worker-service (worker-service/DESIGN.md): wachtrij (worker_jobs), rechten op taken en downloads,
+ * Worker-service (worker-service/README.md): wachtrij (worker_jobs), rechten op taken en downloads,
  * backups in de opslag en de onderhoudsmodus tijdens een restore.
  *
  * De website zet taken in de wachtrij en controleert de rechten; de Python-worker voert ze uit. De

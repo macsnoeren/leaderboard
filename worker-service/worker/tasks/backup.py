@@ -1,4 +1,4 @@
-"""Taken backup en backup_upload: de volledige omgeving (DESIGN §7).
+"""Taken backup en backup_upload: de volledige omgeving.
 
 Een backup bevat de database (momentopname via de backup-API), htdocs/artifacts/ en htdocs/uploads/,
 met een manifest (schema, tellingen, sha256 per bestand). Niet: conf/config.php, config.py en storage/.

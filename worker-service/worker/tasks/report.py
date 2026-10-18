@@ -1,4 +1,4 @@
-"""Taak report: rapport (PDF) van een spel (DESIGN §9). Leest uit een momentopname van de database."""
+"""Taak report: rapport (PDF) van een spel. Leest uit een momentopname van de database."""
 import os
 
 from worker.jobs import UserError, register

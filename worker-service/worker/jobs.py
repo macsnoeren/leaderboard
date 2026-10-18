@@ -1,4 +1,4 @@
-"""Takenregister en de context van een lopende taak (DESIGN §5).
+"""Takenregister en de context van een lopende taak.
 
 Een handler is een functie handler(job) die met @register('type') wordt aangemeld. Fouten voor de
 gebruiker gooi je als UserError (die tekst komt in de website); elke andere fout wordt "Interne fout,

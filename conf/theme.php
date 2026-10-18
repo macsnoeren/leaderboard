@@ -1,12 +1,19 @@
 <?php
 /**
- * Huisstijl "Ops Room" (TASKS-DESIGN.md §2): design tokens, basiscomponenten, iconen en een paar
+ * Huisstijl "Ops Room": design tokens, basiscomponenten, iconen en een paar
  * kleine hulpfuncties voor de opmaak.
  *
  * Er is bewust geen gedeeld CSS-bestand: elke pagina zet <?= themeStyles() ?> in de <head> en houdt
  * daarnaast haar eigen pagina-CSS. Licht thema (admin) is de standaard; data-theme="ops" op <html>
  * geeft het donkere thema (leaderboard, beamer, teamdashboard, auth-pagina's). De admin volgt
  * prefers-color-scheme, tenzij data-theme="light" staat.
+ *
+ * Het thema is de operatiekamer van een detectiveteam, met mate: een subtiele zebrastreep in kopbalken en
+ * het actieve deel van de voortgangsbalk, monospace (met tabular-nums) voor data als codes, timers, levels
+ * en rangen, signaalkleur (cyaan) voor wat live is, en een voortgangsbalk met één segment per opdracht.
+ * Geen neon, glows of scanlines. Alleen de systeemfonts: geen externe fonts, dus geen IP-adressen van
+ * leerlingen naar derden. Kleurcontrast is nagerekend voor beide thema's (tekst ≥ 4,5:1, randen ≥ 3:1);
+ * podiumkleuren alleen als achtergrond met donkere tekst.
  *
  * Alleen pure functies: tests laden dit bestand via auth.php.
  */
@@ -167,7 +174,7 @@ function rankBadge(int $rank): string {
 }
 
 /**
- * Auth-layout (§3.4): donker thema, logo erboven, gecentreerde kaart. Geeft de HTML tot en met de
+ * Auth-layout: donker thema, logo erboven, gecentreerde kaart. Geeft de HTML tot en met de
  * opening van de kaart; sluit af met authPageEnd(). Opties: logo (pad), no_referrer (token in URL),
  * wide (bredere kaart), subtitle (tekst onder de titel), icon (icoon boven de titel), css (extra <style>).
  */
@@ -198,7 +205,7 @@ function authPageEnd(string $links = ''): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Tokens, reset en basiscomponenten (§2.1 en §2.3) als één inline <style>-blok.
+ * Tokens, reset en basiscomponenten als één inline <style>-blok.
  */
 function themeStyles(): string {
     return <<<'CSS'

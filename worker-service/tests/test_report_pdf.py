@@ -1,4 +1,4 @@
-"""T5.3/T5.4: PDF-opmaak, de taak report en de CLI."""
+"""PDF-opmaak, de taak report en de CLI."""
 import contextlib
 import io
 import os

@@ -1,4 +1,4 @@
-"""T2.9 (en T4.7, T5.4): de commandoregel."""
+"""De commandoregel."""
 import contextlib
 import io
 import os

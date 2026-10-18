@@ -1,7 +1,7 @@
 <?php
 /**
  * API voor de AI-agent (agentic-service/main.py). Authenticatie met de header X-API-Token of ?token=,
- * gecontroleerd tegen api_keys. De logica staat in conf/ai.php; zie agentic-service/DESIGN.md §10.
+ * gecontroleerd tegen api_keys. De logica staat in conf/ai.php; het protocol staat in CLAUDE.md.
  */
 require_once '../conf/config.php';
 require_once '../conf/database.php';

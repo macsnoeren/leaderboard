@@ -1,4 +1,4 @@
-"""Worker voor Zebrawave: voert taken uit de wachtrij (worker_jobs) uit, zie DESIGN.md.
+"""Worker voor Zebrawave: voert taken uit de wachtrij (worker_jobs) uit, zie README.md.
 
 Starten: python3 main.py (config.py hiernaast is optioneel; zie config.py.sample). Stoppen met Ctrl+C of
 SIGTERM: de lopende taak wordt afgemaakt (een backup wordt afgebroken) en de worker meldt zich af.

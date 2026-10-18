@@ -1,6 +1,6 @@
 <?php
 /**
- * Backups (worker-service/DESIGN.md §7–§8): lijst, nu een backup maken, downloaden, vastzetten,
+ * Backups (worker-service/README.md): lijst, nu een backup maken, downloaden, vastzetten,
  * verwijderen, uploaden en terugzetten. Alleen beheerders. Het werk doet de worker (wachtrij).
  */
 session_start();

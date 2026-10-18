@@ -1,4 +1,4 @@
-"""Beslisregels (DESIGN §6): pure functies, geen LLM. De server (allowedDecision() in conf/ai.php)
+"""Beslisregels (README, "Beslisregels"): pure functies, geen LLM. De server (allowedDecision() in conf/ai.php)
 controleert de uitkomst opnieuw en stelt alleen omlaag bij.
 
 ctx (uit de taak + voorfilter): mode, rubric_status, auto_allowed, escalation_open, flag_injection,

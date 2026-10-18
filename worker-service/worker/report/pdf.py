@@ -1,4 +1,4 @@
-"""Opmaak van het rapport met fpdf2 (DESIGN §9).
+"""Opmaak van het rapport met fpdf2.
 
 Voorblad, deel A (goedgekeurde antwoorden per opdracht, naast het modelantwoord) en deel B (verloop per
 team). Antwoorden staan in doorlopende tekst, zodat een lang antwoord over een pagina kan doorlopen;

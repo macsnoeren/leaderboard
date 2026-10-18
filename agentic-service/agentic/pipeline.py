@@ -1,4 +1,4 @@
-"""Pijplijn per teambericht (DESIGN §6, stappen 2–7): voorfilter → intentie → hulp-agent of
+"""Pijplijn per teambericht (README, "Hoe het werkt"): voorfilter → intentie → hulp-agent of
 beoordelaar → validator → beslisregels → payload voor submit_evaluation.
 
 Elke LLMError geeft een escalatie: nooit een automatische actie als een model faalt.

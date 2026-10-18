@@ -1,4 +1,4 @@
-"""Backups in storage/backups/: <naam>.tar.gz met <naam>.tar.gz.json (metadata) ernaast (DESIGN §7).
+"""Backups in storage/backups/: <naam>.tar.gz met <naam>.tar.gz.json (metadata) ernaast.
 
 De .json bevat trigger, created_at (UTC, 'YYYY-MM-DD HH:MM:SS' zoals SQLite), size, counts, pinned,
 created_by, app_version en warnings. PHP (backups.php) leest hem en zet alleen 'pinned'.

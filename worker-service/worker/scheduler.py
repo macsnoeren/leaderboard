@@ -1,4 +1,4 @@
-"""Planner voor de dagelijkse automatische backup (DESIGN §7.3).
+"""Planner voor de dagelijkse automatische backup.
 
 Elke dag na BACKUP_TIME (lokale tijd, TZ) zet de planner een backup-taak met trigger 'scheduled' in de
 wachtrij, ook na een herstart (inhalen). "Al gedaan vandaag" kijkt naar de backups zelf én naar de

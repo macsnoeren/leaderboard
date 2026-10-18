@@ -2,7 +2,7 @@
 /**
  * Agentic AI: modus per team, rubric per opdracht, openstaande taken voor de agent, de serverregels
  * voor wat de AI mag, de tussenstand, beoordelingen, escalaties en de opdracht-assistent.
- * Ontwerp: agentic-service/DESIGN.md.
+ * Ontwerp: agentic-service/README.md.
  *
  * Net als game.php: functies krijgen een PDO mee en gebruiken geen sessie, zodat ze met SQLite in het
  * geheugen te testen zijn (tests/ai_test.php). Tijden zijn UTC; vergelijk en reken in SQL.
@@ -113,7 +113,7 @@ function updateGameAiSettings(PDO $db, int $gameId, string $mode, int $maxAttemp
 }
 
 // ---------------------------------------------------------------------------
-// Rubric per opdracht (DESIGN §5)
+// Rubric per opdracht
 // ---------------------------------------------------------------------------
 
 function rubricStatusBadge(string $status): string {
@@ -388,7 +388,7 @@ function assignmentDialog(PDO $db, int $assignmentId): array {
 /**
  * Teams waarvan het laatste teambericht nog geen reactie (docent, AI of suggestie) en nog geen
  * (niet-verouderde) beoordeling heeft, in lopende of gepauzeerde spellen, met AI-modus ≠ off en zonder actieve claim.
- * Per team alles wat de agent nodig heeft (DESIGN §10, API-tabel).
+ * Per team alles wat de agent nodig heeft.
  */
 function aiPendingTasks(PDO $db): array {
     $stmt = $db->prepare("
@@ -463,7 +463,7 @@ function releaseTeam(PDO $db, int $teamId, string $agentId): void {
 }
 
 // ---------------------------------------------------------------------------
-// Serverregels: wat mag de AI? (DESIGN §6 "Controles")
+// Serverregels: wat mag de AI?
 // ---------------------------------------------------------------------------
 
 /**
@@ -494,7 +494,7 @@ function allowedDecision(array $ctx, string $requested): string {
 }
 
 // ---------------------------------------------------------------------------
-// Tussenstand per team per level (DESIGN §6 "Context")
+// Tussenstand per team per level
 // ---------------------------------------------------------------------------
 
 /**
@@ -789,7 +789,7 @@ function setTeacherVerdict(PDO $db, int $evaluationId, int $gameId, string $verd
 }
 
 // ---------------------------------------------------------------------------
-// Opdracht-assistent (DESIGN §5)
+// Opdracht-assistent
 // ---------------------------------------------------------------------------
 
 /**

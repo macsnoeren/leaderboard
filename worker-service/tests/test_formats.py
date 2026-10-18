@@ -1,4 +1,4 @@
-"""T2.3: formaatherkenning en de v3-lezer."""
+"""Formaatherkenning en de v3-lezer."""
 import os
 import tempfile
 import unittest

@@ -1,4 +1,4 @@
-"""T1.8: de hoofdlus: één taak per ronde, heartbeat, stopvlag, opruimen bij de start."""
+"""De hoofdlus: één taak per ronde, heartbeat, stopvlag, opruimen bij de start."""
 import os
 import unittest
 

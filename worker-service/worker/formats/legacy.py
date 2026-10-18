@@ -1,4 +1,4 @@
-"""Oude archieven van bin/export_assignments.py (DESIGN §2, §6.3).
+"""Oude archieven van bin/export_assignments.py.
 
 v1 (eerste versie, commit c249ede): manifest is een lijst met assignment_number, title, description,
 instruction, criteria, time_limit en artifact_file. v2 voegt ai_rubric (JSON-tekst), ai_rubric_status en

@@ -1,4 +1,4 @@
-"""T1.7: opslag: paden, veilige bestandsnamen en het opruimen van verlopen resultaten."""
+"""Opslag: paden, veilige bestandsnamen en het opruimen van verlopen resultaten."""
 import os
 import unittest
 

@@ -1,4 +1,4 @@
-"""T2.12: chatblok, data-blokken, afkappen en dataminimalisatie."""
+"""Chatblok, data-blokken, afkappen en dataminimalisatie."""
 import unittest
 
 from agentic import context

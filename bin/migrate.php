@@ -174,7 +174,7 @@ try {
     // 18. Centrale mededelingen (team_id NULL = alle teams van het spel)
     $db->exec("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 
-    // 19. Agentic AI (agentic-service/DESIGN.md §7). Elke kolom apart: een bestaande kolom houdt de rest
+    // 19. Agentic AI. Elke kolom apart: een bestaande kolom houdt de rest
     //     niet tegen. Constante defaults vullen ook de bestaande rijen (suggest, none, 1).
     $aiColumns = [
         "teams ADD COLUMN ai_mode TEXT DEFAULT 'suggest'",
@@ -202,7 +202,7 @@ try {
     $db->exec("CREATE INDEX IF NOT EXISTS idx_ai_evaluations_team ON ai_evaluations(team_id, assignment_number)");
     $db->exec("CREATE INDEX IF NOT EXISTS idx_assignment_ai_dialog ON assignment_ai_dialog(assignment_id)");
 
-    // 20. Worker-service (worker-service/DESIGN.md): wachtrij, heartbeat en een archief dat weet wie
+    // 20. Worker-service: wachtrij, heartbeat en een archief dat weet wie
     //     goedkeurde en welk antwoord. Bestaande archiefregels houden NULL (het rapport leidt die af).
     foreach (['completed_assignments ADD COLUMN leveled_by INTEGER', 'completed_assignments ADD COLUMN leveled_by_name TEXT',
               'completed_assignments ADD COLUMN ai_evaluation_id INTEGER', 'completed_assignments ADD COLUMN accepted_message_id INTEGER',

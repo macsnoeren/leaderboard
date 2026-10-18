@@ -1,4 +1,4 @@
-"""T2.10: LLMClient.chat_json met format, think, stream=false, validatie en één retry."""
+"""LLMClient.chat_json met format, think, stream=false, validatie en één retry."""
 import json
 import unittest
 from unittest import mock
@@ -36,7 +36,7 @@ class LLMTest(unittest.TestCase):
         self.assertEqual(body["format"], schemas.INTENT)
         self.assertEqual(body["think"], "low")
         self.assertIs(body["stream"], False)
-        self.assertIn("JSON-schema", body["messages"][0]["content"])  # schema ook in de prompt (T0.3)
+        self.assertIn("JSON-schema", body["messages"][0]["content"])  # schema ook in de prompt
         self.assertTrue(llm.last_ok)
 
     def test_code_block_is_parsed(self):

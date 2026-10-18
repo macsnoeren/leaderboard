@@ -1,6 +1,6 @@
 """Prompt-opbouw: opdracht, rubric, tussenstand en chat als afgebakende data-blokken.
 
-Dataminimalisatie (DESIGN §10): alleen de opdracht, de rubric en de berichten gaan naar het model.
+Dataminimalisatie: alleen de opdracht, de rubric en de berichten gaan naar het model.
 Teamnaam, e-mail, tokens en docentnamen uit de taak worden hier nooit gebruikt; in de prompt heet het
 team "Team" en de docent "Docent". Suggesties (sender 'suggestion') komen nooit in de context.
 """

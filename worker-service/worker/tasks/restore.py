@@ -1,4 +1,4 @@
-"""Taak restore: een backup terugzetten (DESIGN §8). Vervangt database, bijlagen en logo's.
+"""Taak restore: een backup terugzetten. Vervangt database, bijlagen en logo's.
 
 1. Controleren zonder iets te veranderen (checksums, integrity_check, schema niet nieuwer dan nu).
 2. Onderhoudsmodus aan (storage/maintenance.json) en even wachten.

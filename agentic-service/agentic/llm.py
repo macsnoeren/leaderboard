@@ -1,6 +1,6 @@
 """Ollama /api/chat met een JSON-schema, timeout en één retry.
 
-Uitkomst van tools/check_ollama.py (DESIGN §10): gpt-oss negeert `format` via de cloud (het antwoordt
+Uitkomst van tools/check_ollama.py: gpt-oss negeert `format` via de cloud (het antwoordt
 met een codeblok en eigen veldwaarden). Daarom staat het schema ook in de prompt, haalt
 `parse_json()` het JSON-object uit een eventueel codeblok en valideert deze client altijd zelf.
 `format` gaat wel mee: modellen die het wel respecteren hebben er baat bij.

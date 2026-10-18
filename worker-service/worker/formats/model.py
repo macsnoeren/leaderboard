@@ -1,4 +1,4 @@
-"""Intern model van een spel-archief (DESIGN §6.3): v1, v2 en v3 worden hiernaar vertaald,
+"""Intern model van een spel-archief: v1, v2 en v3 worden hiernaar vertaald,
 zodat de import maar één pad kent."""
 from dataclasses import dataclass, field
 from typing import Optional

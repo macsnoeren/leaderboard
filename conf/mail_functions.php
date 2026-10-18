@@ -45,7 +45,7 @@ function createMailer(): PHPMailer {
 }
 
 /**
- * HTML van een accountmail (TASKS-DESIGN §3.5): tabellen en inline stijl, want mailclients negeren
+ * HTML van een accountmail: tabellen en inline stijl, want mailclients negeren
  * de meeste CSS. Kopbalk in merkkleur, witte inhoud, knop na de eerste alinea met de link ook als
  * tekst, en een grijze voetregel. Alle tekst wordt ge-escaped (teamnamen komen van teams zelf).
  * Mailclients met een donkere modus krijgen via de <style> in de <head> donkere kleuren.

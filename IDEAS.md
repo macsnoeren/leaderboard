@@ -9,3 +9,7 @@ Ideas that popped during development or during the day.
 - [x] Optie om ook spel te verwijderen. (Spelinstellingen → Gevarenzone, alleen beheerders)
 - [ ] Aftelklok tot eindtijd is niet zichtbaar.
 
+- [ ] AI-modus `auto` pas in een echt spel aanzetten na een go/no-go: evals en de overeenstemming in het AI-logboek (na minstens één spel in `suggest`/`reply`) bekijken; richtlijn ≥ 90 % overeenstemming en 0 onterechte level-ups.
+- [ ] Versleutelde backups (wachtwoord) of een kopie naar een andere plek (rsync/S3).
+- [ ] AI-agent leest bij een 401 zelf de API-key opnieuw, zodat hij na een restore niet herstart hoeft te worden.
+- [ ] Rapport uitbreiden met een AI-hercontrole van goedgekeurde antwoorden, of een kwaliteitscontrole van opdrachten (rubric goedgekeurd, bijlage aanwezig).

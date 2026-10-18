@@ -1,4 +1,4 @@
-"""T1.5: wachtrij: atomaire claim, exclusieve restore, verweesde taken."""
+"""Wachtrij: atomaire claim, exclusieve restore, verweesde taken."""
 import threading
 import unittest
 

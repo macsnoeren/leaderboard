@@ -1,14 +1,14 @@
-"""Evals tegen het echte model (T2.20 en T3.6).
+"""Evals tegen het echte model.
 
 Gebruik (vanuit agentic-service/, Ollama moet draaien en aangemeld zijn voor de -cloud-modellen):
     python3 evals/run.py                 # beoordelingspijplijn, alle cases in evals/cases/
     python3 evals/run.py 04 11           # alleen cases waarvan de naam zo begint
     python3 evals/run.py --designer      # opdracht-assistent, evals/designer/
-Modellen en denkniveaus komen uit config.py (als die er is) of uit de AI_*-variabelen (zie DESIGN §10).
+Modellen en denkniveaus komen uit config.py (als die er is) of uit de AI_*-variabelen (zie README.md).
 
 Elke case draait in modus 'auto' met een goedgekeurde rubric, zodat zichtbaar wordt wat de AI zelf zou
 doen. Het rapport geeft per agent goed/fout en een lijst van onterechte level-ups. Herhaal na elke
-promptwijziging en noteer de score in DESIGN.md §10.
+promptwijziging en noteer de score in README.md.
 """
 import argparse
 import glob

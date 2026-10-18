@@ -1,4 +1,4 @@
-"""T2.9: de voorbeelden uit DESIGN §6 zijn geldig; fouten worden gevonden."""
+"""Voorbeelden van geldige uitvoer; fouten worden gevonden."""
 import unittest
 
 from agentic import schemas

@@ -1,4 +1,4 @@
-"""T2.8: config per agent, ASSESSOR_MODELS als lijst, standaarden uit DESIGN §10."""
+"""Config per agent, ASSESSOR_MODELS als lijst, standaarden."""
 import importlib.util
 import os
 import types

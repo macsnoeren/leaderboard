@@ -1,4 +1,4 @@
-"""T2.18 en T4.3: scenario's voor de hele pijplijn met een FakeLLM."""
+"""Scenario's voor de hele pijplijn met een FakeLLM."""
 import unittest
 
 from agentic.llm import LLMError

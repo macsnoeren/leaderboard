@@ -1,4 +1,4 @@
-"""T3.1, T3.2, T3.4, T3.7: backup maken, vrije ruimte, bewaartermijn na een backup, backup uploaden."""
+"""Backup maken, vrije ruimte, bewaartermijn na een backup, backup uploaden."""
 import json
 import os
 import shutil

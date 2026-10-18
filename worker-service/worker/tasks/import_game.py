@@ -1,4 +1,4 @@
-"""Taak game_import: een archief (v1, v2 of v3) als nieuw spel (DESIGN §6.3).
+"""Taak game_import: een archief (v1, v2 of v3) als nieuw spel.
 
 Altijd een nieuw spel: concept (met voortgang: gepauzeerd, of afgelopen als het bronspel klaar was),
 nieuwe spelcode, registratie dicht, gekoppeld aan de importerende beheerder. Bijlagen en logo krijgen een

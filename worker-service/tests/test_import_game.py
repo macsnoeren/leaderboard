@@ -1,4 +1,4 @@
-"""T2.6/T2.7: import als nieuw spel, zonder en met voortgang."""
+"""Import als nieuw spel, zonder en met voortgang."""
 import os
 import shutil
 import tempfile

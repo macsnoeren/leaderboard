@@ -27,7 +27,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINC
 $db->exec("CREATE TABLE IF NOT EXISTS team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
 $db->exec("CREATE TABLE IF NOT EXISTS api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, key_name TEXT, api_key TEXT UNIQUE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 $db->exec("CREATE TABLE IF NOT EXISTS ai_service_status (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT UNIQUE, last_heartbeat DATETIME DEFAULT CURRENT_TIMESTAMP, model_ok INTEGER DEFAULT 1)");
-// Archief: wie keurde goed (NULL = AI) en welk antwoord, ook na het verwijderen van team of docent (worker-service/DESIGN.md §9.2)
+// Archief: wie keurde goed (NULL = AI) en welk antwoord, ook na het verwijderen van team of docent
 $db->exec("CREATE TABLE IF NOT EXISTS completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
 $db->exec("CREATE TABLE IF NOT EXISTS announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 // Agentic AI: tussenstand per team per level, dialoog van de opdracht-assistent en elke beoordeling
@@ -36,7 +36,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS assignment_ai_dialog (id INTEGER PRIMARY K
 $db->exec("CREATE TABLE IF NOT EXISTS ai_evaluations (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, team_name TEXT, assignment_number INTEGER NOT NULL, message_id INTEGER NOT NULL, intent TEXT, intent_json TEXT, helper_json TEXT, assessor_json TEXT, validator_json TEXT, verdict TEXT, decision TEXT, reason TEXT, reply_text TEXT, escalation_reason TEXT, resolved_by INTEGER, resolved_at DATETIME, teacher_verdict TEXT, agent_id TEXT, models TEXT, duration_ms INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
 $db->exec("CREATE INDEX IF NOT EXISTS idx_ai_evaluations_team ON ai_evaluations(team_id, assignment_number)");
 $db->exec("CREATE INDEX IF NOT EXISTS idx_assignment_ai_dialog ON assignment_ai_dialog(assignment_id)");
-// Worker-service: wachtrij en heartbeat (worker-service/DESIGN.md §5.1)
+// Worker-service: wachtrij en heartbeat
 $db->exec("CREATE TABLE IF NOT EXISTS worker_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, game_id INTEGER, params_json TEXT, status TEXT NOT NULL DEFAULT 'queued', progress INTEGER DEFAULT 0, message TEXT, result_file TEXT, result_name TEXT, result_size INTEGER, result_game_id INTEGER, created_by INTEGER, created_at DATETIME, started_at DATETIME, heartbeat_at DATETIME, finished_at DATETIME, expires_at DATETIME, worker_id TEXT)");
 $db->exec("CREATE INDEX IF NOT EXISTS idx_worker_jobs_status ON worker_jobs(status, id)");
 $db->exec("CREATE INDEX IF NOT EXISTS idx_worker_jobs_game ON worker_jobs(game_id, id)");

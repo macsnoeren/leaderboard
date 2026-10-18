@@ -1,4 +1,4 @@
-"""T5.1/T5.2: gegevens voor het rapport, ook voor oude archiefregels (afgeleid)."""
+"""Gegevens voor het rapport, ook voor oude archiefregels (afgeleid)."""
 import unittest
 
 from tests.helpers import make_env, seed_game

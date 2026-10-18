@@ -1,4 +1,4 @@
-"""Commandoregel voor beheer en noodgevallen (DESIGN §10.3): python -m worker <commando>.
+"""Commandoregel voor beheer en noodgevallen: python -m worker <commando>.
 
 Elk commando (behalve inspect) maakt een worker_jobs-rij met created_by NULL voor de historie en voert de
 handler direct uit, zonder wachtrij. Exitcode 0 = gelukt, 1 = mislukt, 2 = verkeerd gebruik.

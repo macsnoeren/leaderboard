@@ -1,4 +1,4 @@
-"""T1.10: momentopname van de database."""
+"""Momentopname van de database."""
 import os
 import sqlite3
 import threading

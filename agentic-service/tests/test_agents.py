@@ -1,4 +1,4 @@
-"""T2.14–T2.16, T3.3, T4.1, T4.2: de agents met een FakeLLM."""
+"""De agents met een FakeLLM."""
 import unittest
 
 from agentic.agents import assessor, designer, helper, intent, validator

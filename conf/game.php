@@ -22,7 +22,7 @@ const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_LENGTH = 6;
 const TEAM_NAME_MAX_LENGTH = 50;
 const LOGO_DIR = 'uploads';
-// Privacytekst op join.php en team.php (DESIGN §11, aandachtspunt AVG)
+// Privacytekst op join.php en team.php (AVG, zie agentic-service/README.md)
 const PRIVACY_NOTICE = 'Deel geen persoonsgegevens of andere gevoelige informatie in de chat (zoals adressen, telefoonnummers, wachtwoorden of gegevens over gezondheid). Berichten kunnen met hulp van AI worden verwerkt.';
 
 // ---------------------------------------------------------------------------

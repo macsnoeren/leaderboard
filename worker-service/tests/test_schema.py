@@ -1,4 +1,4 @@
-"""T0.2: het testschema maakt alle tabellen die de worker raakt."""
+"""Het testschema maakt alle tabellen die de worker raakt."""
 import os
 import tempfile
 import unittest

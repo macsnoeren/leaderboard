@@ -1,4 +1,4 @@
-"""Taak game_export: een spel als archief v3 (DESIGN §6.1, §6.2).
+"""Taak game_export: een spel als archief v3.
 
 Standaard alleen de spelinformatie (instellingen, logo, opdrachten met bijlagen en rubric). Met
 include_progress ook teams, berichten, archief, AI-beoordelingen, mededelingen en downloads in

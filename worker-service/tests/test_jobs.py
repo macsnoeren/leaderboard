@@ -1,4 +1,4 @@
-"""T1.6: takenregister en Job-context: eindstatus, foutmeldingen, waarschuwingen, voortgang."""
+"""Takenregister en Job-context: eindstatus, foutmeldingen, waarschuwingen, voortgang."""
 import os
 import unittest
 

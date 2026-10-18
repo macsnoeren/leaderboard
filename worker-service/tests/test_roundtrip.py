@@ -1,4 +1,4 @@
-"""T2.8: export → import → export geeft hetzelfde spel (op id's, bestandsnamen, tokens en exporttijd na)."""
+"""Export → import → export geeft hetzelfde spel (op id's, bestandsnamen, tokens en exporttijd na)."""
 import hashlib
 import json
 import os
@@ -53,7 +53,7 @@ class RoundTripTest(unittest.TestCase):
         self.maxDiff = None
         a, b = self.roundtrip(True)
         (ma, pa), (mb, pb) = normalized(a), normalized(b)
-        # Bewust anders: een lopend spel komt gepauzeerd binnen (DESIGN §6.3)
+        # Bewust anders: een lopend spel komt gepauzeerd binnen
         self.assertEqual((pa["game"].pop("status"), pb["game"].pop("status")), ("running", "paused"))
         self.assertEqual((ma, pa), (mb, pb))
 

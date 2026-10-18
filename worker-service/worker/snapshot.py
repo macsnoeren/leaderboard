@@ -1,4 +1,4 @@
-"""Momentopname van de database met de online backup-API van SQLite (DESIGN §7.1, §9.3).
+"""Momentopname van de database met de online backup-API van SQLite.
 
 Consistent, ook als de website op dat moment schrijft, en zonder een lange leesactie op de echte
 database: export, rapport en backup lezen uit de kopie.

@@ -1,4 +1,4 @@
-"""T3.3/T3.4: bewaartermijnen voor backups (tabelgestuurd) en het toepassen ervan."""
+"""Bewaartermijnen voor backups (tabelgestuurd) en het toepassen ervan."""
 import types
 import unittest
 from datetime import datetime, timedelta, timezone

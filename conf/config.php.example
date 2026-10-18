@@ -18,7 +18,7 @@
 // Database configuration (zelfde pad als bin/setup.sh en de Python-scripts)
 define('DB_FILE', __DIR__ . '/../database/leaderboard.db');
 
-// Worker-service (worker-service/DESIGN.md): uploads, exports, rapporten en backups, buiten de webroot.
+// Worker-service (worker-service/README.md): uploads, exports, rapporten en backups, buiten de webroot.
 // Zelfde map als STORAGE_DIR in worker-service/config.py.
 define('STORAGE_DIR', __DIR__ . '/../storage');
 // Grootste archief voor import en restore (MB); verhoog ook upload_max_filesize en post_max_size in php.ini

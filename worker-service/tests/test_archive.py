@@ -1,4 +1,4 @@
-"""T1.9: archieven veilig lezen en schrijven."""
+"""Archieven veilig lezen en schrijven."""
 import hashlib
 import io
 import os

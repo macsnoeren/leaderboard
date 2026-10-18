@@ -1,4 +1,4 @@
-"""Spel-archieven lezen: herkent v1, v2 en v3 en vertaalt ze naar ImportModel (DESIGN §6.3)."""
+"""Spel-archieven lezen: herkent v1, v2 en v3 en vertaalt ze naar ImportModel."""
 import json
 
 from worker.formats import game_v3, legacy

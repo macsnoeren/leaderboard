@@ -55,7 +55,7 @@ services:
     environment:
       APP_PORT: ${APP_PORT:-8088}
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
-      # Model en denkniveau per agent; leeg = de standaard (gpt-oss:20b-cloud / gpt-oss:120b-cloud, zie DESIGN.md §10)
+      # Model en denkniveau per agent; leeg = de standaard (gpt-oss:20b-cloud / gpt-oss:120b-cloud, zie agentic-service/README.md)
       AI_INTENT_MODEL: ${AI_INTENT_MODEL:-}
       AI_INTENT_THINK: ${AI_INTENT_THINK:-}
       AI_HELPER_MODEL: ${AI_HELPER_MODEL:-}
@@ -79,7 +79,7 @@ services:
       # Alleen lezen: voor de API key die de webcontainer aanmaakt
       - database:/data:ro
 
-  # Worker: export/import, backup/restore en rapporten (worker-service/DESIGN.md). Werkt direct op de
+  # Worker: export/import, backup/restore en rapporten (worker-service/README.md). Werkt direct op de
   # database en de bestanden, dus lezen én schrijven op dezelfde volumes als de webcontainer.
   worker:
     build:

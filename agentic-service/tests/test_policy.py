@@ -1,4 +1,4 @@
-"""T2.17 en T4.2: de beslistabel uit DESIGN §6, tabelgedreven."""
+"""De beslistabel uit README.md, tabelgedreven."""
 import itertools
 import unittest
 
@@ -29,7 +29,7 @@ def question(**kw):
 
 
 class AnswerTableTest(unittest.TestCase):
-    # (oordeel, zeker?, suggest, reply, auto) uit de tabel in DESIGN §6
+    # (oordeel, zeker?, suggest, reply, auto) uit de tabel in README.md
     TABLE = [
         ("onvoldoende", True, "suggest", "reply", "reply"),
         ("onvoldoende", False, "suggest", "escalate", "escalate"),

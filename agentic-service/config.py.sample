@@ -1,6 +1,6 @@
 # config.py voor de AI-agent (agentic-service/main.py). Kopieer naar agentic-service/config.py
 # en vul API_KEY en BASE_URL in. Niet committen: config.py staat in .gitignore.
-# Alles wat je weglaat krijgt de standaard uit agentic/settings.py (DESIGN.md §10).
+# Alles wat je weglaat krijgt de standaard uit agentic/settings.py.
 
 # API-sleutel uit 🔑 API Keys in de webapplicatie
 API_KEY = "vul-hier-je-api-key-in"

@@ -1,4 +1,4 @@
-"""Opslag buiten de webroot (DESIGN §5.3): incoming/, jobs/<id>/, backups/, tmp/ en maintenance.json."""
+"""Opslag buiten de webroot: incoming/, jobs/<id>/, backups/, tmp/ en maintenance.json."""
 import logging
 import os
 import re

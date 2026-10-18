@@ -1,4 +1,4 @@
-"""Bewaartermijnen voor backups (DESIGN §7.3).
+"""Bewaartermijnen voor backups.
 
 - automatisch (scheduled): de laatste BACKUP_KEEP;
 - handmatig en geüpload: BACKUP_MANUAL_DAYS dagen;

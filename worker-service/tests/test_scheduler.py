@@ -1,4 +1,4 @@
-"""T3.5: planner voor de dagelijkse backup."""
+"""Planner voor de dagelijkse backup."""
 import unittest
 from datetime import datetime, timedelta, timezone
 

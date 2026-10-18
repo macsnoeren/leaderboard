@@ -1,5 +1,5 @@
 """De LLM-agents. Elke agent bouwt zijn eigen prompt met agentic.context en krijgt alleen wat hij nodig
-heeft (DESIGN §6, tabel "Wie krijgt wat"). Uitkomst: (uitvoer, meta) met meta = model, think, duur,
+heeft (README, "Context"). Uitkomst: (uitvoer, meta) met meta = model, think, duur,
 uitvoer en redenering; meta gaat als *_json naar submit_evaluation (zichtbaar in ai_log.php).
 """
 import os

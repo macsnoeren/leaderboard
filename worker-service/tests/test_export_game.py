@@ -1,4 +1,4 @@
-"""T2.4/T2.5: export als sjabloon en met voortgang."""
+"""Export als sjabloon en met voortgang."""
 import hashlib
 import json
 import os

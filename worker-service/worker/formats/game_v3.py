@@ -1,4 +1,4 @@
-"""Archiefformaat v3 (DESIGN §6.1): manifest is een object met format/format_version.
+"""Archiefformaat v3: manifest is een object met format/format_version.
 
 manifest.json, files/<naam>, logo/<naam> en (bij include_progress) progress.json. De velden per opdracht
 heten hetzelfde als in v1/v2; ai_rubric is hier een object.

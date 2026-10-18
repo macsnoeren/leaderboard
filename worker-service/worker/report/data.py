@@ -1,4 +1,4 @@
-"""Gegevens voor het rapport (DESIGN §9): goedgekeurde antwoorden per opdracht en het verloop per team.
+"""Gegevens voor het rapport: goedgekeurde antwoorden per opdracht en het verloop per team.
 
 Archiefregels van na de migratie (level_started_at gevuld) hebben "wie" en "welk antwoord" in eigen
 kolommen. Voor oudere regels wordt het afgeleid: antwoord = laatste "Team: …" uit chat_history, "door" =

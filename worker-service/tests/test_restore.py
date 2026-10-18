@@ -1,4 +1,4 @@
-"""T4.3–T4.5: restore: eerst controleren, dan vervangen, en terugrollen bij een fout (migrate.php gemockt)."""
+"""Restore: eerst controleren, dan vervangen, en terugrollen bij een fout (migrate.php gemockt)."""
 import hashlib
 import io
 import json
@@ -72,7 +72,7 @@ class RestoreTest(unittest.TestCase):
         conn.close()
         return row
 
-    # T4.3 -----------------------------------------------------------------
+    # Eerst controleren ----------------------------------------------------
     def assert_refused(self, archive, fragment):
         before = self.state()
         upload = os.path.join(self.env.storage.incoming, "u.tar.gz")
@@ -111,7 +111,7 @@ class RestoreTest(unittest.TestCase):
         rewrite_backup(self.backup_path, bad, change_db=add_column)
         self.assert_refused(bad, "nieuwere versie")
 
-    # T4.4 -----------------------------------------------------------------
+    # Vervangen ------------------------------------------------------------
     def test_restore_replaces_everything(self):
         with mock.patch.object(restore_task, "run_migrate") as migrate:
             row = self.run_restore({"backup": self.backup_name})
@@ -154,7 +154,7 @@ class RestoreTest(unittest.TestCase):
         safety = [b for b in backups.list_backups(self.env.storage) if b["trigger"] == "pre_restore"][0]
         self.assertEqual(safety["meta"]["counts"]["teams"], 3)
 
-    # T4.5 -----------------------------------------------------------------
+    # Terugrollen bij een fout ---------------------------------------------
     def test_rollback_after_failed_migrate(self):
         before = self.state()
         with mock.patch.object(restore_task, "run_migrate", side_effect=[RuntimeError("migrate.php mislukt: kapot"), None]):

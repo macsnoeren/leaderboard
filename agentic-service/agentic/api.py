@@ -1,4 +1,4 @@
-"""Client voor api.php van de webapplicatie (DESIGN §10, API-tabel)."""
+"""Client voor api.php van de webapplicatie."""
 import logging
 
 import requests

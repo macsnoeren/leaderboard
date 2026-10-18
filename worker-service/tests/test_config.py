@@ -1,4 +1,4 @@
-"""T0.4: configuratie met standaardwaarden en overschrijven via config.py."""
+"""Configuratie met standaardwaarden en overschrijven via config.py."""
 import os
 import tempfile
 import types

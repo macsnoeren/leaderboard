@@ -16,7 +16,7 @@ function check(string $name, bool $ok): void {
 }
 
 /**
- * Alle tabellen van setup.php + migrate.php, inclusief de AI-kolommen en -tabellen (DESIGN §7).
+ * Alle tabellen van setup.php + migrate.php, inclusief de AI-kolommen en -tabellen.
  */
 function freshDb(): PDO {
     $db = new PDO('sqlite::memory:');
@@ -121,7 +121,7 @@ function payload(int $team, int $msg, array $extra = []): array {
 }
 
 // ---------------------------------------------------------------------------
-echo "AI-modus per team (T1.2)\n";
+echo "AI-modus per team\n";
 $db = freshDb();
 $g1 = addGame($db);
 $g2 = addGame($db);
@@ -144,7 +144,7 @@ check('instellingen: ongeldige modus geweigerd', updateGameAiSettings($db, $g1, 
 check('instellingen opgeslagen', updateGameAiSettings($db, $g1, 'reply', 3, 7, 1) === null
     && getGame($db, $g1)['ai_max_attempts'] == 3 && getGame($db, $g1)['ai_max_questions'] == 7 && getGame($db, $g1)['ai_mode'] === 'reply');
 
-echo "Rubric (T1.6)\n";
+echo "Rubric\n";
 check('geldige rubric', validateRubric(validRubric()) === null);
 $broken = function (callable $f): array { $r = validRubric(); $f($r); return $r; };
 $cases = [
@@ -205,7 +205,7 @@ check('formulier → rubric: lege rij overgeslagen, verplicht als bool', count($
 check('formulier → rubric is geldig en lijsten zonder lege regels', validateRubric($fromForm) === null && normalizeRubric($fromForm)['ook_goed'] === ['de conciërge', 'Jan']);
 check('leeg formulier → null', rubricFromForm(['rubric_kern' => '', 'aspect_naam' => [''], 'rubric_ook_goed' => "\n"]) === null);
 
-echo "Opruimen bij verwijderen/leegmaken (T1.10)\n";
+echo "Opruimen bij verwijderen/leegmaken\n";
 $db = freshDb();
 $g1 = addGame($db);
 $g2 = addGame($db);
@@ -224,7 +224,7 @@ resetGame($db, $g1, 1);
 check('resetGame: AI-rijen van dit spel weg', (int)$db->query("SELECT (SELECT COUNT(*) FROM ai_team_progress WHERE team_id = $t2) + (SELECT COUNT(*) FROM ai_evaluations WHERE team_id = $t2)")->fetchColumn() === 0);
 check('resetGame: ander spel ongemoeid', (int)$db->query("SELECT (SELECT COUNT(*) FROM ai_team_progress WHERE team_id = $keep) + (SELECT COUNT(*) FROM ai_evaluations WHERE team_id = $keep)")->fetchColumn() === 2);
 
-echo "Openstaande taken (T2.1)\n";
+echo "Openstaande taken\n";
 $db = freshDb();
 $run = addGame($db, 'running');
 $paused = addGame($db, 'paused');
@@ -302,7 +302,7 @@ check('recent_attempts telt antwoorden van 10 min, dit level, zonder stale', $ta
 check('recent_questions telt vragen', $task['recent_questions'] === 1);
 check('escalation_open en progress', $task['escalation_open'] === true && $task['progress']['summary'] === 'Dader nog niet');
 
-echo "Serverregels (T2.2)\n";
+echo "Serverregels\n";
 $rank = ['ignored' => 0, 'suggest' => 1, 'reply' => 2, 'level_up' => 3];
 $all = 0;
 $neverHigher = true;
@@ -346,7 +346,7 @@ check('open escalatie → alleen suggest', allowedDecision(['game_status' => 'ru
 check('alles goed → level_up', allowedDecision(['game_status' => 'running', 'ai_mode' => 'auto', 'ai_auto_allowed' => true, 'rubric_status' => 'approved', 'escalation_open' => false], 'level_up') === 'level_up');
 check('onbekende beslissing → suggest', allowedDecision(['game_status' => 'running', 'ai_mode' => 'auto', 'ai_auto_allowed' => true, 'rubric_status' => 'approved', 'escalation_open' => false], 'hack') === 'suggest');
 
-echo "Tussenstand (T2.3)\n";
+echo "Tussenstand\n";
 $db = freshDb();
 $g = addGame($db);
 addAssignment($db, $g, 1);
@@ -383,7 +383,7 @@ updateTeamProgress($db, $t, 1, [['naam' => 'Dader', 'niveau' => 'goed', 'bewijs'
 check('ouder citaat overschrijft een nieuwer standpunt niet', getTeamProgress($db, $t, 1)['aspects'][0]['bericht'] === $p2);
 check('wissen', clearTeamProgress($db, $t, 1, 5) && getTeamProgress($db, $t, 1) === null && auditCount($db, 'AI_PROGRESS_CLEAR') === 1);
 
-echo "submitEvaluation (T2.4, T4.4, T5.1)\n";
+echo "submitEvaluation\n";
 [$db, $game, $team, $msg] = evalSetup('suggest');
 $r = submitEvaluation($db, payload($team, $msg, ['agent_id' => 'agent-2']));
 check('claim van een andere agent → 409', $r['status'] === 409 && (int)$db->query("SELECT COUNT(*) FROM ai_evaluations")->fetchColumn() === 0);
@@ -435,7 +435,7 @@ check('overig: daarna niet opnieuw in get_pending', !in_array($team, array_colum
 $db->exec("UPDATE ai_evaluations SET decision = 'stale'");
 check('een verouderde beoordeling blokkeert het bericht niet (bijv. na level terug)', in_array($team, array_column(aiPendingTasks($db), 'team_id'), true));
 
-// reply (T4.4)
+// reply
 [$db, $game, $team, $msg] = evalSetup('reply');
 $r = submitEvaluation($db, payload($team, $msg, ['decision' => 'reply', 'verdict' => 'onvoldoende', 'reply_text' => 'Kijk nog eens naar het motief.']));
 check('reply + goedgekeurde rubric → ai-bericht', $r['decision'] === 'reply' && $db->query("SELECT message FROM team_messages WHERE sender = 'ai'")->fetchColumn() === 'Kijk nog eens naar het motief.');
@@ -460,7 +460,7 @@ check('reply zonder tekst → suggestie', submitEvaluation($db, payload($team, $
 $r = submitEvaluation($db, payload($team, $msg, ['intent' => 'vraag', 'decision' => 'level_up', 'verdict' => 'goed', 'reply_text' => 'Met motief bedoelen we waarom.']));
 check('vraag levert nooit level-up of oordeel', $r['decision'] === 'reply' && teamLevel($db, $team) === 1 && $db->query("SELECT verdict FROM ai_evaluations")->fetchColumn() === null);
 
-// level_up (T5.1)
+// level_up
 [$db, $game, $team, $msg] = evalSetup('auto');
 $r = submitEvaluation($db, payload($team, $msg));
 check('auto + goedgekeurde rubric + running → level +1', $r['decision'] === 'level_up' && teamLevel($db, $team) === 2);
@@ -484,7 +484,7 @@ $db->exec("UPDATE teams SET current_level = 2 WHERE id = $team");
 claimTeam($db, $team, 'agent-1');
 check('auto, maar stale → niets', submitEvaluation($db, payload($team, $msg))['decision'] === 'stale' && teamLevel($db, $team) === 2);
 
-echo "Escalaties afhandelen (T4.5)\n";
+echo "Escalaties afhandelen\n";
 function escalationSetup(): array {
     $db = freshDb();
     $g = addGame($db);
@@ -520,7 +520,7 @@ $g2 = addGame($db);
 check('teacher_verdict alleen binnen het eigen spel', !setTeacherVerdict($db, $id, $g2, 'agree', 1) && setTeacherVerdict($db, $id, $g, 'disagree', 1)
     && $db->query("SELECT teacher_verdict FROM ai_evaluations WHERE id = $id")->fetchColumn() === 'disagree' && !setTeacherVerdict($db, $id, $g, 'misschien', 1));
 
-echo "Opdracht-assistent (T3.1)\n";
+echo "Opdracht-assistent\n";
 $db = freshDb();
 $g = addGame($db, 'draft');
 $g2 = addGame($db, 'draft');
@@ -564,7 +564,7 @@ claimDesign($db, $as, 'agent-1');
 check('fout → failed', submitDesign($db, ['agent_id' => 'agent-1', 'assignment_id' => $as, 'error' => 'LLM onbereikbaar'])['status'] === 200 && $status() === 'failed');
 check('na failed opnieuw aanvragen kan', requestDesign($db, $as, $g, 1) === null);
 
-echo "Heartbeat en agentstatus (T2.5, T2.7)\n";
+echo "Heartbeat en agentstatus\n";
 $db = freshDb();
 check('geen agent → inactive', aiAgentStatus($db) === ['status' => 'inactive', 'count' => 0]);
 recordHeartbeat($db, 'agent-1', false);

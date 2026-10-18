@@ -1,4 +1,4 @@
-"""T2.19 en T3.4: de agentloop met mocks; teamberichten gaan voor design-taken."""
+"""De agentloop met mocks; teamberichten gaan voor design-taken."""
 import threading
 import unittest
 from unittest import mock
@@ -92,7 +92,7 @@ class MainTest(unittest.TestCase):
 
 
 class MaintenanceTest(unittest.TestCase):
-    """T4.2 (worker-service): bij onderhoud (503) wacht de agent, zonder fout en zonder iets in te dienen."""
+    """Bij onderhoud (503) wacht de agent, zonder fout en zonder iets in te dienen."""
 
     def test_503_on_get_pending(self):
         service, api, calls = make_service([make_task(team_id=1)])

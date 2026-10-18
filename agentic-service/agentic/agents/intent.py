@@ -14,7 +14,7 @@ def build_prompt(task, max_tokens=20000):
 
 
 def effective_intent(output):
-    """Code-regel (DESIGN §6 stap 3): niet zeker = antwoord, wat het model ook zegt."""
+    """Code-regel: niet zeker = antwoord, wat het model ook zegt."""
     return output["intentie"] if output.get("zeker") else "antwoord"
 
 

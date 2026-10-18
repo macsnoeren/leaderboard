@@ -1,4 +1,4 @@
-"""T2.2: oude archieven (v1, v2) lezen met de echte fixtures uit T0.3."""
+"""Oude archieven (v1, v2) lezen met de echte fixtures."""
 import io
 import json
 import os

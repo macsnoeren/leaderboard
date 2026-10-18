@@ -1,4 +1,4 @@
-"""T2.13: voorfilter op lege berichten en injection-patronen."""
+"""Voorfilter op lege berichten en injection-patronen."""
 import unittest
 
 from agentic import prefilter

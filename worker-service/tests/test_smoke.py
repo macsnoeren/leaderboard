@@ -1,4 +1,4 @@
-"""T0.1: de testopzet werkt en het pakket is importeerbaar."""
+"""De testopzet werkt en het pakket is importeerbaar."""
 import unittest
 
 

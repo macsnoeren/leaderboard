@@ -1,4 +1,4 @@
-"""Archieven (tar.gz) veilig lezen en schrijven (DESIGN §11).
+"""Archieven (tar.gz) veilig lezen en schrijven.
 
 Een archief is onbetrouwbare invoer: alleen gewone bestanden met een naam uit de allowlist, geen
 links, geen '..' of absolute paden, limieten op grootte en aantal, en nooit extractall. Schrijven gaat

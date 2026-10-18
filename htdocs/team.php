@@ -58,7 +58,7 @@ $max_downloads = 10;
 // Haal chatberichten op voor dit level
 $stmt = $db->prepare("SELECT * FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC");
 $stmt->execute([$team['id'], $level]);
-// AI-berichten zien er voor het team precies uit als docentberichten (DESIGN §11, beslissing 2)
+// AI-berichten zien er voor het team precies uit als docentberichten
 $messages = array_map(function ($m) {
     if ($m['sender'] === 'ai') {
         $m['sender'] = 'teacher';

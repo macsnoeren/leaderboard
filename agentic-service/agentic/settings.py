@@ -1,4 +1,4 @@
-"""Instellingen van de agent: standaarden (DESIGN §10) plus wat config.py of de environment opgeeft."""
+"""Instellingen van de agent: standaarden plus wat config.py of de environment opgeeft."""
 import re
 from types import SimpleNamespace
 

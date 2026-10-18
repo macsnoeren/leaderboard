@@ -7,7 +7,7 @@ import contextlib
 import json
 import sqlite3
 
-# Draaien alleen als er niets anders draait; een restore in de wachtrij houdt de rest tegen (DESIGN §5.2)
+# Draaien alleen als er niets anders draait; een restore in de wachtrij houdt de rest tegen
 EXCLUSIVE_TYPES = ("restore", "backup")
 ORPHAN_MINUTES = 10
 

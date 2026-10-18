@@ -1,4 +1,4 @@
-"""T2.11: client voor api.php: URL, methode, header X-API-Token en body; 409 bij claim = False."""
+"""Client voor api.php: URL, methode, header X-API-Token en body; 409 bij claim = False."""
 import unittest
 from unittest import mock
 
