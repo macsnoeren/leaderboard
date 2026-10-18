@@ -1,0 +1,10 @@
+*
+!conf
+conf/config.php*
+!bin/migrate.php
+!worker-service/main.py
+!worker-service/requirements.txt
+!worker-service/worker
+**/__pycache__
+!docker/worker-config.py
+!docker/worker-php-config.php

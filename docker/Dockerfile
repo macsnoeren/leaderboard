@@ -6,9 +6,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends sqlite3 \
  && rm -rf /var/lib/apt/lists/*
 
-# Ontwikkel-instellingen (foutmeldingen zichtbaar) en ruimte voor artifact-uploads
+# Ontwikkel-instellingen (foutmeldingen zichtbaar) en ruimte voor uploads (bijlagen, en archieven voor import/restore)
 RUN cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini" \
- && printf 'upload_max_filesize=64M\npost_max_size=64M\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
+ && printf 'upload_max_filesize=512M\npost_max_size=512M\nmax_execution_time=300\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
 
 # conf/ blijft buiten de webroot, net als in productie
 ENV APACHE_DOCUMENT_ROOT=/var/www/leaderboard/htdocs

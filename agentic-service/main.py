@@ -12,7 +12,7 @@ import threading
 import uuid
 
 from agentic.agents import designer
-from agentic.api import ApiClient, ApiError
+from agentic.api import ApiClient, ApiError, MaintenanceError
 from agentic.llm import LLMClient, LLMError
 from agentic.pipeline import Pipeline
 from agentic.settings import load_settings, local_models
@@ -34,12 +34,16 @@ class AgentService:
     def heartbeat(self):
         try:
             self.api.heartbeat(self.model_ok())
+        except MaintenanceError:
+            pass
         except Exception as e:  # noqa: BLE001 - een gemiste heartbeat mag de agent niet stoppen
             logger.warning("Heartbeat mislukt: %s", e)
 
     def process_tasks(self):
         try:
             tasks = self.api.get_pending()
+        except MaintenanceError:
+            raise
         except Exception as e:  # noqa: BLE001
             logger.error("Ophalen van teamberichten mislukt: %s", e)
             return 0
@@ -71,6 +75,8 @@ class AgentService:
     def process_design_jobs(self):
         try:
             jobs = self.api.get_design_jobs()
+        except MaintenanceError:
+            raise
         except Exception as e:  # noqa: BLE001
             logger.error("Ophalen van opdrachten mislukt: %s", e)
             return 0
@@ -103,10 +109,14 @@ class AgentService:
         return done
 
     def run_once(self):
-        self.heartbeat()
-        self.process_tasks()  # een lopend spel gaat voor
-        if not self.stop_event.is_set():
-            self.process_design_jobs()
+        try:
+            self.heartbeat()
+            self.process_tasks()  # een lopend spel gaat voor
+            if not self.stop_event.is_set():
+                self.process_design_jobs()
+        except MaintenanceError:
+            # De worker zet een backup terug (onderhoudsmodus): niets beoordelen, volgende ronde opnieuw
+            logger.info("Webapp in onderhoudsmodus; wachten")
 
     def run(self):
         logger.info("AI-agent %s gestart (interval %ss, Ollama %s)", self.api.agent_id, self.settings.POLL_INTERVAL, self.llm.url)

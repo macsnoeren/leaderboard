@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bouwt en start de leaderboard testomgeving (webapp, AI-agent en Mailpit).
+# Bouwt en start de leaderboard testomgeving (webapp, AI-agent, worker en Mailpit).
 set -e
 cd "$(dirname "$0")"
 

@@ -27,10 +27,15 @@ services:
       DARKNET_CHAT_URL: ${DARKNET_CHAT_URL:-}
       # Maakt de API key 'docker-agent' aan voor de agent-container
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
+      # Worker: grootste upload voor import/restore (MB) en hoe lang exports en rapporten te downloaden zijn
+      MAX_ARCHIVE_MB: ${WORKER_MAX_ARCHIVE_MB:-500}
+      WORKER_RESULT_TTL_DAYS: ${WORKER_RESULT_TTL_DAYS:-7}
     volumes:
       - database:/var/www/leaderboard/database
       - artifacts:/var/www/leaderboard/htdocs/artifacts
       - uploads:/var/www/leaderboard/htdocs/uploads
+      # Uploads, exports, rapporten en backups van de worker (buiten de webroot)
+      - storage:/var/www/leaderboard/storage
       # Live wijzigingen in de PHP-pagina's zonder rebuild:
       # - ../htdocs:/var/www/leaderboard/htdocs
 
@@ -74,6 +79,37 @@ services:
       # Alleen lezen: voor de API key die de webcontainer aanmaakt
       - database:/data:ro
 
+  # Worker: export/import, backup/restore en rapporten (worker-service/DESIGN.md). Werkt direct op de
+  # database en de bestanden, dus lezen én schrijven op dezelfde volumes als de webcontainer.
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    init: true
+    restart: unless-stopped
+    # SIGINT: de lopende taak wordt afgemaakt en de worker meldt zich af
+    stop_signal: SIGINT
+    stop_grace_period: 2m
+    depends_on:
+      - leaderboard
+    environment:
+      # Tijdzone voor de nachtelijke backup
+      TZ: ${TZ:-Europe/Amsterdam}
+      WORKER_BACKUP_TIME: ${WORKER_BACKUP_TIME-03:00}
+      WORKER_BACKUP_KEEP: ${WORKER_BACKUP_KEEP:-}
+      WORKER_BACKUP_MANUAL_DAYS: ${WORKER_BACKUP_MANUAL_DAYS:-}
+      WORKER_BACKUP_PRE_RESTORE_DAYS: ${WORKER_BACKUP_PRE_RESTORE_DAYS:-}
+      WORKER_BACKUP_MIN_FREE_MB: ${WORKER_BACKUP_MIN_FREE_MB:-}
+      WORKER_RESULT_TTL_DAYS: ${WORKER_RESULT_TTL_DAYS:-7}
+      WORKER_MAX_ARCHIVE_MB: ${WORKER_MAX_ARCHIVE_MB:-500}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-}
+      WORKER_APP_VERSION: ${WORKER_APP_VERSION:-}
+    volumes:
+      - database:/var/www/leaderboard/database
+      - artifacts:/var/www/leaderboard/htdocs/artifacts
+      - uploads:/var/www/leaderboard/htdocs/uploads
+      - storage:/var/www/leaderboard/storage
+
   # Vangt alle uitgaande mail op: SMTP op localhost:1025, webinterface op http://localhost:8025
   mailpit:
     image: axllent/mailpit:v1.27.0
@@ -84,3 +120,4 @@ volumes:
   database:
   artifacts:
   uploads:
+  storage:

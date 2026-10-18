@@ -1,5 +1,6 @@
 .git
 database
+storage
 htdocs/artifacts
 conf/config.php*
 **/config.py

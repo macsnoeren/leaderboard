@@ -2,7 +2,7 @@
 import unittest
 from unittest import mock
 
-from agentic.api import ApiClient, ApiError
+from agentic.api import ApiClient, ApiError, MaintenanceError
 
 
 def response(status=200, data=None):
@@ -87,6 +87,15 @@ class ApiTest(unittest.TestCase):
         self.session.request.return_value = response()
         self.api.unregister_agent()
         self.assertEqual(self.last()[1]["params"], {"action": "unregister_agent"})
+
+
+class MaintenanceApiTest(unittest.TestCase):
+    def test_503_raises_maintenance(self):
+        session = mock.Mock()
+        session.request.return_value = response(503, {"error": "maintenance"})
+        api = ApiClient("http://app/api.php", "geheim", "agent-1", session=session)
+        with self.assertRaises(MaintenanceError):
+            api.get_pending()
 
 
 if __name__ == "__main__":

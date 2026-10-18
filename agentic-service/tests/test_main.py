@@ -3,7 +3,7 @@ import threading
 import unittest
 from unittest import mock
 
-from agentic.api import ApiError
+from agentic.api import ApiError, MaintenanceError
 from agentic.llm import LLMError
 from main import AgentService
 from tests.helpers import RUBRIC, SETTINGS, make_task
@@ -89,6 +89,23 @@ class MainTest(unittest.TestCase):
         api.heartbeat.side_effect = lambda ok: service.stop_event.set()
         service.run()
         api.unregister_agent.assert_called_once()
+
+
+class MaintenanceTest(unittest.TestCase):
+    """T4.2 (worker-service): bij onderhoud (503) wacht de agent, zonder fout en zonder iets in te dienen."""
+
+    def test_503_on_get_pending(self):
+        service, api, calls = make_service([make_task(team_id=1)])
+        api.get_pending.side_effect = MaintenanceError("get_pending: onderhoudsmodus", 503)
+        service.run_once()  # geen exception naar boven
+        self.assertFalse([c for c in calls if c[0] == "submit_evaluation"])
+        api.get_design_jobs.assert_not_called()
+
+    def test_503_on_claim(self):
+        service, api, calls = make_service([make_task(team_id=1)])
+        api.claim_task.side_effect = MaintenanceError("claim_task: onderhoudsmodus", 503)
+        service.run_once()
+        self.assertFalse([c for c in calls if c[0] in ("process", "submit_evaluation")])
 
 
 if __name__ == "__main__":

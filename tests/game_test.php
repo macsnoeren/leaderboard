@@ -25,7 +25,7 @@ function freshDb(): PDO {
     $db->exec("CREATE UNIQUE INDEX idx_teams_game_name ON teams(game_id, team_name)");
     $db->exec("CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT, ai_rubric TEXT, ai_rubric_status TEXT DEFAULT 'none', ai_design_status TEXT DEFAULT 'idle', ai_design_round INTEGER DEFAULT 0, ai_auto_allowed INTEGER DEFAULT 1, ai_processing_by TEXT, ai_processing_at DATETIME)");
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
-    $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
     $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
     $db->exec("CREATE TABLE download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
     $db->exec("CREATE TABLE team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
@@ -34,6 +34,7 @@ function freshDb(): PDO {
     $db->exec("CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT, description TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE ai_team_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, assignment_number INTEGER NOT NULL, aspects_json TEXT, summary TEXT, last_message_id INTEGER, updated_at DATETIME, UNIQUE (team_id, assignment_number))");
     $db->exec("CREATE TABLE assignment_ai_dialog (id INTEGER PRIMARY KEY AUTOINCREMENT, assignment_id INTEGER NOT NULL, role TEXT NOT NULL, message TEXT NOT NULL, teacher_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE worker_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, game_id INTEGER, params_json TEXT, status TEXT NOT NULL DEFAULT 'queued', progress INTEGER DEFAULT 0, message TEXT, result_file TEXT, result_name TEXT, result_size INTEGER, result_game_id INTEGER, created_by INTEGER, created_at DATETIME, started_at DATETIME, heartbeat_at DATETIME, finished_at DATETIME, expires_at DATETIME, worker_id TEXT)");
     $db->exec("CREATE TABLE ai_evaluations (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, team_name TEXT, assignment_number INTEGER NOT NULL, message_id INTEGER NOT NULL, intent TEXT, intent_json TEXT, helper_json TEXT, assessor_json TEXT, validator_json TEXT, verdict TEXT, decision TEXT, reason TEXT, reply_text TEXT, escalation_reason TEXT, resolved_by INTEGER, resolved_at DATETIME, teacher_verdict TEXT, agent_id TEXT, models TEXT, duration_ms INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     return $db;
 }
@@ -131,6 +132,46 @@ check('level-up voorbij Finish doet niets', !levelUp($db, $team, 7) && teamLevel
 check('niet bestaand team → false', !levelUp($db, 999, 7));
 $waiting = addTeam($db, $game, 'Wachters', 0);
 check('level-up vanaf level 0 doet niets', !levelUp($db, $waiting, 7) && teamLevel($db, $waiting) === 0);
+
+echo "levelUp vult het archief (wie, welk antwoord, start)\n";
+$db = freshDb();
+$db->exec("INSERT INTO teachers (id, username, role) VALUES (7, 'jjansen', 'user')");
+$game = addGame($db, 'running');
+addAssignments($db, $game, 3);
+$team = addTeam($db, $game, 'Archivarissen', 1);
+$startedAt = $db->query("SELECT level_updated_at FROM teams WHERE id = $team")->fetchColumn();
+addMessage($db, $team, 1, 'team', 'Eerste poging');
+addMessage($db, $team, 1, 'teacher', 'Bijna');
+addMessage($db, $team, 1, 'team', 'De conciërge');
+$acceptedId = (int)$db->query("SELECT MAX(id) FROM team_messages WHERE sender = 'team'")->fetchColumn();
+levelUp($db, $team, 7);
+$row = $db->query("SELECT * FROM completed_assignments WHERE team_id = $team AND assignment_number = 1")->fetch(PDO::FETCH_ASSOC);
+check('docent: leveled_by en naam', (int)$row['leveled_by'] === 7 && $row['leveled_by_name'] === 'jjansen');
+check('docent: geen AI-beoordeling', $row['ai_evaluation_id'] === null);
+check('goedgekeurd antwoord = laatste teambericht', (int)$row['accepted_message_id'] === $acceptedId && $row['accepted_answer'] === 'De conciërge');
+check('level_started_at = oude level_updated_at', $row['level_started_at'] === $startedAt);
+
+addMessage($db, $team, 2, 'team', 'Geldnood');
+$msg = (int)$db->query("SELECT MAX(id) FROM team_messages")->fetchColumn();
+$db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id, intent, decision) VALUES ($game, $team, 2, $msg, 'antwoord', 'suggest')");
+$db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id, intent, decision) VALUES ($game, $team, 2, $msg, 'antwoord', 'level_up')");
+$evalId = (int)$db->lastInsertId();
+levelUp($db, $team, null);
+$row = $db->query("SELECT * FROM completed_assignments WHERE team_id = $team AND assignment_number = 2")->fetch(PDO::FETCH_ASSOC);
+check('AI: leveled_by NULL en de level-up-beoordeling', $row['leveled_by'] === null && $row['leveled_by_name'] === null && (int)$row['ai_evaluation_id'] === $evalId);
+
+levelUp($db, $team, 7);
+$row = $db->query("SELECT * FROM completed_assignments WHERE team_id = $team AND assignment_number = 3")->fetch(PDO::FETCH_ASSOC);
+check('level zonder teambericht: antwoord NULL', $row['accepted_message_id'] === null && $row['accepted_answer'] === null);
+
+$db->exec("INSERT INTO teachers (id, username, role) VALUES (8, 'weg', 'user')");
+$gone = addTeam($db, $game, 'Vertrekkers', 1);
+addMessage($db, $gone, 1, 'team', 'Ons laatste antwoord');
+levelUp($db, $gone, 8);
+deleteTeam($db, $gone);
+$db->exec("DELETE FROM teachers WHERE id = 8");
+$row = $db->query("SELECT * FROM completed_assignments WHERE team_id = $gone")->fetch(PDO::FETCH_ASSOC);
+check('na deleteTeam() blijven antwoord en docentnaam in het archief', $row['accepted_answer'] === 'Ons laatste antwoord' && $row['leveled_by_name'] === 'weg');
 
 echo "levelDown\n";
 $db = freshDb();
@@ -300,6 +341,75 @@ levelUp($db, $team, 1);
 check('na level-up telt het oude bericht niet meer', countUnread($db, $game) === 0);
 levelDown($db, $team, 1);
 check('na level terug telt het weer', countUnread($db, $game) === 1);
+
+echo "deleteGame\n";
+$db = freshDb();
+$htdocs = sys_get_temp_dir() . '/game_test_' . bin2hex(random_bytes(4));
+mkdir("$htdocs/artifacts", 0777, true);
+mkdir("$htdocs/uploads", 0777, true);
+foreach (['artifacts/a.pdf', 'artifacts/b.pdf', 'artifacts/gedeeld.pdf', 'uploads/logo.png'] as $f) {
+    file_put_contents("$htdocs/$f", 'x');
+}
+$db->exec("INSERT INTO teachers (id, username, role) VALUES (1, 'admin', 'admin')");
+$weg = addGame($db, 'finished');
+$blijft = addGame($db, 'running');
+$db->exec("UPDATE games SET logo_file = 'uploads/logo.png' WHERE id = $weg");
+addAssignments($db, $weg, 2);
+addAssignments($db, $blijft, 1);
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/a.pdf' WHERE game_id = $weg AND assignment_number = 1");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/gedeeld.pdf' WHERE game_id = $weg AND assignment_number = 2");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/gedeeld.pdf' WHERE game_id = $blijft");
+$aId = (int)$db->query("SELECT id FROM assignments WHERE game_id = $weg LIMIT 1")->fetchColumn();
+$db->exec("INSERT INTO assignment_ai_dialog (assignment_id, role, message) VALUES ($aId, 'teacher', 'x')");
+$db->exec("INSERT INTO game_teachers (game_id, teacher_id) VALUES ($weg, 1), ($blijft, 1)");
+foreach ([$weg, $blijft] as $g) {
+    $t = addTeam($db, $g, "Team $g", 2);
+    addMessage($db, $t, 1, 'team', 'hallo');
+    $db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id) VALUES ($g, $t, 1, 1)");
+    $db->exec("INSERT INTO ai_team_progress (game_id, team_id, assignment_number) VALUES ($g, $t, 1)");
+    $db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES ($t, 1, 1)");
+    $db->exec("INSERT INTO download_tokens (team_id, level, token) VALUES ($t, 1, 'tok$g')");
+    $db->exec("INSERT INTO team_presence (team_id, username) VALUES ($t, 'x')");
+    $db->exec("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history) VALUES ($g, $t, 'Team $g', 1, 'Team: hallo')");
+    $db->exec("INSERT INTO announcements (game_id, message) VALUES ($g, 'Welkom')");
+    $db->exec("INSERT INTO worker_jobs (type, game_id, status) VALUES ('report', $g, 'done')");
+}
+$counts = function (PDO $db) {
+    $out = [];
+    foreach (['games', 'teams', 'assignments', 'assignment_ai_dialog', 'team_messages', 'ai_evaluations', 'ai_team_progress', 'team_downloads',
+              'download_tokens', 'team_presence', 'completed_assignments', 'announcements', 'game_teachers', 'worker_jobs'] as $table) {
+        $out[$table] = (int)$db->query("SELECT COUNT(*) FROM $table")->fetchColumn();
+    }
+    return $out;
+};
+
+check('lopend spel verwijderen wordt geweigerd', deleteGame($db, $blijft, 1, $htdocs) !== null && getGame($db, $blijft) !== null);
+$db->exec("UPDATE games SET status = 'paused' WHERE id = $blijft");
+check('gepauzeerd spel verwijderen wordt geweigerd', deleteGame($db, $blijft, 1, $htdocs) !== null);
+$db->exec("UPDATE games SET status = 'running' WHERE id = $blijft");
+$db->exec("INSERT INTO worker_jobs (type, game_id, status) VALUES ('game_export', $weg, 'running')");
+check('niet zolang er een taak voor het spel loopt', deleteGame($db, $weg, 1, $htdocs) !== null && getGame($db, $weg) !== null);
+$db->exec("UPDATE worker_jobs SET status = 'done' WHERE game_id = $weg");
+$before = $counts($db);
+
+check('afgelopen spel verwijderen lukt', deleteGame($db, $weg, 1, $htdocs) === null);
+check('spel is weg', getGame($db, $weg) === null);
+$after = $counts($db);
+$expected = $before;
+foreach ($expected as $table => $n) {
+    $expected[$table] = ['games' => 1, 'assignments' => 1, 'assignment_ai_dialog' => 0, 'worker_jobs' => 1][$table] ?? (int)($n / 2);
+}
+check('alle rijen van het spel zijn weg, van het andere spel niet', $after === $expected);
+check('andere spel is onaangeroerd', getGame($db, $blijft) !== null && totalAssignments($db, $blijft) === 1);
+check('bijlage en geüpload logo van het spel zijn weg', !is_file("$htdocs/artifacts/a.pdf") && !is_file("$htdocs/uploads/logo.png"));
+check('bijlage die een ander spel nog gebruikt blijft', is_file("$htdocs/artifacts/gedeeld.pdf"));
+check('ander bestand blijft', is_file("$htdocs/artifacts/b.pdf"));
+check('audit GAME_DELETE', auditCount($db, 'GAME_DELETE') === 1);
+check('onbekend spel → foutmelding', deleteGame($db, 999, 1, $htdocs) !== null);
+array_map('unlink', glob("$htdocs/*/*"));
+rmdir("$htdocs/artifacts");
+rmdir("$htdocs/uploads");
+rmdir($htdocs);
 
 if ($failures > 0) {
     echo "\n$failures test(s) mislukt\n";

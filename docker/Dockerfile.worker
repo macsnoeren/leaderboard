@@ -1,0 +1,28 @@
+# Worker (worker-service/main.py): export/import, backup/restore en rapporten in de achtergrond.
+# Op basis van PHP-CLI, zodat de worker na een restore bin/migrate.php kan draaien.
+# Bouwen vanuit de repo-root: docker compose -f docker/docker-compose.yml up --build worker
+FROM php:8.3-cli
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv fonts-dejavu-core tzdata \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY worker-service/requirements.txt /opt/worker-requirements.txt
+RUN python3 -m venv /opt/venv \
+ && /opt/venv/bin/pip install --no-cache-dir -r /opt/worker-requirements.txt
+
+WORKDIR /var/www/leaderboard
+# Voor bin/migrate.php: conf/ (zonder config.php) en het script zelf
+COPY conf conf
+COPY bin/migrate.php bin/migrate.php
+COPY docker/worker-php-config.php conf/config.php
+COPY worker-service/main.py worker-service/main.py
+COPY worker-service/worker worker-service/worker
+# config.py leest alles uit de environment (WORKER_*)
+COPY docker/worker-config.py worker-service/config.py
+
+# Zelfde gebruiker (uid 33) als Apache in de webcontainer: bestanden blijven voor beide schrijfbaar
+USER www-data
+ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1
+WORKDIR /var/www/leaderboard/worker-service
+CMD ["python3", "-u", "main.py"]

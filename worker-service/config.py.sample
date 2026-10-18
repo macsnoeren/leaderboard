@@ -1,0 +1,36 @@
+# Configuratie van de worker. Kopieer naar config.py (staat in .gitignore) en pas aan.
+# Alles is optioneel: ontbrekende waarden krijgen de standaard uit worker/config.py.
+# Relatieve paden zijn ten opzichte van worker-service/.
+
+# Zelfde database en mappen als de webapp
+DB_FILE = "../database/leaderboard.db"
+HTDOCS_DIR = "../htdocs"
+# Buiten de webroot: uploads, exports, rapporten en backups (moet gelijk zijn aan STORAGE_DIR in conf/config.php)
+STORAGE_DIR = "../storage"
+# Map van de webapp en PHP, voor bin/migrate.php na een restore
+APP_DIR = ".."
+PHP_BIN = "php"
+
+# Seconden tussen twee keer kijken in de wachtrij
+POLL_INTERVAL = 5
+# Resultaten van export en rapport zoveel dagen bewaren
+RESULT_TTL_DAYS = 7
+
+# Automatische backup elke dag om deze lokale tijd (TZ); leeg = geen automatische backups
+BACKUP_TIME = "03:00"
+# Bewaren: laatste N automatische backups; handmatige en veiligheidsbackups zoveel dagen (0 = nooit verwijderen)
+BACKUP_KEEP = 14
+BACKUP_MANUAL_DAYS = 90
+BACKUP_PRE_RESTORE_DAYS = 30
+# Onder deze vrije ruimte (MB) wordt geen backup gemaakt
+BACKUP_MIN_FREE_MB = 500
+
+# Grootste archief (uitgepakt, MB) en maximaal aantal bestanden in een archief
+MAX_ARCHIVE_MB = 500
+MAX_ARCHIVE_FILES = 10000
+# Wachttijd na het aanzetten van de onderhoudsmodus, zodat lopende requests klaar zijn
+RESTORE_GRACE_SECONDS = 5
+
+# Lettertype voor het rapport (Unicode); zonder dit bestand valt de PDF terug op Helvetica (alleen Latin-1)
+REPORT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+REPORT_FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"

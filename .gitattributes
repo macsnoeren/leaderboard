@@ -1,0 +1,14 @@
+# Altijd Unix-regeleindes (LF), ook bij een checkout op Windows
+* text=auto eol=lf
+
+# Binair: nooit omzetten
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.db binary
+*.ttf binary

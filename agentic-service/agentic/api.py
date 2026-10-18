@@ -13,6 +13,10 @@ class ApiError(Exception):
         self.body = body
 
 
+class MaintenanceError(ApiError):
+    """503: de webapp staat in onderhoudsmodus (een restore door de worker). Geen fout: even wachten."""
+
+
 class ApiClient:
     def __init__(self, base_url, api_key, agent_id, session=None, timeout=30):
         self.base_url = base_url
@@ -33,6 +37,8 @@ class ApiClient:
             data = None
         if resp.status_code == 401:
             raise ApiError("Authenticatie mislukt: controleer API_KEY", 401, data)
+        if resp.status_code == 503:
+            raise MaintenanceError(f"{action}: onderhoudsmodus", 503, data)
         return resp.status_code, data
 
     def _post(self, action, body, ok_statuses=(200,)):

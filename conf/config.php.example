@@ -18,6 +18,14 @@
 // Database configuration (zelfde pad als bin/setup.sh en de Python-scripts)
 define('DB_FILE', __DIR__ . '/../database/leaderboard.db');
 
+// Worker-service (worker-service/DESIGN.md): uploads, exports, rapporten en backups, buiten de webroot.
+// Zelfde map als STORAGE_DIR in worker-service/config.py.
+define('STORAGE_DIR', __DIR__ . '/../storage');
+// Grootste archief voor import en restore (MB); verhoog ook upload_max_filesize en post_max_size in php.ini
+define('MAX_ARCHIVE_MB', 500);
+// Zoveel dagen blijven exports en rapporten te downloaden (gelijk aan RESULT_TTL_DAYS in worker-service/config.py)
+define('RESULT_TTL_DAYS', 7);
+
 // Email configuration
 define('ENABLE_EMAIL', True); // Gebruik voor het testen False!
 define('SMTP_HOST', 'smtp.gmail.com');

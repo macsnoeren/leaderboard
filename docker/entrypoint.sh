@@ -26,10 +26,14 @@ define('FROM_NAME', '${FROM_NAME:-Assignment System}');
 define('BASE_URL', '$BASE_URL');
 define('REQUIRE_2FA_ADMIN', ${REQUIRE_2FA_ADMIN:-false});
 define('DARKNET_CHAT_URL', '${DARKNET_CHAT_URL:-}');
+define('STORAGE_DIR', '$APP/storage');
+define('MAX_ARCHIVE_MB', ${MAX_ARCHIVE_MB:-500});
+define('RESULT_TTL_DAYS', ${WORKER_RESULT_TTL_DAYS:-7});
 EOF
 
-# Database, artifact store en logo-uploads (volumes)
-mkdir -p "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads"
+# Database, artifact store, logo-uploads en de opslag van de worker (volumes)
+mkdir -p "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads" \
+         "$APP/storage/incoming" "$APP/storage/jobs" "$APP/storage/backups" "$APP/storage/tmp"
 
 # Schema: setup.php maakt de basistabellen, migrate.php de latere kolommen (beide idempotent)
 (cd "$APP/htdocs" && php setup.php > /dev/null 2>&1) || true
@@ -42,6 +46,6 @@ if [ "${AI_AGENT_ENABLED:-1}" = "1" ]; then
                    WHERE NOT EXISTS (SELECT 1 FROM api_keys WHERE key_name = 'docker-agent');"
 fi
 
-chown -R www-data:www-data "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads"
+chown -R www-data:www-data "$APP/database" "$APP/htdocs/artifacts" "$APP/htdocs/uploads" "$APP/storage"
 
 exec apache2-foreground

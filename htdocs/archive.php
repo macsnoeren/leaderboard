@@ -28,7 +28,11 @@ $extraCSS = '<style>
 </style>';
 include 'admin_header.php';
 ?>
-    <?= pageHeader('Archief', gameSubtitle($game)) ?>
+    <?= pageHeader('Archief', gameSubtitle($game),
+        // Rapport van dit spel (worker-service): dezelfde actie als bij Spelinstellingen
+        '<form method="POST" action="game.php" class="inline">' . csrfField() . '<input type="hidden" name="action" value="report">'
+        . '<input type="hidden" name="sections[]" value="answers"><input type="hidden" name="sections[]" value="teams">'
+        . '<button type="submit" class="btn btn-secondary">' . icon('file') . 'Rapport (PDF)</button></form>') ?>
 
     <div class="card">
         <p class="muted text-sm" style="margin-bottom: 16px;">Hier staan de chats van alle levels die teams hebben afgerond.</p>

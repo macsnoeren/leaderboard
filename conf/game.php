@@ -344,7 +344,8 @@ function deleteTeam(PDO $db, int $teamId): void {
 
 /**
  * Level omhoog: archiveert de chat van het huidige level (zonder AI-suggesties; AI-berichten als
- * "AI: …") met teamnaam, verwijdert alleen de suggesties van dat level, sluit open escalaties en
+ * "AI: …") met teamnaam, wie goedkeurde (docent of AI-beoordeling), het goedgekeurde antwoord (laatste
+ * teambericht) en de starttijd van het level. Verwijdert alleen de suggesties van dat level, sluit open escalaties en
  * verhoogt het level. De berichten zelf blijven staan, zodat ze bij een level terug weer zichtbaar
  * zijn. Stopt bij N+1 (Finish). $userId null = de AI (submitEvaluation()).
  */
@@ -361,15 +362,34 @@ function levelUp(PDO $db, int $teamId, ?int $userId): bool {
             return false;
         }
 
-        $msgs = $db->prepare("SELECT sender, message FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC, id ASC");
+        $msgs = $db->prepare("SELECT id, sender, message FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender != 'suggestion' ORDER BY created_at ASC, id ASC");
         $msgs->execute([$teamId, $level]);
         $history = [];
+        $accepted = null; // laatste teambericht: het goedgekeurde antwoord
         foreach ($msgs->fetchAll(PDO::FETCH_ASSOC) as $m) {
             $prefix = ['team' => 'Team: ', 'ai' => 'AI: '][$m['sender']] ?? 'Docent: ';
             $history[] = $prefix . $m['message'];
+            if ($m['sender'] === 'team') {
+                $accepted = $m;
+            }
         }
-        $db->prepare("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
-           ->execute([(int)$team['game_id'], $teamId, $team['team_name'], $level, implode("\n", $history)]);
+        // Wie keurde goed: de docent (naam blijft na verwijderen), of de AI met de beoordeling die tot de level-up leidde
+        $leveledByName = null;
+        $evaluationId = null;
+        if ($userId !== null) {
+            $teacher = findTeacher($db, $userId);
+            $leveledByName = $teacher ? teacherLabel($teacher + ['display_name' => null, 'username' => null, 'email' => null]) : null;
+        } else {
+            $stmt = $db->prepare("SELECT id FROM ai_evaluations WHERE team_id = ? AND assignment_number = ? AND decision = 'level_up' ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$teamId, $level]);
+            $evaluationId = $stmt->fetchColumn() ?: null;
+        }
+        $db->prepare("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history, created_at,
+                          leveled_by, leveled_by_name, ai_evaluation_id, accepted_message_id, accepted_answer, level_started_at)
+                      VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?)")
+           ->execute([(int)$team['game_id'], $teamId, $team['team_name'], $level, implode("\n", $history),
+                      $userId, $leveledByName, $evaluationId === null ? null : (int)$evaluationId,
+                      $accepted ? (int)$accepted['id'] : null, $accepted ? $accepted['message'] : null, $team['level_updated_at']]);
 
         $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'")->execute([$teamId, $level]);
         resolveEscalations($db, $teamId, $level, $userId);
@@ -487,6 +507,79 @@ function resetGame(PDO $db, int $gameId, ?int $userId): void {
         $db->rollBack();
         throw $e;
     }
+}
+
+/**
+ * Verwijdert een spel met alles erop en eraan: teams (met berichten, downloads, AI-gegevens), opdrachten
+ * (met bijlagen en de dialoog van de opdracht-assistent), het archief, mededelingen, gekoppelde docenten,
+ * het geüploade logo en de taken van de worker (met hun exports en rapporten). Backups blijven.
+ * Niet bij een lopend of gepauzeerd spel, en niet zolang er een taak van de worker voor dit spel loopt.
+ * Geeft null bij succes, anders een foutmelding.
+ */
+function deleteGame(PDO $db, int $gameId, ?int $userId, ?string $htdocsDir = null): ?string {
+    $htdocsDir = $htdocsDir ?? __DIR__ . '/../htdocs';
+    $game = getGame($db, $gameId);
+    if (!$game) {
+        return 'Spel niet gevonden.';
+    }
+    if (in_array($game['effective_status'], ['running', 'paused'], true)) {
+        return 'Een lopend of gepauzeerd spel kun je niet verwijderen. Beëindig het spel eerst.';
+    }
+    $stmt = $db->prepare("SELECT COUNT(*) FROM worker_jobs WHERE game_id = ? AND status IN ('queued', 'running')");
+    $stmt->execute([$gameId]);
+    if ($stmt->fetchColumn() > 0) {
+        return 'Er loopt nog een export of rapport voor dit spel. Wacht tot die klaar is (zie Taken).';
+    }
+
+    // Bestanden pas weggooien als de database klaar is
+    $files = [];
+    $stmt = $db->prepare("SELECT artifact_file FROM assignments WHERE game_id = ? AND artifact_file IS NOT NULL AND artifact_file != ''");
+    $stmt->execute([$gameId]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $file) {
+        $files[] = $htdocsDir . '/' . $file;
+    }
+    // Alleen een eigen upload, niet een meegeleverd logo zoals images/…
+    if (strpos((string)$game['logo_file'], LOGO_DIR . '/') === 0) {
+        $files[] = $htdocsDir . '/' . $game['logo_file'];
+    }
+    $stmt = $db->prepare("SELECT result_file FROM worker_jobs WHERE game_id = ? AND result_file LIKE 'jobs/%'");
+    $stmt->execute([$gameId]);
+    $results = function_exists('storageDir') ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+
+    $db->beginTransaction();
+    try {
+        $teamIds = "SELECT id FROM teams WHERE game_id = ?";
+        foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
+            $db->prepare("DELETE FROM $table WHERE team_id IN ($teamIds)")->execute([$gameId]);
+        }
+        $db->prepare("DELETE FROM assignment_ai_dialog WHERE assignment_id IN (SELECT id FROM assignments WHERE game_id = ?)")->execute([$gameId]);
+        foreach (['ai_team_progress', 'ai_evaluations', 'announcements', 'completed_assignments', 'assignments', 'teams', 'game_teachers', 'worker_jobs'] as $table) {
+            $db->prepare("DELETE FROM $table WHERE game_id = ?")->execute([$gameId]);
+        }
+        $db->prepare("DELETE FROM games WHERE id = ?")->execute([$gameId]);
+        logAudit($db, $userId, 'GAME_DELETE', "Spel '{$game['name']}' (#$gameId) verwijderd");
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    foreach ($files as $path) {
+        // Een bijlage kan door een ander spel gedeeld worden (oude kopieën): alleen weg als niemand hem meer gebruikt
+        $rel = substr($path, strlen($htdocsDir) + 1);
+        $used = $db->prepare("SELECT (SELECT COUNT(*) FROM assignments WHERE artifact_file = ?) + (SELECT COUNT(*) FROM games WHERE logo_file = ?)");
+        $used->execute([$rel, $rel]);
+        if ((int)$used->fetchColumn() === 0 && strpos($rel, '..') === false && is_file($path)) {
+            @unlink($path);
+        }
+    }
+    foreach ($results as $rel) {
+        if (strpos((string)$rel, '..') === false && is_file(storageDir() . '/' . $rel)) {
+            @unlink(storageDir() . '/' . $rel);
+            @rmdir(dirname(storageDir() . '/' . $rel));
+        }
+    }
+    return null;
 }
 
 /**

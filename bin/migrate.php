@@ -202,7 +202,23 @@ try {
     $db->exec("CREATE INDEX IF NOT EXISTS idx_ai_evaluations_team ON ai_evaluations(team_id, assignment_number)");
     $db->exec("CREATE INDEX IF NOT EXISTS idx_assignment_ai_dialog ON assignment_ai_dialog(assignment_id)");
 
+    // 20. Worker-service (worker-service/DESIGN.md): wachtrij, heartbeat en een archief dat weet wie
+    //     goedkeurde en welk antwoord. Bestaande archiefregels houden NULL (het rapport leidt die af).
+    foreach (['completed_assignments ADD COLUMN leveled_by INTEGER', 'completed_assignments ADD COLUMN leveled_by_name TEXT',
+              'completed_assignments ADD COLUMN ai_evaluation_id INTEGER', 'completed_assignments ADD COLUMN accepted_message_id INTEGER',
+              'completed_assignments ADD COLUMN accepted_answer TEXT', 'completed_assignments ADD COLUMN level_started_at DATETIME'] as $column) {
+        try {
+            $db->exec("ALTER TABLE $column");
+        } catch (PDOException $e) {}
+    }
+    $db->exec("CREATE TABLE IF NOT EXISTS worker_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, game_id INTEGER, params_json TEXT, status TEXT NOT NULL DEFAULT 'queued', progress INTEGER DEFAULT 0, message TEXT, result_file TEXT, result_name TEXT, result_size INTEGER, result_game_id INTEGER, created_by INTEGER, created_at DATETIME, started_at DATETIME, heartbeat_at DATETIME, finished_at DATETIME, expires_at DATETIME, worker_id TEXT)");
+    $db->exec("CREATE INDEX IF NOT EXISTS idx_worker_jobs_status ON worker_jobs(status, id)");
+    $db->exec("CREATE INDEX IF NOT EXISTS idx_worker_jobs_game ON worker_jobs(game_id, id)");
+    $db->exec("CREATE TABLE IF NOT EXISTS worker_status (worker_id TEXT PRIMARY KEY, version TEXT, last_heartbeat DATETIME, current_job_id INTEGER)");
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";
+    // Exitcode voor scripts, o.a. de worker na een restore
+    exit(1);
 }

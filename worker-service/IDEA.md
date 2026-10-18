@@ -1,0 +1,4 @@
+Het idee is dat dit een python worker wordt die in de achtergrond taken oppakt. Bijvoorbeeld het exporteren en importeren van spellen. Of het backuppen en restoren van de omgeving (lees alle spellen). Ook misschien het maken van een rapport waarin je kan controleren of alle vragen goed zijn beantwoord. Misschien in de toekomst meer.
+Het importeren en exporteren staan al een python applicatie in de bin directory. Het moet mogelijk zijn om de bestanden die in de eerste versie van de applicatie zie bin/export_assignments.py ook gebruikt kunnen worden om te importeren in de nieuwe applicatie. Ik snap wel dat in de nieuwe applicatie er meer informatie is.
+
+Kan je van dit idee een eerste ontwerp document maken DESIGN.md. Om dit zo goed mogelijk te doen stel je vragen over zaken die meer verduidelijking nodig hebben.

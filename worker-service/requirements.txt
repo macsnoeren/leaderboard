@@ -1,0 +1,2 @@
+# Alleen voor het rapport (PDF); de rest is standaardbibliotheek
+fpdf2==2.8.3

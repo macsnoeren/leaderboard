@@ -120,6 +120,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             flash('success', $open ? 'Teams kunnen zich nu zelf aanmelden.' : 'De registratie is gesloten.');
             break;
 
+        case 'export':
+            // Spel als archief (worker-service): standaard alleen spelinformatie, optioneel met teams en voortgang
+            $withProgress = !empty($_POST['include_progress']);
+            enqueueJob($db, 'game_export', $gameId, ['game_id' => $gameId, 'include_progress' => $withProgress], $userId,
+                "Export van spel '{$game['name']}'" . ($withProgress ? ' met teams en voortgang' : ''));
+            flash('success', 'De export staat in de wachtrij. Zodra hij klaar is, kun je hem hier downloaden.');
+            redirect('jobs.php');
+
+        case 'report':
+            $sections = array_values(array_intersect(['answers', 'teams'], (array)($_POST['sections'] ?? [])));
+            if (!$sections) {
+                flash('error', 'Kies minstens één onderdeel voor het rapport.');
+                break;
+            }
+            enqueueJob($db, 'report', $gameId, ['game_id' => $gameId, 'sections' => $sections], $userId, "Rapport van spel '{$game['name']}'");
+            flash('success', 'Het rapport wordt gemaakt. Zodra het klaar is, kun je het hier downloaden.');
+            redirect('jobs.php');
+
+        case 'delete_game':
+            // Alleen beheerders: zij maken spellen aan (games.php), dus zij verwijderen ze ook
+            if ($user['role'] !== 'admin') {
+                flash('error', 'Alleen een beheerder kan een spel verwijderen.');
+                break;
+            }
+            if (trim($_POST['confirm_delete_name'] ?? '') !== $game['name']) {
+                flash('error', 'De naam klopt niet; er is niets verwijderd.');
+                break;
+            }
+            $error = deleteGame($db, $gameId, $userId);
+            if ($error !== null) {
+                flash('error', $error);
+                break;
+            }
+            unset($_SESSION['game_id']);
+            flash('success', "Het spel '{$game['name']}' is verwijderd.");
+            redirect('games.php');
+
         case 'reset':
             if (trim($_POST['confirm_name'] ?? '') !== $game['name']) {
                 flash('error', 'De naam klopt niet; er is niets leeggemaakt.');
@@ -274,11 +311,43 @@ include 'admin_header.php';
                 </div>
                 <?php if ($status === 'finished'): ?><p class="muted small" style="margin-top: 12px;">Het spel is afgelopen: aanmelden kan niet meer.</p><?php endif; ?>
             </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><?= icon('download') ?>Exporteren en rapport</div>
+                    <a href="jobs.php" class="btn btn-sm btn-ghost"><?= icon('inbox') ?>Taken</a>
+                </div>
+                <form method="POST">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="export">
+                    <label class="check field">
+                        <input type="checkbox" name="include_progress" value="1">
+                        <span>Met teams en voortgang (berichten, archief, AI-beoordelingen; zonder e-mailadressen)</span>
+                    </label>
+                    <button type="submit" class="btn btn-secondary"><?= icon('download') ?>Spel exporteren</button>
+                    <p class="muted small" style="margin-top: 8px;">Zonder vinkje: alleen de spelinstellingen, het logo en de opdrachten met bijlagen en rubric. Een beheerder kan het archief als nieuw spel importeren.</p>
+                </form>
+                <div class="section-label">Rapport (PDF)</div>
+                <form method="POST">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="report">
+                    <label class="check field" style="margin-bottom: 6px;">
+                        <input type="checkbox" name="sections[]" value="answers" checked>
+                        <span>Goedgekeurde antwoorden per opdracht, naast het modelantwoord</span>
+                    </label>
+                    <label class="check field">
+                        <input type="checkbox" name="sections[]" value="teams" checked>
+                        <span>Verloop per team</span>
+                    </label>
+                    <button type="submit" class="btn btn-secondary"><?= icon('file') ?>Rapport maken</button>
+                </form>
+            </div>
         </div>
     </div>
 
     <div class="card card-danger">
-        <div class="card-title"><?= icon('alert') ?>Gevarenzone: alles leegmaken</div>
+        <div class="card-title"><?= icon('alert') ?>Gevarenzone</div>
+        <div class="section-label">Alles leegmaken</div>
         <p class="text-sm" style="margin-bottom: 16px;">Verwijdert alle <?= $teamCount ?> teams met hun chats, downloads en de mededelingen, en zet het spel terug op concept. Het archief, de opdrachten en de instellingen blijven. Dit kan niet ongedaan worden gemaakt.</p>
         <form method="POST" class="btn-row" style="align-items: flex-end;" onsubmit="return confirm('Weet je het zeker? Dit kan niet ongedaan worden gemaakt.');">
             <?= csrfField() ?>
@@ -289,6 +358,24 @@ include 'admin_header.php';
             </div>
             <button type="submit" class="btn btn-danger-solid"><?= icon('trash') ?>Alles leegmaken</button>
         </form>
+
+        <?php if ($user['role'] === 'admin'): ?>
+            <div class="section-label">Spel verwijderen</div>
+            <p class="text-sm" style="margin-bottom: 16px;">Verwijdert het hele spel: alle <?= $teamCount ?> teams met hun chats, de opdrachten met bijlagen, het archief, de mededelingen, het logo en de exports en rapporten van dit spel. Docenten verliezen de toegang. Dit kan niet ongedaan worden gemaakt; maak eerst een export (met teams en voortgang) of een backup als je het later nog wilt terugzien.</p>
+            <?php if (in_array($status, ['running', 'paused'], true)): ?>
+                <?= alertBox('info', 'Dit spel is ' . htmlspecialchars(gameStatusLabel($status)) . '. Beëindig het spel eerst; daarna kun je het verwijderen.') ?>
+            <?php else: ?>
+                <form method="POST" class="btn-row" style="align-items: flex-end;" onsubmit="return confirm('Het spel definitief verwijderen? Dit kan niet ongedaan worden gemaakt.');">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="delete_game">
+                    <div class="field" style="margin: 0; flex: 1; min-width: 240px; max-width: 420px;">
+                        <label for="g-delete-confirm">Typ ter bevestiging de naam van het spel: <strong><?= htmlspecialchars($game['name']) ?></strong></label>
+                        <input type="text" name="confirm_delete_name" id="g-delete-confirm" autocomplete="off" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger-solid"><?= icon('trash') ?>Spel verwijderen</button>
+                </form>
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
 
     <script src="<?= QRCODE_SRC ?>"></script>

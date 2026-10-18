@@ -36,6 +36,7 @@ $navGroups = [
         ['announcements.php', 'Mededelingen', 'megaphone', ['announcements.php']],
         ['ai_log.php', 'AI-logboek', 'bot', ['ai_log.php']],
         ['game.php', 'Spelinstellingen', 'sliders', ['game.php', 'choose_game.php']],
+        ['jobs.php', 'Taken', 'inbox', ['jobs.php']],
     ],
 ];
 if ($isAdminUser) {
@@ -45,6 +46,7 @@ if ($isAdminUser) {
         ['api_keys.php', 'API-sleutels', 'key', ['api_keys.php']],
         ['archive.php', 'Archief', 'archive', ['archive.php']],
         ['audit.php', 'Auditlog', 'clipboard', ['audit.php']],
+        ['backups.php', 'Backups', 'save', ['backups.php']],
     ];
 }
 

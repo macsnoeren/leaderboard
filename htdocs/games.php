@@ -32,6 +32,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         redirect('games.php');
     }
 
+    if ($action === 'import_game') {
+        // Archief (ook van de eerste versie van bin/export_assignments.py) wordt een nieuw spel; de worker doet het werk
+        $stored = storeArchiveUpload($_FILES['archive'] ?? []);
+        if (is_array($stored)) {
+            flash('error', $stored['error']);
+            redirect('games.php');
+        }
+        $name = trim($_POST['name'] ?? '');
+        $length = function_exists('mb_strlen') ? mb_strlen($name, 'UTF-8') : strlen($name);
+        $original = basename((string)($_FILES['archive']['name'] ?? 'archief.tar.gz'));
+        enqueueJob($db, 'game_import', null, ['upload' => $stored, 'original_name' => $original, 'name' => $length > 0 && $length <= 100 ? $name : null],
+            $adminId, "Import van '$original' als nieuw spel");
+        flash('success', 'Het archief staat in de wachtrij. Het nieuwe spel verschijnt zodra de import klaar is.');
+        redirect('jobs.php');
+    }
+
     $target = getGame($db, (int)($_POST['game_id'] ?? 0));
     if (!$target) {
         flash('error', 'Spel niet gevonden.');
@@ -112,6 +128,27 @@ include 'admin_header.php';
             <button type="submit" class="btn btn-primary"><?= icon('plus') ?>Aanmaken</button>
         </form>
         <p class="muted small" style="margin-top: 10px;">Een nieuw spel begint als concept.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title"><?= icon('inbox') ?>Spel importeren</div>
+        <form method="POST" enctype="multipart/form-data">
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="import_game">
+            <div class="field-row">
+                <div class="field">
+                    <label for="imp-file">Archief (.tar.gz)</label>
+                    <input type="file" name="archive" id="imp-file" accept=".gz,.tgz,application/gzip" required>
+                    <div class="hint">Een export uit Spelinstellingen, of een archief van het oude <span class="mono">export_assignments.py</span>. Max. <?= maxArchiveMb() ?> MB.</div>
+                </div>
+                <div class="field">
+                    <label for="imp-name">Naam van het nieuwe spel</label>
+                    <input type="text" name="name" id="imp-name" maxlength="100" placeholder="Leeg = naam uit het archief">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-secondary"><?= icon('plus') ?>Importeren als nieuw spel</button>
+        </form>
+        <p class="muted small" style="margin-top: 10px;">Een import maakt altijd een nieuw spel (concept; met voortgang: gepauzeerd). Bestaande spellen worden nooit overschreven. Teams krijgen nieuwe links.</p>
     </div>
 
     <?php foreach ($gameRows as $row):
