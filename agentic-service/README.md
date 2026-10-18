@@ -1,6 +1,6 @@
 # Agentic AI service
 
-De AI-agent van Zebrawave. Hij ondersteunt de docent: elk teambericht gaat door een pijplijn van
+De AI-agent van OperationRoom. Hij ondersteunt de docent: elk teambericht gaat door een pijplijn van
 kleine agents, en de opdracht-assistent helpt bij het maken van een rubric. Wat de AI zelf mag
 (alleen suggesties, het team antwoorden, of zelf een level omhoog zetten) stelt de docent per team in.
 De webapplicatie blijft de baas: `api.php` controleert elke beslissing opnieuw, dus een kapotte of

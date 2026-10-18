@@ -1,8 +1,11 @@
-# Leaderboard (Zebrawave)
+# OperationRoom
 
-Leaderboard voor een teamspel met detectiveopdrachten. Teams zien hun opdracht op hun eigen dashboard en
-sturen hun antwoord via de chat; een docent beoordeelt het en zet het team een level omhoog. Alles hoort bij
-een **spel**: teams, opdrachten, het archief en mededelingen.
+Omgeving voor teamspellen, hackathons en opdrachten voor studenten, met een live leaderboard. Teams zien hun
+opdracht op hun eigen dashboard en sturen hun antwoord via de chat; een docent beoordeelt het en zet het team
+een level omhoog. Alles hoort bij een **spel**: teams, opdrachten, het archief en mededelingen.
+
+Het begon als het detectivespel Zebrawave. Exports en backups van vóór de naamswijziging
+(`zebrawave-game`, `zebrawave-backup-…`) zijn nog gewoon te importeren en terug te zetten.
 
 Onderdelen:
 

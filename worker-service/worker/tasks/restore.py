@@ -172,7 +172,7 @@ def restore(job, archive_path, username):
     finally:
         check.close()
     if unknown:
-        raise UserError("Deze backup is van een nieuwere versie van Zebrawave (onbekend: " + ", ".join(unknown[:5]) + ")")
+        raise UserError("Deze backup is van een nieuwere versie van OperationRoom (onbekend: " + ", ".join(unknown[:5]) + ")")
 
     # 2. Onderhoudsmodus en 3. veiligheidsbackup
     set_maintenance(storage, step="Onderhoud gestart", job_id=job.id, by=username)

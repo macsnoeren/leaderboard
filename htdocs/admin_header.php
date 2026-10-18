@@ -63,7 +63,7 @@ function navBadges(int $unread, int $escalations): array {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?> - Zebrawave</title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?> - OperationRoom</title>
     <?= themeMeta() ?>
     <?php if ($loadMarked ?? true): // profile.php zet dit uit: de 2FA-pagina laadt alleen scripts van cdnjs ?>
     <?= markedScript() ?>
@@ -127,11 +127,11 @@ function navBadges(int $unread, int $escalations): array {
     <a class="skip-link" href="#main">Naar de inhoud</a>
     <header class="topbar" data-theme="ops">
         <button type="button" class="btn btn-ghost btn-icon" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Menu openen"><?= icon('menu') ?></button>
-        <span class="brand"><?= brandMark(24) ?> Zebrawave</span>
+        <span class="brand"><?= brandMark(24) ?> OperationRoom</span>
         <?php if ($headerGame): ?><span class="game"><?= htmlspecialchars($headerGame['name']) ?></span><?php endif; ?>
     </header>
     <nav class="sidebar" id="sidebar" data-theme="ops" aria-label="Hoofdmenu">
-        <a href="teacher.php" class="sidebar-brand"><?= brandMark(30) ?><span>Zebrawave<small>Docenten</small></span></a>
+        <a href="teacher.php" class="sidebar-brand"><?= brandMark(30) ?><span>OperationRoom<small>Docenten</small></span></a>
         <div class="sidebar-zebra" aria-hidden="true"></div>
         <div class="game-picker">
             <div class="field-label" id="game-picker-label">Actief spel</div>

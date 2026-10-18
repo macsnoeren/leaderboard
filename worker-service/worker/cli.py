@@ -88,7 +88,7 @@ def inspect(path, cfg):
 
 
 def build_parser():
-    p = argparse.ArgumentParser(prog="python -m worker", description="Taken van de Zebrawave-worker direct uitvoeren.")
+    p = argparse.ArgumentParser(prog="python -m worker", description="Taken van de OperationRoom-worker direct uitvoeren.")
     sub = p.add_subparsers(dest="command", required=True)
     e = sub.add_parser("export-game", help="Spel exporteren naar een archief (v3)")
     e.add_argument("--game", type=int, required=True)

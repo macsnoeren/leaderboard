@@ -1,4 +1,4 @@
-"""AI-agent voor Zebrawave: beoordeelt teamberichten en helpt docenten met rubrics (README.md).
+"""AI-agent voor OperationRoom: beoordeelt teamberichten en helpt docenten met rubrics (README.md).
 
 Starten: python3 main.py (met config.py hiernaast; zie config.py.sample). Stoppen met Ctrl+C of SIGTERM:
 de agent meldt zich dan netjes af.

@@ -11,7 +11,7 @@ from worker.jobs import UserError
 MB = 1024 * 1024
 
 V3 = {
-    "format": "zebrawave-game", "format_version": 3, "include_progress": False,
+    "format": "operationroom-game", "format_version": 3, "include_progress": False,
     "game": {"name": "Operatie", "ai_mode": "reply", "ai_max_attempts": 7, "ai_max_questions": 99, "logo_file": "logo.png"},
     "assignments": [{"assignment_number": 1, "title": "De sleutel", "criteria": "De conciërge", "artifact_file": "assignment_1_bijlage.txt",
                      "ai_rubric": {"kern": "x"}, "ai_rubric_status": "approved", "ai_auto_allowed": 1}],
@@ -35,6 +35,9 @@ class FormatsTest(unittest.TestCase):
         self.assertEqual(detect_format([{"title": "x", "ai_rubric": None}]), "v2")
         self.assertEqual(detect_format(V3), "v3")
         self.assertEqual(detect_format(dict(V3, format_version=4)), "newer")
+        self.assertEqual(detect_format({"format": "operationroom-backup", "format_version": 1}), "backup")
+        # Van vóór de naamswijziging (Zebrawave)
+        self.assertEqual(detect_format(dict(V3, format="zebrawave-game")), "v3")
         self.assertEqual(detect_format({"format": "zebrawave-backup", "format_version": 1}), "backup")
         self.assertEqual(detect_format({"iets": 1}), "unknown")
         self.assertEqual(detect_format("tekst"), "unknown")
@@ -61,7 +64,7 @@ class FormatsTest(unittest.TestCase):
 
     def test_backup_refused(self):
         with self.assertRaisesRegex(UserError, "backup"):
-            self.read({"format": "zebrawave-backup", "format_version": 1})
+            self.read({"format": "operationroom-backup", "format_version": 1})
 
     def test_unknown_refused(self):
         with self.assertRaisesRegex(UserError, "Onbekend formaat"):

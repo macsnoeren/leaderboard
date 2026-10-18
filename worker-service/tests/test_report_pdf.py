@@ -78,7 +78,7 @@ class ReportPdfTest(unittest.TestCase):
         job = run_job(conn, self.env.cfg, self.env.storage, db.claim_next(conn, "w"))
         row = db.get_job(conn, job.id)
         self.assertEqual(row["status"], "done", row["message"])
-        self.assertTrue(row["result_name"].startswith("zebrawave-rapport-operatie-zebra-") and row["result_name"].endswith(".pdf"))
+        self.assertTrue(row["result_name"].startswith("operationroom-rapport-operatie-zebra-") and row["result_name"].endswith(".pdf"))
         self.assertIn("goedgekeurde antwoorden", row["message"])
         db.create_job(conn, "report", {"game_id": 99}, game_id=99)
         job = run_job(conn, self.env.cfg, self.env.storage, db.claim_next(conn, "w"))

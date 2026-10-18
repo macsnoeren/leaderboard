@@ -113,7 +113,7 @@ function totpVerify(string $secret, string $code, ?int $lastStep, ?int $time = n
 /**
  * otpauth://-URI voor de QR-code in een authenticator-app.
  */
-function totpUri(string $secret, string $account, string $issuer = 'Zebrawave'): string {
+function totpUri(string $secret, string $account, string $issuer = 'OperationRoom'): string {
     $label = rawurlencode($issuer) . ':' . rawurlencode($account);
     $query = http_build_query([
         'secret' => $secret,

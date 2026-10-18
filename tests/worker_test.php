@@ -111,23 +111,24 @@ function writeBackup(string $dir, string $name, array $meta, bool $archive = tru
     }
     file_put_contents("$dir/$name.json", json_encode($meta));
 }
-writeBackup($dir, 'zebrawave-backup-20261001-030000.tar.gz', ['trigger' => 'scheduled', 'created_at' => '2026-10-01 01:00:00']);
-writeBackup($dir, 'zebrawave-backup-20261003-120000.tar.gz', ['trigger' => 'manual', 'created_at' => '2026-10-03 10:00:00', 'counts' => ['games' => 2]]);
-writeBackup($dir, 'zebrawave-backup-20261002-030000.tar.gz', ['trigger' => 'scheduled', 'created_at' => '2026-10-02 01:00:00']);
-writeBackup($dir, 'zebrawave-backup-20261004-030000.tar.gz', ['trigger' => 'scheduled', 'created_at' => '2026-10-04 01:00:00'], false);
+writeBackup($dir, 'operationroom-backup-20261001-030000.tar.gz', ['trigger' => 'scheduled', 'created_at' => '2026-10-01 01:00:00']);
+writeBackup($dir, 'operationroom-backup-20261003-120000.tar.gz', ['trigger' => 'manual', 'created_at' => '2026-10-03 10:00:00', 'counts' => ['games' => 2]]);
+writeBackup($dir, 'operationroom-backup-20261002-030000.tar.gz', ['trigger' => 'scheduled', 'created_at' => '2026-10-02 01:00:00']);
+writeBackup($dir, 'operationroom-backup-20261004-030000.tar.gz', ['trigger' => 'scheduled', 'created_at' => '2026-10-04 01:00:00'], false);
 file_put_contents("$dir/geen-backup.tar.gz", 'x');
 file_put_contents("$dir/geen-backup.tar.gz.json", '{}');
 $list = listBackups($dir);
-check('gesorteerd op datum, nieuwste eerst', array_column($list, 'file') === ['zebrawave-backup-20261003-120000.tar.gz', 'zebrawave-backup-20261002-030000.tar.gz', 'zebrawave-backup-20261001-030000.tar.gz']);
-check('.json zonder archief telt niet mee', findBackup('zebrawave-backup-20261004-030000.tar.gz', $dir) === null);
+check('gesorteerd op datum, nieuwste eerst', array_column($list, 'file') === ['operationroom-backup-20261003-120000.tar.gz', 'operationroom-backup-20261002-030000.tar.gz', 'operationroom-backup-20261001-030000.tar.gz']);
+check('.json zonder archief telt niet mee', findBackup('operationroom-backup-20261004-030000.tar.gz', $dir) === null);
 check('vreemde naam telt niet mee', findBackup('geen-backup.tar.gz', $dir) === null);
-check('pad met / wordt geweigerd', findBackup('../backups/zebrawave-backup-20261001-030000.tar.gz', $dir) === null && !isValidBackupName('a/zebrawave-backup-1.tar.gz'));
+check('pad met / wordt geweigerd', findBackup('../backups/operationroom-backup-20261001-030000.tar.gz', $dir) === null && !isValidBackupName('a/operationroom-backup-1.tar.gz'));
 check('tellingen en grootte', $list[0]['counts'] === ['games' => 2] && $list[0]['size'] === 3);
-check('vastzetten', setBackupPinned('zebrawave-backup-20261001-030000.tar.gz', true, $dir) && findBackup('zebrawave-backup-20261001-030000.tar.gz', $dir)['pinned'] === true);
-check('losmaken', setBackupPinned('zebrawave-backup-20261001-030000.tar.gz', false, $dir) && findBackup('zebrawave-backup-20261001-030000.tar.gz', $dir)['pinned'] === false);
-check('verwijderen haalt archief en .json weg', deleteBackup('zebrawave-backup-20261002-030000.tar.gz', $dir)
-    && !is_file("$dir/zebrawave-backup-20261002-030000.tar.gz") && !is_file("$dir/zebrawave-backup-20261002-030000.tar.gz.json"));
-check('onbekende backup verwijderen lukt niet', !deleteBackup('zebrawave-backup-19990101-000000.tar.gz', $dir));
+check('vastzetten', setBackupPinned('operationroom-backup-20261001-030000.tar.gz', true, $dir) && findBackup('operationroom-backup-20261001-030000.tar.gz', $dir)['pinned'] === true);
+check('losmaken', setBackupPinned('operationroom-backup-20261001-030000.tar.gz', false, $dir) && findBackup('operationroom-backup-20261001-030000.tar.gz', $dir)['pinned'] === false);
+check('verwijderen haalt archief en .json weg', deleteBackup('operationroom-backup-20261002-030000.tar.gz', $dir)
+    && !is_file("$dir/operationroom-backup-20261002-030000.tar.gz") && !is_file("$dir/operationroom-backup-20261002-030000.tar.gz.json"));
+check('backupnaam van vóór de naamswijziging is geldig', isValidBackupName('zebrawave-backup-20260101-030000.tar.gz'));
+check('onbekende backup verwijderen lukt niet', !deleteBackup('operationroom-backup-19990101-000000.tar.gz', $dir));
 
 echo "onderhoudsmodus\n";
 check('zonder bestand geen onderhoud', !isMaintenance() && maintenanceInfo() === []);

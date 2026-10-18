@@ -10,7 +10,9 @@ from worker.formats.legacy import artifact_ref, auto_allowed, rubric_fields
 from worker.formats.model import AI_MODES, Assignment, FileRef, GameInfo, ImportModel
 from worker.jobs import UserError
 
-FORMAT = "zebrawave-game"
+# Exports van vóór de naamswijziging hebben format "zebrawave-game": die blijven leesbaar
+FORMAT = "operationroom-game"
+FORMATS = (FORMAT, "zebrawave-game")
 VERSION = 3
 
 

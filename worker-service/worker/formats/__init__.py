@@ -1,6 +1,7 @@
 """Spel-archieven lezen: herkent v1, v2 en v3 en vertaalt ze naar ImportModel."""
 import json
 
+from worker import backups
 from worker.formats import game_v3, legacy
 from worker.jobs import UserError
 
@@ -23,9 +24,9 @@ def detect_format(manifest):
         return legacy.detect(manifest)
     if isinstance(manifest, dict):
         fmt = manifest.get("format")
-        if fmt == "zebrawave-backup":
+        if fmt in backups.FORMATS:
             return "backup"
-        if fmt == game_v3.FORMAT:
+        if fmt in game_v3.FORMATS:
             try:
                 version = int(manifest.get("format_version"))
             except (TypeError, ValueError):
@@ -45,7 +46,7 @@ def read_archive(reader):
     if fmt == "v3":
         return game_v3.read_v3(manifest, reader)
     if fmt == "newer":
-        raise UserError("Dit archief is gemaakt met een nieuwere versie van Zebrawave; werk eerst deze installatie bij")
+        raise UserError("Dit archief is gemaakt met een nieuwere versie van OperationRoom; werk eerst deze installatie bij")
     if fmt == "backup":
         raise UserError("Dit is een volledige backup, geen spel-export; zet hem terug via Backups")
-    raise UserError("Onbekend formaat: dit archief is geen spel-export van Zebrawave")
+    raise UserError("Onbekend formaat: dit archief is geen spel-export van OperationRoom")

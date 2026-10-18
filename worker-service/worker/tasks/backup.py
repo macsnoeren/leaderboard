@@ -12,10 +12,10 @@ import sqlite3
 from worker import backups as backup_store
 from worker import config, retention
 from worker.archive import ArchiveReader, ArchiveWriter
+from worker.formats import game_v3
 from worker.jobs import Reporter, UserError, register
 from worker.snapshot import snapshot_tmp
 
-FORMAT = "zebrawave-backup"
 VERSION = 1
 BACKUP_ALLOWED = [r"manifest\.json", r"database/leaderboard\.db", r"htdocs/(artifacts|uploads)/[^/]+"]
 DIRS = ("artifacts", "uploads")
@@ -85,7 +85,7 @@ def create_backup(cfg, storage, trigger, created_by=None, reporter=None, job_id=
                     reporter.warn(f"{arcname} verdween tijdens de backup")
             counts["files"] = len(writer.files) - 1
             manifest = {
-                "format": FORMAT,
+                "format": backup_store.FORMAT,
                 "format_version": VERSION,
                 "created_at": backup_store.utc_now_str(),
                 "trigger": trigger,
@@ -118,21 +118,21 @@ def validate_backup(cfg, archive_path, workdir):
     """
     with ArchiveReader(archive_path, BACKUP_ALLOWED, cfg.MAX_ARCHIVE_MB * 1024 * 1024, cfg.MAX_ARCHIVE_FILES) as reader:
         if not reader.has("manifest.json"):
-            raise UserError("Dit is geen backup van Zebrawave (manifest.json ontbreekt)")
+            raise UserError("Dit is geen backup van OperationRoom (manifest.json ontbreekt)")
         try:
             manifest = json.loads(reader.read_bytes("manifest.json").decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as e:
             raise UserError("De backup is beschadigd (manifest.json is geen geldige JSON)") from e
-        if isinstance(manifest, list) or (isinstance(manifest, dict) and manifest.get("format") == "zebrawave-game"):
+        if isinstance(manifest, list) or (isinstance(manifest, dict) and manifest.get("format") in game_v3.FORMATS):
             raise UserError("Dit is een spel-export, geen backup; importeer hem bij Spellen")
-        if not isinstance(manifest, dict) or manifest.get("format") != FORMAT:
-            raise UserError("Dit is geen backup van Zebrawave")
+        if not isinstance(manifest, dict) or manifest.get("format") not in backup_store.FORMATS:
+            raise UserError("Dit is geen backup van OperationRoom")
         try:
             version = int(manifest.get("format_version"))
         except (TypeError, ValueError) as e:
             raise UserError("De backup heeft geen geldige versie") from e
         if version > VERSION:
-            raise UserError("Deze backup is gemaakt met een nieuwere versie van Zebrawave; werk eerst deze installatie bij")
+            raise UserError("Deze backup is gemaakt met een nieuwere versie van OperationRoom; werk eerst deze installatie bij")
         files = manifest.get("files")
         if not isinstance(files, dict) or "database/leaderboard.db" not in files:
             raise UserError("De backup is onvolledig: de database ontbreekt")

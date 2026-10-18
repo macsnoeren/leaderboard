@@ -1,6 +1,6 @@
 # worker-service
 
-Python-worker voor Zebrawave die taken in de achtergrond uitvoert: spellen exporteren en importeren (ook
+Python-worker voor OperationRoom die taken in de achtergrond uitvoert: spellen exporteren en importeren (ook
 archieven van de eerste versie van `bin/export_assignments.py`), volledige backups (handmatig en elke nacht)
 en restores, en een rapport (PDF) per spel.
 
@@ -24,10 +24,10 @@ kunnen lezen en vervangen). Er is ook een commandoregel voor beheer en noodgeval
 
 | Taak (`type`) | Wie | Resultaat |
 |---|---|---|
-| `game_export` | docent van het spel, admin (`game.php`) | `zebrawave-spel-<naam>-<datum>.tar.gz`, als sjabloon of met teams en voortgang |
-| `report` | docent van het spel, admin (`game.php`, snelknop in `archive.php`) | `zebrawave-rapport-<naam>-<datum>.pdf` |
+| `game_export` | docent van het spel, admin (`game.php`) | `operationroom-spel-<naam>-<datum>.tar.gz`, als sjabloon of met teams en voortgang |
+| `report` | docent van het spel, admin (`game.php`, snelknop in `archive.php`) | `operationroom-rapport-<naam>-<datum>.pdf` |
 | `game_import` | admin (`games.php`): een import maakt een spel | nieuw spel (`result_game_id`), de admin wordt eraan gekoppeld |
-| `backup` | admin (`backups.php`), of de planner (`created_by` NULL) | `storage/backups/zebrawave-backup-<datum>.tar.gz` |
+| `backup` | admin (`backups.php`), of de planner (`created_by` NULL) | `storage/backups/operationroom-backup-<datum>.tar.gz` |
 | `backup_upload` | admin | geüploade backup, eerst volledig gecontroleerd, daarna in de lijst |
 | `restore` | admin, met het eigen wachtwoord (fout telt mee in `login_attempts`, scope `restore`) | omgeving vervangen |
 
@@ -81,7 +81,7 @@ allowlist.
 ### Spel-export (v3)
 
 ```
-manifest.json      {"format": "zebrawave-game", "format_version": 3, "game": {…}, "assignments": [...], "files": {pad: {size, sha256}}}
+manifest.json      {"format": "operationroom-game", "format_version": 3, "game": {…}, "assignments": [...], "files": {pad: {size, sha256}}}
 files/<naam>       bijlagen van opdrachten
 logo/<naam>        logo van het spel (optioneel)
 progress.json      alleen bij "met teams en voortgang"
@@ -121,7 +121,7 @@ Elk formaat wordt eerst vertaald naar één `ImportModel` (`worker/formats/`); d
 ### Backup
 
 ```
-manifest.json            {"format": "zebrawave-backup", "format_version": 1, "trigger", "schema", "counts", "files", "job_id"}
+manifest.json            {"format": "operationroom-backup", "format_version": 1, "trigger", "schema", "counts", "files", "job_id"}
 database/leaderboard.db  momentopname via de online backup-API van SQLite (consistent, ook tijdens schrijven)
 htdocs/artifacts/…
 htdocs/uploads/…

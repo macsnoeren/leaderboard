@@ -45,7 +45,7 @@ class EnqueueTest(unittest.TestCase):
 
     def test_existing_scheduled_backup_counts(self):
         now = datetime.now(timezone.utc).astimezone().replace(hour=14)
-        name = "zebrawave-backup-x.tar.gz"
+        name = "operationroom-backup-x.tar.gz"
         open(f"{self.env.storage.backups}/{name}", "wb").close()
         created = now.replace(hour=3, minute=5).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         backups.write_meta(self.env.storage, name, {"trigger": "scheduled", "created_at": created})

@@ -183,9 +183,9 @@ function authPageStart(string $title, array $opts = []): string {
     $html = '<!DOCTYPE html><html lang="nl" data-theme="ops"><head><meta charset="UTF-8">'
         . '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
         . (!empty($opts['no_referrer']) ? '<meta name="referrer" content="no-referrer">' : '')
-        . '<title>' . htmlspecialchars($title) . ' - Zebrawave</title>' . themeMeta('ops') . themeStyles()
+        . '<title>' . htmlspecialchars($title) . ' - OperationRoom</title>' . themeMeta('ops') . themeStyles()
         . ($opts['css'] ?? '') . '</head><body class="auth-body"><main class="auth' . (!empty($opts['wide']) ? ' is-wide' : '') . '">'
-        . '<div class="auth-brand">' . ($logo ? '<img src="' . htmlspecialchars($logo) . '" alt="" class="auth-logo">' : brandMark(40) . '<span>Zebrawave</span>') . '</div>'
+        . '<div class="auth-brand">' . ($logo ? '<img src="' . htmlspecialchars($logo) . '" alt="" class="auth-logo">' : brandMark(40) . '<span>OperationRoom</span>') . '</div>'
         . '<div class="auth-card">'
         . (isset($opts['icon']) ? '<div class="auth-icon">' . icon($opts['icon']) . '</div>' : '')
         . '<h1>' . htmlspecialchars($title) . '</h1>'

@@ -72,7 +72,7 @@ class ImportTest(unittest.TestCase):
         before = self.conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
         with mock.patch.object(imp, "import_progress", side_effect=RuntimeError("halverwege")):
             path = os.path.join(self.tmp, "a.tar.gz")
-            make_archive(path, {"format": "zebrawave-game", "format_version": 3, "include_progress": True, "game": {"name": "X"},
+            make_archive(path, {"format": "operationroom-game", "format_version": 3, "include_progress": True, "game": {"name": "X"},
                                 "assignments": [{"assignment_number": 1, "title": "T", "artifact_file": "a.pdf"}], "files": {}},
                          {"files/a.pdf": b"%PDF", "progress.json": b'{"teams": []}'})
             with self.assertRaises(RuntimeError):
@@ -129,7 +129,7 @@ class ImportTest(unittest.TestCase):
 
     def test_progress_renumber_refused(self):
         path = os.path.join(self.tmp, "a.tar.gz")
-        make_archive(path, {"format": "zebrawave-game", "format_version": 3, "include_progress": True, "game": {"name": "X"},
+        make_archive(path, {"format": "operationroom-game", "format_version": 3, "include_progress": True, "game": {"name": "X"},
                             "assignments": [{"assignment_number": 1, "title": "A"}, {"assignment_number": 3, "title": "B"}], "files": {}},
                      {"progress.json": b'{"teams": []}'})
         with self.assertRaisesRegex(UserError, "hernummerd"):

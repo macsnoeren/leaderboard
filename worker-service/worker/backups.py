@@ -8,7 +8,10 @@ import os
 import re
 from datetime import datetime, timezone
 
-NAME_RE = re.compile(r"^zebrawave-backup-[A-Za-z0-9._-]+\.tar\.gz$")
+# Backups van vóór de naamswijziging heetten zebrawave-backup-…: die blijven geldig
+NAME_RE = re.compile(r"^(operationroom|zebrawave)-backup-[A-Za-z0-9._-]+\.tar\.gz$")
+FORMAT = "operationroom-backup"
+FORMATS = (FORMAT, "zebrawave-backup")
 TRIGGERS = ("scheduled", "manual", "pre_restore", "uploaded")
 
 
@@ -71,10 +74,10 @@ def list_backups(storage):
 
 
 def new_name(storage, trigger, now_local=None):
-    """Unieke bestandsnaam op basis van de lokale tijd, bijv. zebrawave-backup-20261018-030000.tar.gz."""
+    """Unieke bestandsnaam op basis van de lokale tijd, bijv. operationroom-backup-20261018-030000.tar.gz."""
     now_local = now_local or datetime.now()
     suffix = {"pre_restore": "-veiligheid", "uploaded": "-upload"}.get(trigger, "")
-    base = f"zebrawave-backup-{now_local:%Y%m%d-%H%M%S}{suffix}"
+    base = f"operationroom-backup-{now_local:%Y%m%d-%H%M%S}{suffix}"
     name = base + ".tar.gz"
     n = 2
     while os.path.exists(os.path.join(storage.backups, name)):

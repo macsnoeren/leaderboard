@@ -87,7 +87,7 @@ function accountEmailHtml(string $heading, array $paragraphs, ?string $buttonTex
         . '</td></tr>'
         // Voetregel
         . '<tr><td style="padding: 16px 28px; ' . $font . ' font-size: 12px; line-height: 1.5; color: #8C96AD; text-align: center;" class="zw-foot">'
-        . 'Deze mail is automatisch verstuurd door het Zebrawave leaderboard. Je kunt er niet op antwoorden.'
+        . 'Deze mail is automatisch verstuurd door het OperationRoom leaderboard. Je kunt er niet op antwoorden.'
         . '</td></tr>'
         . '</table></td></tr></table></body></html>';
 }
@@ -130,10 +130,10 @@ function sendAccountEmail($to, $subject, $heading, array $paragraphs, $buttonTex
 function sendInviteEmail($to, $link, $invitedBy) {
     return sendAccountEmail(
         $to,
-        'Uitnodiging voor het Zebrawave docentenaccount',
+        'Uitnodiging voor het OperationRoom docentenaccount',
         'Je bent uitgenodigd',
         [
-            "$invitedBy heeft je uitgenodigd voor een account op het Zebrawave leaderboard. Klik op de knop om je gebruikersnaam en wachtwoord te kiezen.",
+            "$invitedBy heeft je uitgenodigd voor een account op het OperationRoom leaderboard. Klik op de knop om je gebruikersnaam en wachtwoord te kiezen.",
             'Deze link is 72 uur geldig en werkt één keer. Is hij verlopen, vraag de beheerder dan om een nieuwe uitnodiging.',
         ],
         'Account activeren',
@@ -150,7 +150,7 @@ function sendPasswordResetEmail($to, $link) {
         'Wachtwoord opnieuw instellen',
         'Nieuw wachtwoord instellen',
         [
-            'Er is gevraagd om het wachtwoord van je Zebrawave docentenaccount opnieuw in te stellen. Klik op de knop om een nieuw wachtwoord te kiezen.',
+            'Er is gevraagd om het wachtwoord van je OperationRoom docentenaccount opnieuw in te stellen. Klik op de knop om een nieuw wachtwoord te kiezen.',
             'Deze link is 60 minuten geldig en werkt één keer.',
             'Heb je dit niet aangevraagd? Dan kun je deze mail negeren.',
         ],
@@ -168,7 +168,7 @@ function sendEmailChangeConfirmation($to, $link) {
         'Bevestig je nieuwe e-mailadres',
         'Nieuw e-mailadres bevestigen',
         [
-            'Je hebt gevraagd om dit adres te gebruiken voor je Zebrawave docentenaccount. Klik op de knop om dat te bevestigen.',
+            'Je hebt gevraagd om dit adres te gebruiken voor je OperationRoom docentenaccount. Klik op de knop om dat te bevestigen.',
             'Deze link is 24 uur geldig en werkt één keer. Tot je bevestigt, blijft je oude adres in gebruik.',
             'Heb je dit niet aangevraagd? Dan kun je deze mail negeren.',
         ],
@@ -186,7 +186,7 @@ function sendEmailChangedNotice($to, $newEmail) {
         'Je e-mailadres is gewijzigd',
         'E-mailadres gewijzigd',
         [
-            "Het e-mailadres van je Zebrawave docentenaccount is gewijzigd naar $newEmail. Mails over je account gaan voortaan naar dat adres.",
+            "Het e-mailadres van je OperationRoom docentenaccount is gewijzigd naar $newEmail. Mails over je account gaan voortaan naar dat adres.",
             'Heb je dit niet zelf gedaan? Neem dan direct contact op met de beheerder.',
         ]
     );

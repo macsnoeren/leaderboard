@@ -33,7 +33,7 @@ class BackupTest(unittest.TestCase):
         self.assertIn("htdocs/uploads/game_1_logo_1.png", files)
         self.assertFalse([n for n in files if "config" in n or n.startswith("storage")])
         manifest = json.loads(files["manifest.json"])
-        self.assertEqual((manifest["format"], manifest["format_version"], manifest["trigger"]), ("zebrawave-backup", 1, "manual"))
+        self.assertEqual((manifest["format"], manifest["format_version"], manifest["trigger"]), ("operationroom-backup", 1, "manual"))
         self.assertEqual(manifest["counts"]["games"], 1)
         self.assertEqual(manifest["counts"]["teams"], 2)
         self.assertEqual(manifest["counts"]["files"], 2)
@@ -74,7 +74,7 @@ class BackupTest(unittest.TestCase):
             stop.set()
             t.join()
         manifest, db_path, _ = backup_task.validate_backup(self.env.cfg, path, self.env.storage.make_tmp("check"))
-        self.assertEqual(manifest["format"], "zebrawave-backup")
+        self.assertEqual(manifest["format"], "operationroom-backup")
 
     def test_low_disk_space(self):
         env = make_env(self, BACKUP_MIN_FREE_MB=500)
@@ -88,7 +88,7 @@ class BackupTest(unittest.TestCase):
         conn = db.connect(env.db_file)
         self.addCleanup(conn.close)
         for i in range(3):
-            name = f"zebrawave-backup-2026010{i}-030000.tar.gz"
+            name = f"operationroom-backup-2026010{i}-030000.tar.gz"
             open(os.path.join(env.storage.backups, name), "wb").close()
             backups.write_meta(env.storage, name, {"trigger": "scheduled", "created_at": f"2026-01-0{i + 1} 01:00:00"})
         db.create_job(conn, "backup", {"trigger": "scheduled"})
@@ -120,6 +120,23 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(sorted(os.listdir(self.env.storage.backups)), before)
         self.assertFalse(os.path.exists(upload))
         return row["message"]
+
+    def test_old_name_still_valid(self):
+        """Een backup van vóór de naamswijziging (zebrawave-backup-…, format zebrawave-backup) blijft bruikbaar."""
+        path, _ = backup_task.create_backup(self.env.cfg, self.env.storage, "manual")
+        old = os.path.join(self.env.storage.backups, "zebrawave-backup-20260101-030000.tar.gz")
+        with tarfile.open(path, "r:gz") as src, tarfile.open(old, "w:gz") as dst:
+            for m in src.getmembers():
+                data = src.extractfile(m).read()
+                if m.name == "manifest.json":
+                    data = json.dumps(dict(json.loads(data), format="zebrawave-backup")).encode("utf-8")
+                    m.size = len(data)
+                import io  # noqa: PLC0415
+                dst.addfile(m, io.BytesIO(data))
+        shutil.copy(path + ".json", old + ".json")
+        self.assertIn("zebrawave-backup-20260101-030000.tar.gz", [b["file"] for b in backups.list_backups(self.env.storage)])
+        manifest, _, _ = backup_task.validate_backup(self.env.cfg, old, os.path.join(self.env.root, "check"))
+        self.assertEqual(manifest["format"], "zebrawave-backup")
 
     def test_upload_game_export_refused(self):
         self.assertIn("spel-export", self.upload_fails(os.path.join(FIXTURES, "legacy_v1.tar.gz")))

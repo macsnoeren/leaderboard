@@ -201,7 +201,7 @@ $needsQr = $game && ($data['registration_open'] || $status === 'draft');
 <?php if (!$game): ?>
     <main class="screen">
         <?= brandMark(64) ?>
-        <div class="eyebrow">Zebrawave</div>
+        <div class="eyebrow">OperationRoom</div>
         <h1 class="screen-title">Leaderboard</h1>
         <?php if ($notFound): ?>
             <p class="screen-sub">Dit spel bestaat niet. Controleer de link of de spelcode.</p>

@@ -49,11 +49,11 @@ class ApplyTest(unittest.TestCase):
     def test_apply_removes_files_and_audits(self):
         env = make_env(self, BACKUP_KEEP=2)
         for i in range(4):
-            name = f"zebrawave-backup-2026101{i}-030000.tar.gz"
+            name = f"operationroom-backup-2026101{i}-030000.tar.gz"
             open(f"{env.storage.backups}/{name}", "wb").close()
             backups.write_meta(env.storage, name, {"trigger": "scheduled", "created_at": f"2026-10-1{i} 01:00:00"})
         removed = retention.apply(env.cfg, env.storage, env.conn, now=NOW)
-        self.assertEqual(sorted(removed), ["zebrawave-backup-20261010-030000.tar.gz", "zebrawave-backup-20261011-030000.tar.gz"])
+        self.assertEqual(sorted(removed), ["operationroom-backup-20261010-030000.tar.gz", "operationroom-backup-20261011-030000.tar.gz"])
         self.assertEqual(len(backups.list_backups(env.storage)), 2)
         self.assertEqual(env.conn.execute("SELECT COUNT(*) FROM audit_logs WHERE event_type = 'BACKUP_DELETE'").fetchone()[0], 2)
 

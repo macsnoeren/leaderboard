@@ -31,7 +31,7 @@ class ExportTest(unittest.TestCase):
     def test_template(self):
         files, _ = self.export()
         manifest = json.loads(files["manifest.json"])
-        self.assertEqual((manifest["format"], manifest["format_version"]), ("zebrawave-game", 3))
+        self.assertEqual((manifest["format"], manifest["format_version"]), ("operationroom-game", 3))
         self.assertFalse(manifest["include_progress"])
         self.assertEqual(manifest["game"]["name"], "Operatie Zebra")
         self.assertEqual(manifest["game"]["ai_mode"], "reply")
@@ -105,7 +105,7 @@ class ExportTest(unittest.TestCase):
         job = run_job(conn, self.env.cfg, self.env.storage, db.claim_next(conn, "w"))
         row = db.get_job(conn, job.id)
         self.assertEqual(row["status"], "done", row["message"])
-        self.assertTrue(row["result_name"].startswith("zebrawave-spel-operatie-zebra-"))
+        self.assertTrue(row["result_name"].startswith("operationroom-spel-operatie-zebra-"))
         self.assertTrue(os.path.isfile(os.path.join(self.env.cfg.STORAGE_DIR, row["result_file"])))
         self.assertIn("met teams en voortgang", row["message"])
 

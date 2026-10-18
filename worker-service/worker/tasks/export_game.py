@@ -182,7 +182,7 @@ def progress_data(conn, game):
 
 
 def download_name(game_name, kind="spel", ext="tar.gz"):
-    return f"zebrawave-{kind}-{safe_filename(game_name)}-{datetime.now():%Y%m%d-%H%M}.{ext}"
+    return f"operationroom-{kind}-{safe_filename(game_name)}-{datetime.now():%Y%m%d-%H%M}.{ext}"
 
 
 @register("game_export")

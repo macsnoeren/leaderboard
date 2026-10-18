@@ -35,7 +35,8 @@ const WORKER_STATUS_LABELS = [
     'cancelled' => 'geannuleerd',
 ];
 const WORKER_ACTIVE_SECONDS = 120;
-const BACKUP_NAME_PATTERN = '/^zebrawave-backup-[A-Za-z0-9._-]+\.tar\.gz$/';
+// Backups van vóór de naamswijziging heetten zebrawave-backup-…: die blijven geldig
+const BACKUP_NAME_PATTERN = '/^(operationroom|zebrawave)-backup-[A-Za-z0-9._-]+\.tar\.gz$/';
 const BACKUP_TRIGGER_LABELS = [
     'scheduled' => 'automatisch',
     'manual' => 'handmatig',

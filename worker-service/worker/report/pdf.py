@@ -228,7 +228,7 @@ def build_pdf(path, overview, answers=None, traces=None, sections=SECTIONS, logo
     pdf = ReportPDF(f"Rapport {overview['game']['name']}", font=font, font_bold=font_bold)
     pdf.set_compression(compress)
     pdf.set_title(pdf.clean(f"Rapport {overview['game']['name']}"))
-    pdf.set_creator("Zebrawave worker")
+    pdf.set_creator("OperationRoom worker")
     _cover(pdf, overview, logo_path, sections)
     if "answers" in sections:
         _answers(pdf, answers or [])

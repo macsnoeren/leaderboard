@@ -61,8 +61,8 @@ check('te korte code wordt geweigerd', totpVerify($secret, '28708', null, 59) ==
 
 echo "totpUri\n";
 $uri = totpUri($secret, 'jan@school.nl');
-check('URI begint met otpauth://totp/Zebrawave:', strpos($uri, 'otpauth://totp/Zebrawave:jan%40school.nl?') === 0);
-check('URI bevat het secret en de issuer', strpos($uri, "secret=$secret") !== false && strpos($uri, 'issuer=Zebrawave') !== false);
+check('URI begint met otpauth://totp/OperationRoom:', strpos($uri, 'otpauth://totp/OperationRoom:jan%40school.nl?') === 0);
+check('URI bevat het secret en de issuer', strpos($uri, "secret=$secret") !== false && strpos($uri, 'issuer=OperationRoom') !== false);
 
 if ($failures > 0) {
     echo "\n$failures test(s) mislukt\n";
