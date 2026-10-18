@@ -25,6 +25,7 @@ define('FROM_EMAIL', '${FROM_EMAIL:-}');
 define('FROM_NAME', '${FROM_NAME:-Assignment System}');
 define('BASE_URL', '$BASE_URL');
 define('REQUIRE_2FA_ADMIN', ${REQUIRE_2FA_ADMIN:-false});
+define('DARKNET_CHAT_URL', '${DARKNET_CHAT_URL:-}');
 EOF
 
 # Database, artifact store en logo-uploads (volumes)

@@ -74,48 +74,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificatiecode</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .login-box { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 100%; max-width: 400px; }
-        h1 { text-align: center; margin-bottom: 20px; color: #333; }
-        p.intro { color: #555; margin-bottom: 20px; line-height: 1.5; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
-        input[type="text"] { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 5px; font-size: 1.3em; letter-spacing: 3px; text-align: center; }
-        button { width: 100%; background: #667eea; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: 600; }
-        button:hover { background: #5568d3; }
-        .error { background: #f44336; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-        .hint { font-size: 0.85em; color: #888; margin-top: 15px; line-height: 1.5; }
-        .back-link { text-align: center; margin-top: 20px; }
-        .back-link a { color: #667eea; text-decoration: none; }
-    </style>
-</head>
-<body>
-    <div class="login-box">
-        <h1>🔐 Verificatiecode</h1>
-        <p class="intro">Voer de 6-cijferige code uit je authenticator-app in.</p>
+<?= authPageStart('Verificatiecode', ['subtitle' => 'Voer de 6-cijferige code uit je authenticator-app in.', 'icon' => 'shield-check']) ?>
         <?php if ($error): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <?= alertBox('error', htmlspecialchars($error)) ?>
         <?php endif; ?>
         <form method="POST">
             <?= csrfField() ?>
-            <div class="form-group">
-                <label>Code:</label>
-                <input type="text" name="code" autocomplete="one-time-code" maxlength="20" required autofocus>
+            <div class="field">
+                <label for="c-code">Code</label>
+                <input type="text" name="code" id="c-code" class="input-mono" style="font-size: 22px; text-align: center; letter-spacing: .3em;" inputmode="numeric" autocomplete="one-time-code" maxlength="20" required autofocus>
             </div>
-            <button type="submit">Verifiëren</button>
+            <button type="submit" class="btn btn-primary btn-lg btn-block">Verifiëren</button>
         </form>
-        <p class="hint">Geen toegang tot je app? Vul dan een van je herstelcodes in (formaat xxxxx-xxxxx). Elke herstelcode werkt één keer.</p>
-        <div class="back-link">
-            <a href="login.php">← Opnieuw inloggen</a>
-        </div>
-    </div>
-</body>
-</html>
+        <p class="auth-note">Geen toegang tot je app? Vul dan een van je herstelcodes in (formaat xxxxx-xxxxx). Elke herstelcode werkt één keer.</p>
+<?= authPageEnd('<a href="login.php">← Opnieuw inloggen</a>') ?>

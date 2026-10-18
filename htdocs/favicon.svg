@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Zebrawave: vergrootglas met zebrastrepen (zelfde tekening als brandMark() in conf/theme.php) -->
+  <rect width="32" height="32" rx="8" fill="#121A2E"/>
+  <clipPath id="lens"><circle cx="13.5" cy="13.5" r="7.5"/></clipPath>
+  <circle cx="13.5" cy="13.5" r="7.5" fill="#F4F6FB"/>
+  <g clip-path="url(#lens)" stroke="#121A2E" stroke-width="2.6">
+    <path d="M2 14 14 2M5 19 19 5M9 24 24 9M14 27 27 14"/>
+  </g>
+  <circle cx="13.5" cy="13.5" r="7.5" fill="none" stroke="#8B7CFF" stroke-width="2.8"/>
+  <path d="m19.5 19.5 6 6" stroke="#22D3EE" stroke-width="3.6" stroke-linecap="round"/>
+</svg>

@@ -103,124 +103,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .login-box {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            width: 100%;
-            max-width: 400px;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #555;
-        }
-        input[type="text"], input[type="password"] {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
-            font-size: 1em;
-        }
-        button {
-            width: 100%;
-            background: #667eea;
-            color: white;
-            padding: 12px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1.1em;
-            font-weight: 600;
-        }
-        button:hover {
-            background: #5568d3;
-        }
-        .error {
-            background: #f44336;
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .notice {
-            background: #e8f5e9;
-            color: #2e7d32;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .forgot-link {
-            text-align: right;
-            margin: -10px 0 20px;
-            font-size: 0.9em;
-        }
-        .forgot-link a {
-            color: #667eea;
-            text-decoration: none;
-        }
-        .back-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-        .back-link a {
-            color: #667eea;
-            text-decoration: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="login-box">
-        <h1>Login</h1>
+<?= authPageStart('Inloggen', ['subtitle' => 'Voor docenten en beheerders', 'icon' => 'login']) ?>
         <?php if ($notice): ?>
-            <div class="notice"><?= htmlspecialchars($notice) ?></div>
+            <?= alertBox('success', htmlspecialchars($notice)) ?>
         <?php endif; ?>
         <?php if ($error): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <?= alertBox('error', htmlspecialchars($error)) ?>
         <?php endif; ?>
         <form method="POST">
             <?= csrfField() ?>
-            <div class="form-group">
-                <label>Gebruikersnaam of e-mailadres:</label>
-                <input type="text" name="username" value="<?= htmlspecialchars($identifier) ?>" autocomplete="username" required autofocus>
+            <div class="field">
+                <label for="l-user">Gebruikersnaam of e-mailadres</label>
+                <input type="text" name="username" id="l-user" value="<?= htmlspecialchars($identifier) ?>" autocomplete="username" required autofocus>
             </div>
-            <div class="form-group">
-                <label>Wachtwoord:</label>
-                <input type="password" name="password" autocomplete="current-password" required>
+            <div class="field">
+                <label for="l-pass">Wachtwoord</label>
+                <input type="password" name="password" id="l-pass" autocomplete="current-password" required>
+                <div class="hint" style="text-align: right;"><a href="forgot_password.php">Wachtwoord vergeten?</a></div>
             </div>
-            <div class="forgot-link"><a href="forgot_password.php">Wachtwoord vergeten?</a></div>
-            <button type="submit">Inloggen</button>
+            <button type="submit" class="btn btn-primary btn-lg btn-block">Inloggen</button>
         </form>
-        <div class="back-link">
-            <a href="index.php">← Terug naar het leaderboard</a>
-        </div>
-    </div>
-</body>
-</html>
+<?= authPageEnd('<a href="index.php">← Naar het leaderboard</a>') ?>

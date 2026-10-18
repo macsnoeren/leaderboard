@@ -24,89 +24,120 @@ if (!$headerGame) {
 $unread_total = $headerGame ? countUnread($db, (int)$headerGame['id']) : 0;
 $escalations_total = $headerGame ? countOpenEscalations($db, (int)$headerGame['id']) : 0;
 $currentPage = basename($_SERVER['PHP_SELF']);
+$isAdminUser = ($_SESSION['teacher_role'] ?? 'user') === 'admin';
+$darknetUrl = defined('DARKNET_CHAT_URL') ? trim((string)DARKNET_CHAT_URL) : '';
+
+// Navigatie: [pagina, label, icoon, pagina's die dit item actief maken]
+$navGroups = [
+    'Spel' => [
+        ['teacher.php', 'Dashboard', 'dashboard', ['teacher.php']],
+        ['messages.php', 'Berichten', 'message', ['messages.php']],
+        ['assignments.php', 'Opdrachten', 'book', ['assignments.php']],
+        ['announcements.php', 'Mededelingen', 'megaphone', ['announcements.php']],
+        ['ai_log.php', 'AI-logboek', 'bot', ['ai_log.php']],
+        ['game.php', 'Spelinstellingen', 'sliders', ['game.php', 'choose_game.php']],
+    ],
+];
+if ($isAdminUser) {
+    $navGroups['Beheer'] = [
+        ['games.php', 'Spellen', 'gamepad', ['games.php']],
+        ['users.php', 'Gebruikers', 'users', ['users.php', 'user_edit.php']],
+        ['api_keys.php', 'API-sleutels', 'key', ['api_keys.php']],
+        ['archive.php', 'Archief', 'archive', ['archive.php']],
+        ['audit.php', 'Auditlog', 'clipboard', ['audit.php']],
+    ];
+}
+
+function navBadges(int $unread, int $escalations): array {
+    return [
+        $unread > 0 ? '<span class="count" title="Ongelezen berichten">' . $unread . '<span class="sr-only"> ongelezen</span></span>' : '',
+        $escalations > 0 ? '<span class="count count-warning" title="Docent nodig">' . icon('hand') . $escalations . '<span class="sr-only"> keer docent nodig</span></span>' : '',
+    ];
+}
+[$unreadBadge, $escalationBadge] = navBadges($unread_total, $escalations_total);
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'Teacher Dashboard') ?> - Zebrawave</title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?> - Zebrawave</title>
+    <?= themeMeta() ?>
     <?php if ($loadMarked ?? true): // profile.php zet dit uit: de 2FA-pagina laadt alleen scripts van cdnjs ?>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <?= markedScript() ?>
     <?php endif; ?>
+    <?= themeStyles() ?>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; display: flex; min-height: 100vh; }
-        
-        .sidebar { width: 260px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 1000; }
-        .sidebar-header { 
-            padding: 25px 20px; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            color: white; text-align: center; font-weight: bold; font-size: 1.2em; 
-            display: flex; flex-direction: column; gap: 5px;
+        /* ---------- Admin-shell ---------- */
+        :root { --sidebar-w: 248px; }
+        .skip-link { position: absolute; left: 8px; top: -60px; z-index: 5000; background: var(--brand); color: var(--on-brand); padding: 8px 14px; border-radius: var(--radius-sm); }
+        .skip-link:focus { top: 8px; }
+        .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1000; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-right: 1px solid var(--line); }
+        .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 18px 20px; font-weight: 800; font-size: 17px; letter-spacing: .02em; color: var(--text); text-decoration: none; }
+        .sidebar-brand:hover { color: var(--text); }
+        .sidebar-brand small { display: block; font-weight: 500; font-size: 11px; color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase; }
+        .sidebar-zebra { height: 4px; background: repeating-linear-gradient(-45deg, var(--brand) 0 6px, transparent 6px 12px); opacity: .7; }
+        .game-picker { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+        .game-picker .field-label { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+        .game-picker select { background: var(--surface); }
+        .game-picker .game-name { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+        .sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 10px 12px; }
+        .nav-group-label { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); padding: 14px 10px 6px; }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm); color: var(--text-muted); text-decoration: none; font-size: 14px; font-weight: 500; transition: background var(--t-fast), color var(--t-fast); }
+        .nav-item:hover { background: var(--surface-2); color: var(--text); }
+        .nav-item.active { background: var(--brand-soft); color: var(--text); font-weight: 600; box-shadow: inset 3px 0 0 var(--brand); }
+        .nav-item.active .icon { color: var(--brand); }
+        .nav-item .badges { margin-left: auto; display: inline-flex; gap: 4px; }
+        .nav-item .count .icon { width: 12px; height: 12px; margin-right: 2px; }
+        .nav-item .ext { width: 14px; height: 14px; margin-left: auto; opacity: .7; }
+        .sidebar-foot { border-top: 1px solid var(--line); padding: 12px 10px 14px; }
+        .user-block { display: flex; align-items: center; gap: 10px; padding: 6px 10px 10px; font-size: 14px; min-width: 0; }
+        .user-block .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); display: grid; place-items: center; color: var(--text-muted); flex-shrink: 0; }
+        .user-block .who { min-width: 0; }
+        .user-block .who strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .user-block .who span { font-size: 12px; color: var(--text-muted); }
+        .ai-pill { display: inline-flex; align-items: center; gap: 8px; margin: 8px 10px 0; padding: 4px 12px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--text-muted); max-width: calc(100% - 20px); }
+        .ai-pill .icon { width: 14px; height: 14px; }
+        .ai-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex-shrink: 0; }
+        .ai-pill[data-state="active"] .dot { background: var(--success); }
+        .ai-pill[data-state="active"] { color: var(--text); }
+        .ai-pill[data-state="model_down"] .dot { background: var(--warning); }
+        .ai-pill[data-state="model_down"] { color: var(--warning); }
+        .main-content { margin-left: var(--sidebar-w); padding: 32px 40px 48px; min-width: 0; min-height: 100vh; }
+        .main-content.is-app { padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .main-content.is-app > .alert { margin: 16px 24px 0; flex-shrink: 0; }
+        .topbar { display: none; }
+        .sidebar-overlay { position: fixed; inset: 0; background: rgba(8,12,24,.55); z-index: 999; }
+        @media (max-width: 999px) {
+            .topbar { display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 900; padding: 10px 16px; background: var(--bg); color: var(--text); border-bottom: 1px solid var(--line); }
+            .topbar .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; }
+            .topbar .game { margin-left: auto; font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+            .sidebar { transform: translateX(-100%); transition: transform var(--t) var(--ease); box-shadow: var(--shadow-2); }
+            .sidebar.is-open { transform: none; }
+            .main-content { margin-left: 0; padding: 20px 16px 40px; }
+            .main-content.is-app { height: auto; overflow: visible; display: block; padding: 20px 16px 40px; }
+            .main-content.is-app > .alert { margin: 0 0 16px; }
         }
-        .sidebar-nav { flex: 1; padding: 20px 0; display: flex; flex-direction: column; overflow-y: auto; }
-        .game-picker { padding: 12px 20px; border-bottom: 1px solid #eee; font-size: 0.85em; }
-        .game-picker label { display: block; color: #999; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-        .game-picker select { padding: 8px; font-size: 0.95em; }
-        .game-picker .game-name { font-weight: bold; color: #333; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-        .nav-item { display: flex; align-items: center; padding: 12px 25px; color: #4b4f56; text-decoration: none; transition: 0.2s; font-weight: 500; }
-        .nav-item:hover { background: #f0f2f5; color: #667eea; }
-        .nav-item.active { background: #f0f4ff; color: #667eea; border-left: 4px solid #667eea; }
-        .badge { background: #f44336; color: white; padding: 2px 7px; border-radius: 10px; font-size: 0.75em; margin-left: auto; }
-        .badge-escalation { background: #ff9800; margin-left: 4px; }
-
-        .main-content { margin-left: 260px; flex: 1; padding: 40px; min-width: 0; }
-        header.content-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
-        h1 { font-size: 1.8em; color: #333; }
-        
-        /* Dashboard Grid Layout */
-        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; align-items: start; }
-        .stats-overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-        .stat-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; }
-        .stat-label { font-size: 0.8em; color: #888; text-transform: uppercase; letter-spacing: 1px; }
-        .stat-value { font-size: 1.8em; font-weight: bold; color: #667eea; margin-top: 5px; }
-
-        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
-        .btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9em; text-decoration: none; text-align: center; }
-        .btn-primary { background: #667eea; color: white; }
-        .btn-primary:hover { background: #5568d3; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
-        .btn-outline { background: transparent; border: 1px solid #ddd; color: #666; }
-        .btn-outline:hover { background: #f8f9fa; border-color: #ccc; }
-        .btn-danger { background: #ffebee; color: #c62828; }
-        .btn-danger:hover { background: #ffcdd2; }
-        
-        .success { background: #e8f5e9; color: #2e7d32; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #4caf50; font-weight: 500; }
-        .error-msg { background: #ffebee; color: #c62828; padding: 15px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #f44336; }
-
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 15px; border-bottom: 2px solid #f0f2f5; color: #888; font-size: 0.85em; text-transform: uppercase; }
-        td { padding: 15px; border-bottom: 1px solid #f0f2f5; }
-
-        /* Progress Bar Styles */
-        .progress-wrapper { width: 100%; min-width: 100px; }
-        .progress-fill { background: #667eea; height: 100%; border-radius: 3px; transition: width 0.3s ease; }
-
-        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95em; transition: all 0.2s; }
-        input:focus, select:focus, textarea:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
     </style>
     <?php if (isset($extraCSS)) echo $extraCSS; ?>
 </head>
-<body>
-    <nav class="sidebar">
-        <div class="sidebar-header">
-            <span>Zebrawave Admin</span>
-            <div style="font-size: 0.65em; font-weight: normal; opacity: 0.9; margin-top: 5px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-                👤 <?= htmlspecialchars($_SESSION['teacher_display_name'] ?? $_SESSION['teacher_username'] ?? 'Docent') ?>
-            </div>
-        </div>
+<body class="admin">
+    <a class="skip-link" href="#main">Naar de inhoud</a>
+    <header class="topbar" data-theme="ops">
+        <button type="button" class="btn btn-ghost btn-icon" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Menu openen"><?= icon('menu') ?></button>
+        <span class="brand"><?= brandMark(24) ?> Zebrawave</span>
+        <?php if ($headerGame): ?><span class="game"><?= htmlspecialchars($headerGame['name']) ?></span><?php endif; ?>
+    </header>
+    <nav class="sidebar" id="sidebar" data-theme="ops" aria-label="Hoofdmenu">
+        <a href="teacher.php" class="sidebar-brand"><?= brandMark(30) ?><span>Zebrawave<small>Docenten</small></span></a>
+        <div class="sidebar-zebra" aria-hidden="true"></div>
         <div class="game-picker">
-            <label>Spel</label>
+            <div class="field-label" id="game-picker-label">Actief spel</div>
             <?php if (count($headerGames) > 1): ?>
-                <form method="POST" action="choose_game.php" style="margin: 0;">
+                <form method="POST" action="choose_game.php">
                     <?= csrfField() ?>
                     <input type="hidden" name="return" value="<?= htmlspecialchars($currentPage) ?>">
-                    <select name="game_id" onchange="this.form.submit()" aria-label="Kies een spel">
+                    <select name="game_id" onchange="this.form.submit()" aria-labelledby="game-picker-label">
                         <?php if (!$headerGame): ?><option value="">Kies een spel…</option><?php endif; ?>
                         <?php foreach ($headerGames as $g): ?>
                             <option value="<?= (int)$g['id'] ?>" <?= $headerGame && (int)$headerGame['id'] === (int)$g['id'] ? 'selected' : '' ?>>
@@ -114,78 +145,50 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                             </option>
                         <?php endforeach; ?>
                     </select>
-                    <noscript><button type="submit" class="btn btn-outline" style="margin-top: 5px; padding: 4px 10px;">Wissel</button></noscript>
+                    <noscript><button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 6px;">Wissel</button></noscript>
                 </form>
             <?php elseif ($headerGame): ?>
                 <div class="game-name"><span><?= htmlspecialchars($headerGame['name']) ?></span><?= gameStatusBadge($headerGame['effective_status']) ?></div>
             <?php else: ?>
-                <span style="color: #999;">Nog geen spel</span>
+                <span class="muted text-sm">Nog geen spel</span>
             <?php endif; ?>
         </div>
         <div class="sidebar-nav">
-            <a href="teacher.php" class="nav-item <?= $currentPage == 'teacher.php' ? 'active' : '' ?>">📊 Dashboard</a>
-            <a href="game.php" class="nav-item <?= in_array($currentPage, ['game.php', 'choose_game.php']) ? 'active' : '' ?>">⚙️ Spel</a>
-            <a href="assignments.php" class="nav-item <?= $currentPage == 'assignments.php' ? 'active' : '' ?>">📘 Assignments</a>
-            <a href="messages.php" class="nav-item <?= $currentPage == 'messages.php' ? 'active' : '' ?>">
-                ✉️ Messages
-                <span id="unread-badge-container">
-                    <?php if ($unread_total > 0): ?>
-                        <span class="badge"><?= $unread_total ?></span>
-                    <?php endif; ?>
-                </span>
-                <span id="escalation-badge-container">
-                    <?php if ($escalations_total > 0): ?>
-                        <span class="badge badge-escalation" title="Docent nodig">🙋 <?= $escalations_total ?></span>
-                    <?php endif; ?>
-                </span>
-            </a>
-            <a href="ai_log.php" class="nav-item <?= $currentPage == 'ai_log.php' ? 'active' : '' ?>">🤖 AI-logboek</a>
-            <a href="announcements.php" class="nav-item <?= $currentPage == 'announcements.php' ? 'active' : '' ?>">📣 Mededelingen</a>
-            <?php if (($_SESSION['teacher_role'] ?? 'user') === 'admin'): ?>
-            <a href="games.php" class="nav-item <?= $currentPage == 'games.php' ? 'active' : '' ?>">🎮 Spellen</a>
-            <a href="users.php" class="nav-item <?= in_array($currentPage, ['users.php', 'user_edit.php']) ? 'active' : '' ?>">👥 Users</a>
-            <a href="api_keys.php" class="nav-item <?= $currentPage == 'api_keys.php' ? 'active' : '' ?>">🔑 API Keys</a>
-            <a href="archive.php" class="nav-item <?= $currentPage == 'archive.php' ? 'active' : '' ?>">📦 Archief</a>
-            <a href="audit.php" class="nav-item <?= $currentPage == 'audit.php' ? 'active' : '' ?>">📋 Audit Logs</a>
+            <?php foreach ($navGroups as $groupLabel => $items): ?>
+                <div class="nav-group-label"><?= htmlspecialchars($groupLabel) ?></div>
+                <?php foreach ($items as [$href, $label, $iconName, $activeOn]): $active = in_array($currentPage, $activeOn, true); ?>
+                    <a href="<?= $href ?>" class="nav-item<?= $active ? ' active' : '' ?>"<?= $active ? ' aria-current="page"' : '' ?>>
+                        <?= icon($iconName) ?><span><?= htmlspecialchars($label) ?></span>
+                        <?php if ($href === 'messages.php'): ?>
+                            <span class="badges"><span id="unread-badge-container"><?= $unreadBadge ?></span><span id="escalation-badge-container"><?= $escalationBadge ?></span></span>
+                        <?php endif; ?>
+                    </a>
+                <?php endforeach; ?>
+            <?php endforeach; ?>
+            <?php if ($darknetUrl !== ''): ?>
+                <div class="nav-group-label">Tools</div>
+                <a href="<?= htmlspecialchars($darknetUrl) ?>" target="_blank" rel="noopener" class="nav-item">
+                    <?= icon('terminal') ?><span>Darknet-chat</span><?= icon('external', 'ext') ?><span class="sr-only">(opent in een nieuw tabblad)</span>
+                </a>
             <?php endif; ?>
-            <div style="margin-top: 20px; padding: 0 25px; font-size: 0.7em; color: #bbb; text-transform: uppercase;">Settings</div>
-            <a href="profile.php" class="nav-item <?= in_array($currentPage, ['profile.php', 'password.php']) ? 'active' : '' ?>">👤 Profiel</a>
-            <a href="https://darkwebchat.zebrawavesecurity.info/hacker-chat.html" target="_blank" class="nav-item" style="margin-top: auto; color: #4a148c; font-weight: bold;">💀 DARKNET CHAT</a>
-            <a href="logout.php" class="nav-item" style="color: #c62828;">🚪 Logout</a>
         </div>
-        <div style="padding: 15px 25px; border-top: 1px solid #eee; font-size: 0.8em; color: #888;">
-            AI Agent: <span id="ai-agent-status" style="font-weight: bold; color: #888;">Controleren...</span>
+        <div class="sidebar-foot">
+            <div class="user-block">
+                <span class="avatar"><?= icon('user') ?></span>
+                <span class="who">
+                    <strong><?= htmlspecialchars($_SESSION['teacher_display_name'] ?? $_SESSION['teacher_username'] ?? 'Docent') ?></strong>
+                    <span><?= $isAdminUser ? 'Beheerder' : 'Docent' ?></span>
+                </span>
+            </div>
+            <a href="profile.php" class="nav-item<?= in_array($currentPage, ['profile.php', 'password.php'], true) ? ' active' : '' ?>"><?= icon('user') ?><span>Profiel</span></a>
+            <a href="logout.php" class="nav-item"><?= icon('logout') ?><span>Uitloggen</span></a>
+            <span class="ai-pill" id="ai-agent-status" data-state="unknown" role="status" title="Status van de AI-agent">
+                <span class="dot"></span><?= icon('bot') ?><span class="label">AI-agent: controleren…</span>
+            </span>
         </div>
     </nav>
-    <script>
-    function updateAIStatus() {
-        // Voeg een timestamp toe om caching te voorkomen
-        fetch('teacher.php?ajax_ai_status=1&t=' + new Date().getTime())
-            .then(r => r.text())
-            .then(status => {
-                const el = document.getElementById('ai-agent-status');
-                if (!el || !status) return;
-                // active (n) | model_down (n) | inactive; startsWith voorkomt verwarring met 'inactive'
-                const count = (status.match(/\((\d+)\)/) || ['', ''])[1];
-                if (status.startsWith('active')) {
-                    el.innerText = 'Actief (' + count + ')';
-                    el.style.color = '#2e7d32';
-                } else if (status.startsWith('model_down')) {
-                    el.innerText = 'AI-agent actief, model niet bereikbaar';
-                    el.style.color = '#e65100';
-                } else {
-                    el.innerText = 'Inactief';
-                    el.style.color = '#c62828';
-                }
-            });
-    }
-    updateAIStatus();
-    setInterval(updateAIStatus, 10000);
-    </script>
-    <div class="main-content">
-        <?php if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false): ?>
-            <div style="background: #fff3e0; color: #e65100; padding: 10px 20px; border-radius: 8px; margin-bottom: 25px; border-left: 5px solid #ff9800; font-size: 0.9em; display: flex; align-items: center; gap: 10px;">
-                <span>⚠️</span>
-                <span><strong>Test Modus:</strong> E-mail verzending staat uitgeschakeld in de configuratie. Er worden geen uitnodigingen of teamlinks verstuurd.</span>
-            </div>
+    <div class="sidebar-overlay" id="sidebar-overlay" hidden></div>
+    <main class="main-content<?= !empty($mainClass) ? ' ' . htmlspecialchars($mainClass) : '' ?>" id="main">
+        <?php if (!isEmailEnabled()): ?>
+            <?= alertBox('warning', '<strong>Testmodus:</strong> het versturen van e-mail staat uit in de configuratie. Er worden geen uitnodigingen of teamlinks gemaild.') ?>
         <?php endif; ?>

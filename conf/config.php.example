@@ -36,4 +36,8 @@ define('BASE_URL', 'https://localhost/leaderboard');
 // Beheerders moeten tweestapsverificatie (2FA) instellen voordat ze verder kunnen
 define('REQUIRE_2FA_ADMIN', false);
 
+// Link naar de darknet-chat onder "Tools" in de admin-zijbalk; leeg = niet tonen
+// (voorheen vast in admin_header.php: https://darkwebchat.zebrawavesecurity.info/hacker-chat.html)
+define('DARKNET_CHAT_URL', '');
+
 ?>

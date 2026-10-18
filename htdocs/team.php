@@ -76,26 +76,36 @@ $announcements = array_map(function ($a) {
 $logo = gameLogoUrl($game);
 $hasEnd = $game['ends_at'] !== null;
 
-// AJAX endpoint voor live updates. Tijden komen van de server, zodat de klok van het team niet uitmaakt.
-if (isset($_GET['ajax'])) {
-    $msg_html = '';
+$levelText = $level >= 1 && $level <= $total_assignments ? "$level/$total_assignments" : levelLabel($level, $total_assignments);
+$allDone = $level > $total_assignments && $status !== 'draft';
+
+/**
+ * De chat als bubbels. Tijden in lokale tijd via formatDateTime() (de database is UTC).
+ */
+function teamChatHtml(array $messages): string {
+    $html = '';
     foreach ($messages as $m) {
         if ($m['sender'] === 'suggestion') continue;
-        $msg_html .= '<div class="message ' . $m['sender'] . '">';
-        $msg_html .= '<div class="msg-meta">' . ($m['sender'] === 'team' ? 'Jullie' : 'Docent') . ' - ' . $m['created_at'] . '</div>';
-        $msg_html .= '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
-        $msg_html .= '</div>';
+        $mine = $m['sender'] === 'team';
+        $when = formatDateTime($m['created_at']);
+        $html .= '<div class="bubble bubble-' . ($mine ? 'team' : 'teacher') . '">'
+            . '<div class="bubble-meta"><strong>' . ($mine ? 'Jullie' : 'Docent') . '</strong><time title="' . $when . '">' . substr($when, -5) . '</time></div>'
+            . '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div></div>';
     }
+    return $html;
+}
+
+// AJAX endpoint voor live updates. Tijden komen van de server, zodat de klok van het team niet uitmaakt.
+if (isset($_GET['ajax'])) {
+    $lastMessage = end($messages);
     header('Content-Type: application/json');
     echo json_encode([
-        'html' => $msg_html, 
+        'html' => teamChatHtml($messages),
+        'message_count' => count($messages),
+        'last_sender' => $lastMessage ? $lastMessage['sender'] : null,
+        'last_message' => $lastMessage ? $lastMessage['message'] : null,
         'level' => $level,
         'rank' => $rank,
-        'assignment_title' => $assignment ? htmlspecialchars($assignment['title']) : 'Geen opdracht beschikbaar',
-        'assignment_desc' => $assignment ? $assignment['description'] : 'Wacht op instructies.',
-        'assignment_instruction' => $assignment ? $assignment['instruction'] : '',
-        'time_limit' => $assignment ? (int)$assignment['time_limit'] : 0,
-        'has_file' => !empty($assignment['artifact_file']),
         'total_assignments' => $total_assignments,
         'status' => $status,
         'status_message' => $game['status_message'],
@@ -105,323 +115,266 @@ if (isset($_GET['ajax'])) {
     ]);
     exit;
 }
+$chatHtml = teamChatHtml($messages);
+$leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
 ?>
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="nl" data-theme="ops">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Team Dashboard - <?= htmlspecialchars($team['team_name']) ?></title>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <title>Team <?= htmlspecialchars($team['team_name']) ?> - <?= htmlspecialchars($game['name']) ?></title>
+    <?= themeMeta('ops') ?>
+    <script src="<?= CONFETTI_SRC ?>"></script>
+    <?= markedScript() ?>
+    <?= themeStyles() ?>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #1c1e21; height: 100vh; display: flex; flex-direction: column; }
-        
-        /* Header Styles */
-        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 100; }
-        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .team-name { font-size: 1.8em; font-weight: bold; }
-        .stats-bar { display: flex; gap: 30px; font-size: 1.1em; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 10px; }
-        .header-actions { display: flex; align-items: center; gap: 15px; }
-        .header-link { color: white; text-decoration: none; font-size: 0.85em; padding: 8px 15px; border: 1px solid rgba(255,255,255,0.4); border-radius: 8px; transition: 0.2s; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-        .header-link:hover { background: rgba(255,255,255,0.2); border-color: white; }
-        
-        .btn-assignment { 
-            background: #4caf50; 
-            color: white; 
-            border: none; 
-            padding: 8px 20px; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            text-transform: uppercase; 
-            font-size: 0.85em;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-        .btn-assignment:hover { background: #43a047; }
-
-        .stat-item { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
-        .stat-label { font-size: 0.7em; text-transform: uppercase; opacity: 0.8; letter-spacing: 1px; }
-        .stat-value { font-weight: bold; }
-
-        .assignment-meta { display: flex; gap: 20px; margin-top: 15px; font-size: 0.9em; color: #667eea; font-weight: bold; }
-        .assignment-detail-title { font-weight: bold; color: #333; margin-top: 25px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-        .instruction-box { background: #ffffff; padding: 20px 25px; border-radius: 12px; margin-top: 10px; border: 2px solid #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); position: relative; }
-        .instruction-box::before { content: "INSTRUCTIE"; position: absolute; top: -10px; left: 20px; background: #667eea; color: white; font-size: 0.65em; padding: 2px 8px; border-radius: 4px; font-weight: bold; letter-spacing: 1px; }
-
-        /* Markdown Styling Fixes */
-        .assignment-desc, .instruction-box { font-size: 1rem; line-height: 1.6; color: #4b4f56; }
-        .assignment-desc h1, .instruction-box h1 { font-size: 1.4em; margin: 15px 0 10px 0; color: #333; }
-        .assignment-desc h2, .instruction-box h2 { font-size: 1.25em; margin: 12px 0 8px 0; color: #333; }
-        .assignment-desc h3, .instruction-box h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #333; }
-        .assignment-desc p, .instruction-box p { margin-bottom: 12px; }
-        .assignment-desc ul, .instruction-box ul, .assignment-desc ol, .instruction-box ol { margin-left: 20px; margin-bottom: 15px; }
-        .assignment-desc li, .instruction-box li { margin-bottom: 5px; }
-        .assignment-desc code, .instruction-box code { background: #f0f2f5; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; }
-        .assignment-desc pre, .instruction-box pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 8px; overflow-x: auto; margin-bottom: 15px; }
-        .assignment-desc pre code, .instruction-box pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
-
-        /* Main Content Layout */
-        main { display: flex; flex: 1; overflow: hidden; }
-        
-        /* Assignment Modal */
-        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); overflow-y: auto; align-items: flex-start; justify-content: center; padding: 40px 20px; }
-        .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); position: relative; animation: modalIn 0.3s ease; margin-bottom: 40px; }
-        @keyframes modalIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .close-modal { position: absolute; top: 20px; right: 25px; font-size: 30px; font-weight: bold; color: #aaa; cursor: pointer; }
-        .assignment-card { padding: 40px; }
-        .assignment-title { font-size: 1.5em; font-weight: bold; color: #333; margin-bottom: 15px; border-left: 5px solid #667eea; padding-left: 15px; }
-        .assignment-desc { font-size: 1.1em; line-height: 1.6; color: #4b4f56; margin-bottom: 25px; }
-        .download-box { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; }
-        .download-btn { display: inline-block; background: #667eea; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; transition: 0.3s; margin-bottom: 10px; border: none; cursor: pointer; }
-        .download-btn:hover:not(.disabled) { background: #5568d3; transform: translateY(-2px); }
-        .download-btn.disabled { background: #ccc; cursor: not-allowed; transform: none; }
-        .remaining { font-size: 0.85em; color: #888; }
-
-        /* Chat Section */
-        .chat-section { flex: 1; width: 100%; background: white; border-left: none; display: flex; flex-direction: column; overflow: hidden; transition: 0.3s; }
-        .chat-header { padding: 15px 20px; border-bottom: 1px solid #eee; font-weight: bold; color: #333; background: #fafafa; display: flex; justify-content: space-between; align-items: center; }
-        .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; min-height: 0; }
-        .message { padding: 10px 15px; border-radius: 12px; max-width: 85%; font-size: 0.95em; position: relative; }
-        .message.team { align-self: flex-end; background: #667eea; color: white; border-bottom-right-radius: 2px; }
-        .message.teacher { align-self: flex-start; background: #e4e6eb; color: #050505; border-bottom-left-radius: 2px; }
-
-        /* Grote Chat Modus */
-        .chat-section.large-mode .message { font-size: 1.25em; padding: 15px 20px; max-width: 90%; }
-        .chat-section.large-mode textarea { font-size: 1.2em; }
-        .btn-zoom { background: white; border: 1px solid #ddd; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8em; color: #666; transition: 0.2s; }
-        .btn-zoom:hover { background: #f0f0f0; border-color: #bbb; }
-
-        .msg-meta { font-size: 0.7em; opacity: 0.7; margin-bottom: 4px; }
-        
-        .chat-input-area { padding: 20px; border-top: 1px solid #eee; flex-shrink: 0; }
-        .chat-form { display: flex; flex-direction: column; gap: 10px; }
-        .privacy-notice { font-size: 0.75em; color: #888; line-height: 1.4; margin: 0; }
-        textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; min-height: 80px; max-height: 400px; font-family: inherit; font-size: 0.95em; }
-        textarea:focus { outline: 2px solid #667eea; border-color: transparent; }
-
-        /* Level Up Overlay */
-        #level-up-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 10000;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            color: white;
-            text-align: center;
-            animation: fadeIn 0.5s ease;
-        }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        /* Kopbalk */
+        .team-head { display: flex; align-items: center; gap: clamp(12px, 2vw, 32px); padding: 14px clamp(16px, 2.5vw, 32px); background-color: var(--surface); flex-shrink: 0; flex-wrap: wrap; }
+        .th-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+        .th-logo { height: 44px; width: auto; max-width: 140px; object-fit: contain; }
+        .team-title { font-size: clamp(18px, 2vw, 26px); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+        .th-stats { display: flex; gap: clamp(14px, 2vw, 32px); }
+        .th-stat { display: flex; flex-direction: column; align-items: flex-end; }
+        .th-stat .label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); }
+        .th-stat .value { font-family: var(--font-mono); font-size: clamp(18px, 1.8vw, 24px); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+        .th-stat .value.urgent { color: var(--danger); }
+        .th-actions { display: flex; gap: 6px; }
+        .th-actions .count { margin-left: 2px; }
+        .th-progress { padding: 0 clamp(16px, 2.5vw, 32px) 12px; background: var(--surface); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+        .th-progress .progress { height: 6px; }
+        /* Banners */
+        .strip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px clamp(16px, 2.5vw, 32px); font-weight: 600; font-size: 15px; border-bottom: 1px solid; flex-shrink: 0; }
+        .strip-warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
+        .strip-success { background: var(--success-soft); color: var(--text); border-color: var(--success); }
+        .strip-success > .icon { color: var(--success); }
+        .strip .copy-field { flex: 1; min-width: 240px; margin: 0; }
+        /* Tabs (alleen mobiel) */
+        .tabs { display: none; }
+        /* Dossier en chat */
+        .team-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr); }
+        .dossier { overflow-y: auto; padding: clamp(20px, 3vw, 40px); border-right: 1px solid var(--line); }
+        .dossier-inner { max-width: 820px; }
+        .dossier h1 { font-size: clamp(24px, 2.6vw, 34px); font-weight: 800; letter-spacing: -.01em; margin: 6px 0 10px; }
+        .dossier-meta { display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
+        .dossier-meta span { display: inline-flex; align-items: center; gap: 6px; }
+        .dossier .markdown { font-size: 16px; }
+        .instruction { position: relative; margin-top: 28px; padding: 22px 24px 20px; border: 1px solid var(--brand); border-radius: var(--radius); background: var(--brand-soft); }
+        .instruction-label { position: absolute; top: -11px; left: 18px; padding: 2px 10px; border-radius: 4px; background: var(--brand); color: var(--on-brand); font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+        .download { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 24px; padding: 16px 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+        .download .muted { font-size: 13px; }
+        .all-done { text-align: center; padding: 40px 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        .all-done .icon { width: 64px; height: 64px; color: var(--gold); stroke-width: 1.5; }
+        .chat-panel { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+        .chat-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); font-weight: 700; }
+        .chat-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
+        /* Watermerk: logo van het spel vast achter de berichten */
+        .chat-watermark { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        /* Omgekeerd en grijs: een logo met witte achtergrond wordt zo geen lichte rechthoek op donker */
+        .chat-watermark::before { content: ""; position: absolute; inset: 12%; background: var(--logo) center / contain no-repeat; opacity: .07; filter: grayscale(1) invert(1); pointer-events: none; }
+        .chat-watermark .chat-scroll { position: relative; z-index: 1; }
+        .chat-empty { color: var(--text-muted); text-align: center; margin: auto; padding: 30px; }
+        .chat-form { padding: 14px 18px 16px; border-top: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+        .chat-form textarea { min-height: 76px; max-height: 300px; font-size: 15px; }
+        .chat-form-foot { display: flex; align-items: center; gap: 12px; }
+        .privacy-notice { font-size: 12px; color: var(--text-muted); line-height: 1.4; flex: 1; display: flex; gap: 6px; }
+        .privacy-notice .icon { width: 14px; height: 14px; margin-top: 1px; }
+        .chat-closed { margin: auto; text-align: center; padding: 40px 24px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .chat-closed .icon { width: 40px; height: 40px; stroke-width: 1.5; }
+        .chat-panel.large .bubble { font-size: 19px; max-width: 92%; }
+        .chat-panel.large textarea { font-size: 18px; }
+        /* Mededelingen */
+        .announcement { border-left: 3px solid var(--brand); background: var(--surface-2); padding: 14px 18px; border-radius: var(--radius-sm); margin-bottom: 12px; }
+        .announcement time { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+        /* Schermvullend: wachten, einde, level-up */
+        .screen.overlay { position: fixed; inset: 0; z-index: 9000; overflow-y: auto; }
+        #level-up-overlay { z-index: 10000; background: rgba(11, 16, 32, .94); display: none; }
+        #level-up-overlay.is-open { display: flex; animation: fade-in var(--t) var(--ease); }
+        #level-up-overlay .screen-title { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .04em; }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .rank-big { font-family: var(--font-mono); font-weight: 800; font-size: clamp(40px, 8vw, 96px); line-height: 1; color: var(--gold); }
 
         @media (max-width: 900px) {
-            main { overflow-y: auto; }
-            .chat-section { border-left: none; border-top: 1px solid #ddd; min-height: 500px; height: auto; }
-        }
-
-        /* Pauzebanner en welkomstmelding */
-        .notice-banner { padding: 12px 40px; font-weight: 600; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .notice-banner.pause { background: #fff3e0; color: #e65100; border-bottom: 3px solid #ff9800; }
-        .notice-banner.welcome { background: #e8f5e9; color: #2e7d32; border-bottom: 3px solid #4caf50; }
-        .notice-banner input { flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #a5d6a7; border-radius: 6px; font-family: monospace; }
-        .notice-banner button { padding: 6px 12px; border: none; border-radius: 6px; background: #4caf50; color: white; font-weight: bold; cursor: pointer; }
-
-        /* Aftelklok: laatste 10 minuten rood */
-        .stat-value.urgent { color: #ff5252; text-shadow: 0 0 8px rgba(255,82,82,0.6); }
-
-        /* Watermerk: logo van het spel vast achter de berichten */
-        .chat-watermark { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; background: #f9f9f9; }
-        .chat-watermark::before { content: ""; position: absolute; inset: 10%; background: var(--logo) center / contain no-repeat; opacity: 0.08; pointer-events: none; }
-        .chat-watermark .messages { background: transparent; position: relative; z-index: 1; }
-
-        /* Schermvullend wachtscherm en eindscherm */
-        .fullscreen { position: fixed; inset: 0; z-index: 9000; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px; gap: 20px; overflow-y: auto; }
-        .fullscreen .big-logo { max-width: min(80vw, 600px); max-height: 45vh; object-fit: contain; filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3)); }
-        .fullscreen h1 { font-size: clamp(1.8em, 5vw, 3.2em); }
-        .fullscreen .sub { font-size: clamp(1.1em, 3vw, 1.6em); opacity: 0.9; }
-        .fullscreen .status-text { background: rgba(0,0,0,0.25); padding: 15px 25px; border-radius: 12px; font-size: clamp(1em, 2.5vw, 1.4em); max-width: 800px; white-space: pre-line; }
-        .fullscreen .header-link { margin-top: 10px; }
-        .waiting-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
-        @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
-
-        /* Mededelingen */
-        .btn-announce { position: relative; background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 8px 15px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85em; }
-        .btn-announce:hover { background: rgba(255,255,255,0.25); }
-        .ann-count { position: absolute; top: -8px; right: -8px; background: #f44336; color: white; border-radius: 10px; padding: 1px 6px; font-size: 0.8em; }
-        #announcement-modal { z-index: 11000; }
-        .announcement { border-left: 4px solid #667eea; background: #f8f9ff; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; }
-        .announcement .ann-time { font-size: 0.8em; color: #888; margin-bottom: 6px; }
-        .announcement p { margin-bottom: 8px; }
-        .announcement ul, .announcement ol { margin-left: 20px; }
-
-        @media (max-width: 700px) {
-            header { padding: 15px; }
-            .header-top { flex-direction: column; align-items: flex-start; gap: 10px; }
-            .header-actions { flex-wrap: wrap; }
-            .stats-bar { gap: 10px; padding: 8px 10px; }
-            .notice-banner { padding: 10px 15px; }
+            body { height: auto; min-height: 100vh; overflow: auto; }
+            .th-left { flex-basis: 100%; }
+            .th-stats { flex: 1; }
+            .th-stat { align-items: flex-start; }
+            .tabs { display: flex; position: sticky; top: 0; z-index: 50; background: var(--surface); border-bottom: 1px solid var(--line); }
+            .tab { flex: 1; display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 12px; background: none; border: none; border-bottom: 3px solid transparent; color: var(--text-muted); font: inherit; font-weight: 600; cursor: pointer; }
+            .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--brand); }
+            .team-main { display: block; }
+            .dossier { border-right: none; }
+            .team-main[data-tab="dossier"] .chat-panel, .team-main[data-tab="chat"] .dossier { display: none; }
+            .chat-panel { min-height: calc(100vh - 180px); }
+            .chat-scroll { max-height: none; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-top">
-            <div class="team-name">Team: <?= htmlspecialchars($team['team_name']) ?></div>
-            <div class="header-actions">
-                <?php if ($assignment && $chatOpen): ?>
-                    <button class="btn-assignment" onclick="openAssignmentModal()">📄 Bekijk Opdracht</button>
-                <?php endif; ?>
-                <button class="btn-announce" onclick="showAnnouncements(false)">📣 Mededelingen<span class="ann-count" id="ann-count" style="display:none;"></span></button>
-                
-                <a href="index.php?game=<?= urlencode((string)$game['join_code']) ?>" target="_leaderboard" class="header-link">View Public Leaderboard</a>
-                <div class="stats-bar">
-                    <div class="stat-item">
-                        <span class="stat-label">Positie</span>
-                        <span class="stat-value">#<span id="display-rank"><?= $rank ?></span></span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Level</span>
-                        <span class="stat-value"><span id="display-level"><?= levelLabel($level, $total_assignments) ?></span></span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label" id="timer-label"><?= $hasEnd ? 'Resterende tijd' : 'Tijd bezig' ?></span>
-                        <span class="stat-value" id="live-timer">00:00:00</span>
-                    </div>
-                </div>
+    <header class="team-head zebra-band">
+        <div class="th-left">
+            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="th-logo"><?php else: ?><?= brandMark(40) ?><?php endif; ?>
+            <div>
+                <div class="eyebrow"><?= htmlspecialchars($game['name']) ?></div>
+                <div class="team-title">Team <?= htmlspecialchars($team['team_name']) ?></div>
             </div>
         </div>
+        <div class="th-stats">
+            <div class="th-stat"><span class="label">Positie</span><span class="value">#<span id="display-rank"><?= $rank ?></span></span></div>
+            <div class="th-stat"><span class="label">Level</span><span class="value" id="display-level"><?= htmlspecialchars($levelText) ?></span></div>
+            <div class="th-stat"><span class="label" id="timer-label"><?= $hasEnd ? 'Resterend' : 'Speeltijd' ?></span><span class="value" id="live-timer">00:00:00</span></div>
+        </div>
+        <div class="th-actions">
+            <button type="button" class="btn btn-ghost" onclick="showAnnouncements(false)"><?= icon('megaphone') ?>Mededelingen<span class="count" id="ann-count" hidden></span></button>
+            <a href="<?= htmlspecialchars($leaderboardUrl) ?>" target="_leaderboard" class="btn btn-ghost"><?= icon('trophy') ?>Leaderboard</a>
+        </div>
     </header>
+    <div class="th-progress"><?= progressBar($level, $total_assignments) ?></div>
 
-    <div class="notice-banner pause" id="pause-banner" style="<?= $status === 'paused' ? '' : 'display: none;' ?>">
-        ⏸️ <span id="pause-text"><?= htmlspecialchars($game['status_message'] ?: 'Het spel is even gepauzeerd. Jullie kunnen gewoon doorwerken.') ?></span>
+    <div class="strip strip-warning" id="pause-banner" role="status"<?= $status === 'paused' ? '' : ' hidden' ?>>
+        <?= icon('pause') ?><span id="pause-text"><?= htmlspecialchars($game['status_message'] ?: 'Het spel is even gepauzeerd. Jullie kunnen gewoon doorwerken.') ?></span>
     </div>
 
-    <?php if (isset($_GET['welcome'])): ?>
-        <div class="notice-banner welcome" id="welcome-banner">
-            ✅ Jullie team is aangemeld! Bewaar deze link, daarmee komen jullie altijd terug op dit dashboard:
-            <input type="text" readonly value="<?= htmlspecialchars(teamDashboardUrl($team['access_token'])) ?>" onclick="this.select()">
-            <button type="button" onclick="copyLink(this)">Kopiëren</button>
+    <?php if (isset($_GET['welcome'])): $dashUrl = htmlspecialchars(teamDashboardUrl($team['access_token'])); ?>
+        <div class="strip strip-success" id="welcome-banner" role="status">
+            <?= icon('check-circle') ?><span>Jullie team is aangemeld! Bewaar deze link, daarmee komen jullie altijd terug op dit dashboard:</span>
+            <div class="copy-field"><input type="text" readonly value="<?= $dashUrl ?>" onclick="this.select()" aria-label="Link naar jullie dashboard">
+                <button type="button" class="btn btn-secondary" data-copy="<?= $dashUrl ?>"><?= icon('copy') ?><span class="copy-label">Kopiëren</span></button></div>
         </div>
     <?php endif; ?>
 
-    <main>
-        <section id="assignment-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-modal" onclick="closeAssignmentModal()">&times;</span>
-                <div class="assignment-card">
-                    <div class="assignment-title" id="assignment-title">
-                        <?= $assignment ? htmlspecialchars($assignment['title']) : 'Geen Opdracht' ?>
-                    </div>
-                    <div class="assignment-desc" id="assignment-desc"><?= $assignment ? htmlspecialchars($assignment['description']) : 'Er is momenteel geen actieve opdracht voor dit level. Wacht op instructies van de docent.' ?></div>
-                    
-                    <div class="assignment-meta">
-                        <span id="display-time-limit"><?= ($assignment && $assignment['time_limit'] > 0) ? "Verwacht benodigde tijd: " . $assignment['time_limit'] . " min" : "" ?></span>
-                    </div>
+    <div class="tabs" role="tablist" aria-label="Weergave">
+        <button type="button" class="tab" role="tab" id="tab-dossier" aria-controls="panel-dossier" aria-selected="true" onclick="selectTab('dossier')"><?= icon('file') ?>Dossier</button>
+        <button type="button" class="tab" role="tab" id="tab-chat" aria-controls="panel-chat" aria-selected="false" onclick="selectTab('chat')"><?= icon('message') ?>Chat<span class="count" id="chat-badge" hidden>!</span></button>
+    </div>
 
-                    <div id="instruction-wrapper" style="<?= (!$assignment || empty($assignment['instruction'])) ? 'display:none;' : '' ?>">
-                        <div class="instruction-box" id="assignment-instruction"><?= $assignment ? htmlspecialchars($assignment['instruction']) : '' ?></div>
+    <main class="team-main" id="team-main" data-tab="dossier">
+        <section class="dossier" id="panel-dossier" role="tabpanel" aria-labelledby="tab-dossier">
+            <div class="dossier-inner">
+                <?php if ($assignment && $chatOpen): ?>
+                    <div class="eyebrow">Dossier <?= $level ?> van <?= $total_assignments ?></div>
+                    <h1><?= htmlspecialchars($assignment['title']) ?></h1>
+                    <?php if ((int)$assignment['time_limit'] > 0): ?>
+                        <div class="dossier-meta"><span><?= icon('clock') ?>Verwachte tijd: <?= (int)$assignment['time_limit'] ?> min</span></div>
+                    <?php endif; ?>
+                    <div class="markdown" data-md><?= htmlspecialchars((string)$assignment['description']) ?></div>
+                    <?php if (!empty($assignment['instruction'])): ?>
+                        <div class="instruction">
+                            <span class="instruction-label">INSTRUCTIE</span>
+                            <div class="markdown" data-md><?= htmlspecialchars($assignment['instruction']) ?></div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($assignment['artifact_file'])): ?>
+                        <div class="download">
+                            <?php if ($download_count >= $max_downloads): ?>
+                                <button type="button" class="btn btn-primary" disabled><?= icon('download') ?>Bestanden downloaden</button>
+                                <span class="muted">Het maximum van <?= $max_downloads ?> downloads voor dit dossier is bereikt.</span>
+                            <?php else: ?>
+                                <a href="team_download.php?token=<?= htmlspecialchars(urlencode($team['access_token'])) ?>" class="btn btn-primary"><?= icon('download') ?>Bestanden downloaden</a>
+                                <span class="muted"><span class="mono"><?= (int)$download_count ?>/<?= $max_downloads ?></span> downloads gebruikt</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                <?php elseif ($allDone): ?>
+                    <div class="all-done">
+                        <?= icon('trophy') ?>
+                        <div class="eyebrow">Missie voltooid</div>
+                        <h1>Alle dossiers gesloten</h1>
+                        <p class="muted">Jullie staan op positie <strong>#<?= $rank ?></strong>. Bekijk het leaderboard voor de stand van de andere teams.</p>
+                        <a href="<?= htmlspecialchars($leaderboardUrl) ?>" target="_leaderboard" class="btn btn-primary"><?= icon('trophy') ?>Naar het leaderboard</a>
                     </div>
-
-                    <div class="download-box" id="download-box" style="<?= (!$assignment || empty($assignment['artifact_file'])) ? 'display: none;' : '' ?>">
-                        <p style="margin-bottom: 15px; font-weight: bold; color: #333;">Download de opdrachtdocumentatie:</p>
-                        <a href="team_download.php?token=<?= htmlspecialchars($team['access_token']) ?>" class="download-btn" id="dl-link">📄 Bestanden Downloaden (PDF/ZIP)</a>
-                        <div class="remaining">Downloads gebruikt: <span id="display-dl-count"><?= $download_count ?></span> / <?= $max_downloads ?></div>
-                    </div>
-                </div>
+                <?php else: ?>
+                    <?= emptyState('file', 'Er is nog geen dossier. Wacht op instructies van de docent.') ?>
+                <?php endif; ?>
             </div>
         </section>
 
-        <section id="announcement-modal" class="modal">
-            <div class="modal-content">
-                <span class="close-modal" onclick="closeAnnouncements()">&times;</span>
-                <div class="assignment-card">
-                    <div class="assignment-title" id="announcement-title">📣 Mededelingen</div>
-                    <div id="announcement-list"></div>
-                    <div style="text-align: right; margin-top: 10px;">
-                        <button class="download-btn" style="margin: 0;" onclick="closeAnnouncements()">Gelezen</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="chat-section" id="chat-container">
-            <div class="chat-header">
-                <span>Berichten & Antwoorden</span>
-                <button class="btn-zoom" onclick="toggleChatSize()">🔍 Tekst vergroten</button>
+        <section class="chat-panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
+            <div class="chat-head">
+                <span>Berichten</span>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-zoom" aria-pressed="false" onclick="toggleChatSize()" title="Tekst vergroten">A+</button>
             </div>
             <?php if ($chatOpen): ?>
                 <div class="chat-watermark"<?= $logo ? ' style="--logo: url(\'' . htmlspecialchars($logo) . '\')"' : '' ?>>
-                    <div class="messages" id="chat-box">
-                        <?php foreach ($messages as $m): ?>
-                            <div class="message <?= $m['sender'] ?>">
-                                <div class="msg-meta"><?= $m['sender'] === 'team' ? 'Jullie' : 'Docent' ?> - <?= $m['created_at'] ?></div>
-                                <div><?= nl2br(htmlspecialchars($m['message'])) ?></div>
-                            </div>
-                        <?php endforeach; ?>
+                    <div class="chat-scroll" id="chat-scroll">
+                        <div class="chat chat-team-view" id="chat-box"><?= $chatHtml ?></div>
+                        <p class="chat-empty" id="chat-empty"<?= $messages ? ' hidden' : '' ?>>Nog geen berichten. Stel hier een vraag of stuur jullie antwoord.</p>
                     </div>
                 </div>
-                <div class="chat-input-area">
-                    <form method="POST" class="chat-form">
-                        <input type="hidden" name="action" value="send_message">
-                        <textarea name="message" rows="3" placeholder="Typ hier je antwoord of vraag..." required></textarea>
-                        <p class="privacy-notice">🔒 <?= htmlspecialchars(PRIVACY_NOTICE) ?></p>
-                        <button type="submit" class="download-btn" style="width:100%; margin:0;">Bericht versturen</button>
-                    </form>
-                </div>
-            <?php elseif ($level > $total_assignments && $status !== 'draft'): ?>
-                <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #2e7d32; padding: 40px;">
-                    <div>
-                        <h2 style="margin-bottom: 10px;">🏆 Gefeliciteerd!</h2>
-                        <p>Jullie hebben alle opdrachten voltooid. De chat is nu gesloten.</p>
+                <div class="sr-only" aria-live="polite" id="chat-live"></div>
+                <form method="POST" class="chat-form" id="chat-form">
+                    <input type="hidden" name="action" value="send_message">
+                    <label for="chat-message" class="sr-only">Bericht</label>
+                    <textarea name="message" id="chat-message" rows="3" placeholder="Typ hier jullie antwoord of vraag…" required></textarea>
+                    <div class="chat-form-foot">
+                        <p class="privacy-notice"><?= icon('lock') ?><span><?= htmlspecialchars(PRIVACY_NOTICE) ?></span></p>
+                        <button type="submit" class="btn btn-primary" id="chat-send" title="Versturen (Ctrl+Enter)"><?= icon('send') ?>Versturen</button>
                     </div>
-                </div>
+                </form>
+            <?php elseif ($allDone): ?>
+                <div class="chat-closed"><?= icon('check-circle') ?><p>Jullie hebben alle opdrachten voltooid. De chat is nu gesloten.</p></div>
             <?php else: ?>
-                <div class="messages" style="justify-content: center; align-items: center; text-align: center; color: #888;">
-                    De chat wordt geactiveerd zodra het spel begint.
-                </div>
+                <div class="chat-closed"><?= icon('message') ?><p>De chat wordt geactiveerd zodra het spel begint.</p></div>
             <?php endif; ?>
         </section>
     </main>
 
+    <dialog class="modal" id="announcement-modal" aria-labelledby="announcement-title">
+        <div class="modal-header">
+            <h2 id="announcement-title">Mededelingen</h2>
+            <button type="button" class="btn btn-ghost btn-icon" data-close aria-label="Sluiten"><?= icon('x') ?></button>
+        </div>
+        <div class="modal-body" id="announcement-list"></div>
+        <div class="modal-footer"><button type="button" class="btn btn-primary" data-close autofocus>Gelezen</button></div>
+    </dialog>
+
     <?php if ($status === 'draft'): ?>
-        <div class="fullscreen" id="waiting-screen">
-            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="big-logo"><?php endif; ?>
-            <h1>Team <?= htmlspecialchars($team['team_name']) ?></h1>
-            <div class="sub">Wacht op het startsein<span class="waiting-dots"></span></div>
-            <button class="btn-announce" onclick="showAnnouncements(false)">📣 Mededelingen</button>
+        <div class="screen overlay" id="waiting-screen">
+            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="screen-logo"><?php else: ?><?= brandMark(72) ?><?php endif; ?>
+            <div class="eyebrow"><?= htmlspecialchars($game['name']) ?></div>
+            <h1 class="screen-title">Team <?= htmlspecialchars($team['team_name']) ?></h1>
+            <p class="screen-sub">Wacht op het startsein<span class="waiting-dots" aria-hidden="true"></span></p>
+            <button type="button" class="btn btn-secondary" onclick="showAnnouncements(false)"><?= icon('megaphone') ?>Mededelingen</button>
         </div>
     <?php elseif ($status === 'finished'): ?>
-        <div class="fullscreen" id="finished-screen">
-            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="big-logo"><?php endif; ?>
-            <h1>🏁 Het spel is afgelopen</h1>
+        <div class="screen overlay" id="finished-screen">
+            <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="screen-logo"><?php else: ?><?= brandMark(72) ?><?php endif; ?>
+            <div class="eyebrow">Het spel is afgelopen</div>
+            <h1 class="screen-title">Team <?= htmlspecialchars($team['team_name']) ?></h1>
+            <div class="rank-big">#<?= $rank ?></div>
+            <p class="screen-sub"><?= $level > $total_assignments ? 'Alle opdrachten voltooid' : 'Level ' . max(1, $level) . ' van ' . $total_assignments ?></p>
             <?php if ($game['status_message']): ?>
-                <div class="status-text"><?= htmlspecialchars($game['status_message']) ?></div>
+                <div class="screen-box"><?= htmlspecialchars($game['status_message']) ?></div>
             <?php endif; ?>
-            <div class="sub">Team <?= htmlspecialchars($team['team_name']) ?> eindigt op positie <strong>#<?= $rank ?></strong>
-                (<?= $level > $total_assignments ? 'alle opdrachten voltooid' : 'level ' . max(1, $level) . ' van ' . $total_assignments ?>)</div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                <a href="index.php?game=<?= urlencode((string)$game['join_code']) ?>" class="header-link">🏆 Eindstand</a>
-                <button class="btn-announce" onclick="showAnnouncements(false)">📣 Mededelingen</button>
+            <div class="btn-row" style="justify-content: center;">
+                <a href="<?= htmlspecialchars($leaderboardUrl) ?>" class="btn btn-primary"><?= icon('trophy') ?>Eindstand</a>
+                <button type="button" class="btn btn-secondary" onclick="showAnnouncements(false)"><?= icon('megaphone') ?>Mededelingen</button>
             </div>
         </div>
     <?php endif; ?>
 
-    <div id="level-up-overlay">
-        <h1 id="overlay-title" style="font-size: 4em; margin-bottom: 20px;">🎉 GEFELICITEERD! 🎉</h1>
-        <p id="overlay-message" style="font-size: 2em; opacity: 0.9;">Jullie zijn naar het volgende level!</p>
-        <p id="overlay-rank" style="font-size: 1.5em; opacity: 0.8; margin-top: 10px;"></p>
+    <div class="screen overlay" id="level-up-overlay" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+        <div class="eyebrow" id="overlay-eyebrow">Level up</div>
+        <h1 class="screen-title" id="overlay-title">Dossier gesloten</h1>
+        <p class="screen-sub" id="overlay-message"></p>
+        <p class="screen-sub" id="overlay-rank"></p>
+        <div class="btn-row" id="overlay-actions" hidden>
+            <a href="<?= htmlspecialchars($leaderboardUrl) ?>" target="_leaderboard" class="btn btn-primary"><?= icon('trophy') ?>Leaderboard</a>
+            <button type="button" class="btn btn-secondary" onclick="closeOverlay()">Sluiten</button>
+        </div>
     </div>
 
+    <?= themeScript() ?>
     <script>
         const teamId = <?= (int)$team['id'] ?>;
         let currentLevel = <?= $level ?>;
         let totalAssignments = <?= $total_assignments ?>;
         let gameStatus = <?= json_encode($status) ?>;
-        let announcements = <?= json_encode($announcements) ?>;
+        let announcements = <?= json_encode($announcements, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+        let messageCount = <?= count($messages) ?>;
+        const chatOpen = <?= $chatOpen ? 'true' : 'false' ?>;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
         // Tijden zijn relatief aan de server: alleen het verschil met nu telt, niet de klok van deze laptop
         let hasEnd = <?= $hasEnd ? 'true' : 'false' ?>;
@@ -432,135 +385,103 @@ if (isset($_GET['ajax'])) {
             hasEnd = data.seconds_left !== null;
             if (hasEnd) deadline = Date.now() + data.seconds_left * 1000;
             if (data.seconds_elapsed !== null) startedAt = Date.now() - data.seconds_elapsed * 1000;
-            document.getElementById('timer-label').innerText = hasEnd ? 'Resterende tijd' : 'Tijd bezig';
-        }
-
-        function triggerLevelUp(isFinal = false) {
-            const overlay = document.getElementById('level-up-overlay');
-            if (overlay) overlay.style.display = 'flex';
-
-            confetti({
-                particleCount: 150,
-                spread: 70,
-                origin: { y: 0.6 }
-            });
-            
-            if (!isFinal) {
-                setTimeout(() => {
-                    location.reload();
-                }, 3000);
-            }
+            document.getElementById('timer-label').textContent = hasEnd ? 'Resterend' : 'Speeltijd';
         }
 
         function updateTimer() {
             let diff;
-            if (gameStatus === 'draft') {
-                diff = 0;
-            } else if (hasEnd) {
-                diff = Math.max(0, deadline - Date.now());
-            } else {
-                diff = Math.max(0, Date.now() - startedAt);
-            }
-
-            const hours = Math.floor(diff / (1000 * 60 * 60));
-            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-            const display = 
-                (hours < 10 ? "0" + hours : hours) + ":" + 
-                (minutes < 10 ? "0" + minutes : minutes) + ":" + 
-                (seconds < 10 ? "0" + seconds : seconds);
-
+            if (gameStatus === 'draft') diff = 0;
+            else if (hasEnd) diff = Math.max(0, deadline - Date.now());
+            else diff = Math.max(0, Date.now() - startedAt);
+            const s = Math.floor(diff / 1000);
             const timer = document.getElementById('live-timer');
-            timer.innerText = display;
+            timer.textContent = [Math.floor(s / 3600), Math.floor(s % 3600 / 60), s % 60].map(v => String(v).padStart(2, '0')).join(':');
             // Laatste 10 minuten rood
             timer.classList.toggle('urgent', hasEnd && gameStatus !== 'draft' && diff <= 10 * 60 * 1000);
         }
 
-        function renderMarkdown() {
-            marked.setOptions({ breaks: true });
-            const fields = ['assignment-desc', 'assignment-instruction'];
-            fields.forEach(id => {
-                const el = document.getElementById(id);
-                if (el && el.getAttribute('data-rendered') !== 'true') {
-                    const raw = el.textContent;
-                    el.innerHTML = marked.parse(raw);
-                    el.setAttribute('data-rendered', 'true');
-                }
-            });
+        // --- Level-up: overlay met confetti, daarna het nieuwe dossier ---
+        function showOverlay(eyebrow, title, message, rankText, isFinal) {
+            document.getElementById('overlay-eyebrow').textContent = eyebrow;
+            document.getElementById('overlay-title').textContent = title;
+            document.getElementById('overlay-message').textContent = message;
+            document.getElementById('overlay-rank').textContent = rankText;
+            document.getElementById('overlay-actions').hidden = !isFinal;
+            document.getElementById('level-up-overlay').classList.add('is-open');
+            if (!reduceMotion && window.confetti) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+            if (isFinal) { try { sessionStorage.setItem('final_seen_' + teamId, '1'); } catch (e) {} }
+            else setTimeout(() => location.reload(), 3000);
+        }
+        function closeOverlay() {
+            document.getElementById('level-up-overlay').classList.remove('is-open');
         }
 
-        function openAssignmentModal() {
-            document.getElementById('assignment-modal').style.display = 'flex';
-            renderMarkdown();
+        // --- Tabs op mobiel ---
+        function selectTab(tab) {
+            document.getElementById('team-main').dataset.tab = tab;
+            ['dossier', 'chat'].forEach(t => document.getElementById('tab-' + t).setAttribute('aria-selected', t === tab ? 'true' : 'false'));
+            if (tab === 'chat') { document.getElementById('chat-badge').hidden = true; scrollToBottom(); }
+            try { sessionStorage.setItem('team_tab_' + teamId, tab); } catch (e) {}
         }
-
-        function closeAssignmentModal() {
-            document.getElementById('assignment-modal').style.display = 'none';
-        }
+        function isMobile() { return window.matchMedia('(max-width: 900px)').matches; }
 
         function scrollToBottom() {
-            const chatBox = document.getElementById('chat-box');
-            if (chatBox) {
-                setTimeout(() => {
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }, 50);
-            }
+            const scroller = document.getElementById('chat-scroll');
+            if (scroller) setTimeout(() => { scroller.scrollTop = scroller.scrollHeight; }, 50);
         }
 
         // --- Mededelingen: nieuwe (hoger id dan de laatst gesloten) verschijnen als pop-up ---
         const annKey = 'announcements_closed_' + teamId;
+        const annModal = document.getElementById('announcement-modal');
         let closedInMemory = 0;
         function lastClosedId() {
             try { return Math.max(closedInMemory, parseInt(localStorage.getItem(annKey) || '0', 10) || 0); }
             catch (e) { return closedInMemory; }
         }
-        function annModalOpen() {
-            return document.getElementById('announcement-modal').style.display === 'flex';
-        }
         function showAnnouncements(onlyNew) {
             const list = onlyNew ? announcements.filter(a => a.id > lastClosedId()) : announcements;
             const box = document.getElementById('announcement-list');
-            document.getElementById('announcement-title').innerText = onlyNew ? '📣 Nieuwe mededeling' : '📣 Mededelingen';
+            document.getElementById('announcement-title').textContent = onlyNew ? 'Nieuwe mededeling' : 'Mededelingen';
             box.innerHTML = '';
             if (list.length === 0) {
-                box.innerHTML = '<p style="color: #888;">Er zijn nog geen mededelingen.</p>';
+                box.innerHTML = '<p class="muted">Er zijn nog geen mededelingen.</p>';
             }
-            marked.setOptions({ breaks: true });
+            if (window.marked) marked.setOptions({ breaks: true });
             list.slice().reverse().forEach(a => {
                 const item = document.createElement('div');
                 item.className = 'announcement';
-                const time = document.createElement('div');
-                time.className = 'ann-time';
-                time.innerText = a.time;
+                const time = document.createElement('time');
+                time.textContent = a.time;
                 const body = document.createElement('div');
-                body.innerHTML = marked.parse(a.message);
+                body.className = 'markdown';
+                if (window.marked) body.innerHTML = marked.parse(a.message); else body.textContent = a.message;
                 item.appendChild(time);
                 item.appendChild(body);
                 box.appendChild(item);
             });
-            document.getElementById('announcement-modal').style.display = 'flex';
+            if (!annModal.open) annModal.showModal();
         }
-        function closeAnnouncements() {
+        // Sluiten (knop, Esc of klik ernaast) = gelezen
+        annModal.addEventListener('close', () => {
             const maxId = announcements.reduce((max, a) => Math.max(max, a.id), 0);
             closedInMemory = Math.max(closedInMemory, maxId);
             try { localStorage.setItem(annKey, String(closedInMemory)); } catch (e) {}
-            document.getElementById('announcement-modal').style.display = 'none';
             checkAnnouncements();
-        }
+        });
         function checkAnnouncements() {
             const fresh = announcements.filter(a => a.id > lastClosedId()).length;
             const badge = document.getElementById('ann-count');
-            badge.style.display = fresh > 0 ? 'inline' : 'none';
-            badge.innerText = fresh;
-            if (fresh > 0 && !annModalOpen()) showAnnouncements(true);
+            badge.hidden = fresh === 0;
+            badge.textContent = fresh;
+            if (fresh > 0 && !annModal.open) showAnnouncements(true);
         }
 
         function updatePauseBanner(data) {
-            document.getElementById('pause-banner').style.display = data.status === 'paused' ? '' : 'none';
-            document.getElementById('pause-text').innerText = data.status_message || 'Het spel is even gepauzeerd. Jullie kunnen gewoon doorwerken.';
+            document.getElementById('pause-banner').hidden = data.status !== 'paused';
+            document.getElementById('pause-text').textContent = data.status_message || 'Het spel is even gepauzeerd. Jullie kunnen gewoon doorwerken.';
         }
 
+        let lastChatHtml = <?= json_encode($chatHtml, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         function fetchMessages() {
             fetch(window.location.href + '&ajax=1')
                 .then(response => response.json())
@@ -568,56 +489,37 @@ if (isset($_GET['ajax'])) {
                     syncClock(data);
                     announcements = data.announcements;
                     checkAnnouncements();
+                    document.getElementById('display-rank').textContent = data.rank;
 
                     const chatBox = document.getElementById('chat-box');
-                    // Alleen scrollen en updaten als er daadwerkelijk nieuwe berichten zijn
-                    if (chatBox && chatBox.innerHTML !== data.html) {
+                    // Alleen bijwerken en scrollen als er echt iets veranderd is
+                    if (chatBox && data.html !== lastChatHtml) {
                         chatBox.innerHTML = data.html;
+                        document.getElementById('chat-empty').hidden = data.message_count > 0;
                         scrollToBottom();
+                        if (data.message_count > messageCount && data.last_sender && data.last_sender !== 'team') {
+                            // Voorlezen en, op mobiel in het dossier, een badge op de chat-tab
+                            document.getElementById('chat-live').textContent = 'Nieuw bericht van de docent: ' + data.last_message;
+                            if (isMobile() && document.getElementById('team-main').dataset.tab !== 'chat') document.getElementById('chat-badge').hidden = false;
+                        }
+                        messageCount = data.message_count;
                     }
+                    lastChatHtml = data.html;
+
                     if (data.level > currentLevel) {
-                        currentLevel = data.level;
-                        gameStatus = data.status;
-                        // Update UI onmiddellijk voor de reload
-                        document.getElementById('display-level').innerText = data.level > data.total_assignments ? 'Finish' : data.level;
-                        document.getElementById('display-rank').innerText = data.rank;
-                        document.getElementById('assignment-title').innerText = data.assignment_title;
-                        document.getElementById('assignment-desc').textContent = data.assignment_desc;
-                        document.getElementById('assignment-desc').removeAttribute('data-rendered');
-
-                        document.getElementById('display-time-limit').innerText = data.time_limit > 0 ? "⏳ Beschikbare tijd: " + data.time_limit + " min" : "";
-                        
-                        const instrWrapper = document.getElementById('instruction-wrapper');
-                        instrWrapper.style.display = data.assignment_instruction ? 'block' : 'none';
-                        document.getElementById('assignment-instruction').textContent = data.assignment_instruction;
-                        document.getElementById('assignment-instruction').removeAttribute('data-rendered');
-                      
-                        const downloadBox = document.getElementById('download-box');
-
-                        // Check for final level completion
-                        if (data.level > data.total_assignments) { // Aangepast: > in plaats van >=
-                            document.getElementById('overlay-title').innerText = "🏆 GEFELICITEERD KAMPIOENEN! 🏆";
-                            document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
-                            document.getElementById('overlay-rank').innerText = `Jullie eindigen op positie #${data.rank}! Fantastisch werk!`;
-                        } else if (data.level === 1) {
-                            document.getElementById('overlay-title').innerText = "🕵️ OPDRACHT BINNEN! 🕵️";
-                            document.getElementById('overlay-message').innerText = "Jullie kunnen beginnen!";
-                            document.getElementById('overlay-rank').innerText = '';
-                        } else {
-                            document.getElementById('overlay-title').innerText = "🎉 GEFELICITEERD! 🎉";
-                            document.getElementById('overlay-message').innerText = `Jullie zijn naar level ${data.level}!`; // Toont het nieuwe level
-                            document.getElementById('overlay-rank').innerText = ''; // Leeg maken voor normale level-up
-                        }
-
-                        if (downloadBox) {
-                            downloadBox.style.display = data.has_file ? 'block' : 'none';
-                        }
-
+                        const closed = data.level - 1;
                         const isFinal = data.level > data.total_assignments;
-                        triggerLevelUp(isFinal);
-                        if (!isFinal) setTimeout(openAssignmentModal, 1500);
+                        gameStatus = data.status;
+                        if (isFinal) {
+                            showOverlay('Missie voltooid', 'Alle dossiers gesloten', 'Jullie hebben alle opdrachten opgelost!', `Jullie eindigen op positie #${data.rank}. Fantastisch werk!`, true);
+                        } else if (data.level === 1) {
+                            showOverlay('Het spel is begonnen', 'Dossier 1 geopend', 'Jullie kunnen beginnen!', '', false);
+                        } else {
+                            showOverlay('Level up', `Dossier ${closed} gesloten`, `Op naar dossier ${data.level}.`, `Jullie staan nu op positie #${data.rank}.`, false);
+                        }
+                        currentLevel = data.level;
                         // Na de kampioens-overlay toch herladen als het spel intussen afgelopen is
-                        if (isFinal && data.status === 'finished') setTimeout(() => location.reload(), 5000);
+                        if (isFinal) setTimeout(() => location.reload(), data.status === 'finished' ? 5000 : 6000);
                     } else if (data.level < currentLevel) {
                         // Level terug door de docent: opdracht en gesprek van het vorige level laden
                         location.reload();
@@ -634,61 +536,51 @@ if (isset($_GET['ajax'])) {
                     } else if (gameStatus === 'paused') {
                         updatePauseBanner(data);
                     }
-                    renderMarkdown();
                 })
                 .catch(err => console.error('Fout bij ophalen updates:', err));
         }
 
-        setInterval(updateTimer, 1000);
-        setInterval(fetchMessages, 5000);
-        updateTimer();
-        renderMarkdown();
-        scrollToBottom();
-        checkAnnouncements();
-
-        // Open de opdracht popup alleen de eerste keer dat een level geladen wordt in deze browser
-        const modalKey = 'assignment_seen_' + teamId + '_lvl_' + currentLevel;
-        let seen = false;
-        try { seen = localStorage.getItem(modalKey) === 'true'; } catch (e) {}
-        if (<?= $chatOpen ? 'true' : 'false' ?> && !seen && !annModalOpen()) {
-            openAssignmentModal();
-            try { localStorage.setItem(modalKey, 'true'); } catch (e) {}
-        }
-
-        // Als het team al op het eindlevel zit bij het laden van de pagina (en het spel nog loopt), toon de overlay direct
-        if (currentLevel > totalAssignments && (gameStatus === 'running' || gameStatus === 'paused')) {
-            const rank = document.getElementById('display-rank').innerText;
-            document.getElementById('overlay-title').innerText = "🏆 KAMPIOENEN! 🏆";
-            document.getElementById('overlay-message').innerText = "Jullie hebben ALLE levels voltooid!";
-            document.getElementById('overlay-rank').innerText = `Eindpositie: #${rank}`;
-            
-            // Kleine vertraging voor de visuele impact
-            setTimeout(() => triggerLevelUp(true), 500);
-        }
-
-        // Sluit modals als je buiten de box klikt
-        window.onclick = function(event) {
-            if (event.target == document.getElementById('assignment-modal')) closeAssignmentModal();
-            if (event.target == document.getElementById('announcement-modal')) closeAnnouncements();
-        }
-
         function toggleChatSize() {
-            const chat = document.getElementById('chat-container');
-            chat.classList.toggle('large-mode');
-            const btn = document.querySelector('.btn-zoom');
-            btn.innerText = chat.classList.contains('large-mode') ? '🔍 Tekst verkleinen' : '🔍 Tekst vergroten';
+            const chat = document.getElementById('panel-chat');
+            const large = chat.classList.toggle('large');
+            const btn = document.getElementById('btn-zoom');
+            btn.setAttribute('aria-pressed', large ? 'true' : 'false');
+            btn.textContent = large ? 'A−' : 'A+';
+            btn.title = large ? 'Tekst verkleinen' : 'Tekst vergroten';
             scrollToBottom();
         }
 
-        function copyLink(btn) {
-            const input = btn.previousElementSibling;
-            input.select();
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(input.value).then(() => { btn.innerText = 'Gekopieerd'; });
-            } else {
-                document.execCommand('copy');
-                btn.innerText = 'Gekopieerd';
-            }
+        // Versturen: Ctrl/⌘+Enter, en de knop uit tijdens het versturen (geen dubbele berichten)
+        const form = document.getElementById('chat-form');
+        if (form) {
+            const textarea = document.getElementById('chat-message');
+            textarea.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); form.requestSubmit(); }
+            });
+            form.addEventListener('submit', () => {
+                const btn = document.getElementById('chat-send');
+                btn.disabled = true;
+                btn.lastChild.textContent = 'Versturen…';
+                try { sessionStorage.setItem('team_tab_' + teamId, 'chat'); } catch (e) {}
+            });
+        }
+
+        // Op mobiel na het versturen terug op de chat-tab
+        try { if (sessionStorage.getItem('team_tab_' + teamId) === 'chat') selectTab('chat'); } catch (e) {}
+
+        setInterval(updateTimer, 1000);
+        setInterval(fetchMessages, 5000);
+        updateTimer();
+        window.renderMarkdown();
+        scrollToBottom();
+        checkAnnouncements();
+
+        // Als het team al op het eindlevel zit bij het laden van de pagina (en het spel nog loopt), feestelijk tonen
+        if (currentLevel > totalAssignments && totalAssignments > 0 && (gameStatus === 'running' || gameStatus === 'paused')) {
+            const key = 'final_seen_' + teamId;
+            let seen = false;
+            try { seen = sessionStorage.getItem(key) === '1'; } catch (e) {}
+            if (!seen) setTimeout(() => showOverlay('Missie voltooid', 'Kampioenen!', 'Jullie hebben alle levels voltooid!', 'Eindpositie: #' + document.getElementById('display-rank').textContent, true), 500);
         }
     </script>
 </body>

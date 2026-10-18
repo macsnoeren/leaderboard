@@ -105,48 +105,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 ?>
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <title>Initial Setup</title>
-    <style>
-        body { font-family: sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-        .box { background: white; padding: 40px; border-radius: 15px; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-        h1 { text-align: center; color: #333; }
-        .info { background: #e3f2fd; color: #0d47a1; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9em; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .error { color: #f44336; margin-bottom: 15px; text-align: center; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h1>Setup Admin</h1>
-        <div class="info">Er zijn geen gebruikers gevonden. Maak de eerste beheerder aan om te beginnen. De database is automatisch gecontroleerd en bijgewerkt.</div>
-        <?php if ($error): ?><div class="error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+<?= authPageStart('Eerste beheerder', ['icon' => 'shield']) ?>
+        <?= alertBox('info', 'Er zijn nog geen gebruikers. Maak de eerste beheerder aan om te beginnen. De database is automatisch gecontroleerd en bijgewerkt.') ?>
+        <?php if ($error): ?><?= alertBox('error', htmlspecialchars($error)) ?><?php endif; ?>
         <form method="POST">
             <?= csrfField() ?>
-            <div class="form-group">
-                <label>Gebruikersnaam:</label>
-                <input type="text" name="username" value="<?= htmlspecialchars($username) ?>" pattern="[A-Za-z0-9._\-]{3,50}" autocomplete="username" required>
+            <div class="field">
+                <label for="s-user">Gebruikersnaam</label>
+                <input type="text" name="username" id="s-user" value="<?= htmlspecialchars($username) ?>" pattern="[A-Za-z0-9._\-]{3,50}" autocomplete="username" required>
             </div>
-            <div class="form-group">
-                <label>E-mailadres (optioneel, nodig voor wachtwoordherstel):</label>
-                <input type="email" name="email" value="<?= htmlspecialchars($emailInput) ?>" autocomplete="email">
+            <div class="field">
+                <label for="s-email">E-mailadres <span class="muted">(optioneel)</span></label>
+                <input type="email" name="email" id="s-email" value="<?= htmlspecialchars($emailInput) ?>" autocomplete="email">
+                <div class="hint">Nodig voor wachtwoordherstel.</div>
             </div>
-            <div class="form-group">
-                <label>Wachtwoord (minimaal <?= PASSWORD_MIN_LENGTH ?> tekens):</label>
-                <input type="password" name="password" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
+            <div class="field">
+                <label for="s-pw">Wachtwoord</label>
+                <input type="password" name="password" id="s-pw" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
+                <div class="hint">Minimaal <?= PASSWORD_MIN_LENGTH ?> tekens.</div>
             </div>
-            <div class="form-group">
-                <label>Bevestig wachtwoord:</label>
-                <input type="password" name="confirm_password" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
+            <div class="field">
+                <label for="s-pw2">Bevestig wachtwoord</label>
+                <input type="password" name="confirm_password" id="s-pw2" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
             </div>
-            <button type="submit">Account aanmaken & Inloggen</button>
+            <button type="submit" class="btn btn-primary btn-lg btn-block">Account aanmaken en inloggen</button>
         </form>
-    </div>
-</body>
-</html>
+<?= authPageEnd() ?>

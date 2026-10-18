@@ -187,131 +187,132 @@ $users = $db->query("SELECT t.id, t.username, t.email, t.display_name, t.role, t
 // Status volgens het ontwerp: Gedeactiveerd, Uitgenodigd, Uitnodiging verlopen of Actief
 function userStatus(array $u): array {
     if (!(int)$u['is_active']) {
-        return ['Gedeactiveerd', '#f44336'];
+        return ['Gedeactiveerd', 'badge-danger'];
     }
     if ((int)$u['is_invited']) {
-        return (int)$u['open_invites'] > 0 ? ['Uitgenodigd', '#2196f3'] : ['Uitnodiging verlopen', '#ff9800'];
+        return (int)$u['open_invites'] > 0 ? ['Uitgenodigd', 'badge-info'] : ['Uitnodiging verlopen', 'badge-warning'];
     }
-    return ['Actief', '#4caf50'];
+    return ['Actief', 'badge-success'];
 }
 
 // Knop in een eigen POST-formulier met CSRF-token
-function actionButton(string $action, int $id, string $label, string $class = 'btn-outline', ?string $confirm = null, ?string $title = null): string {
+function actionButton(string $action, int $id, string $label, string $class = 'btn-secondary', ?string $confirm = null, ?string $title = null): string {
     $onsubmit = $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '';
-    return '<form method="POST" style="display:inline;"' . $onsubmit . '>' . csrfField()
+    return '<form method="POST" class="inline"' . $onsubmit . '>' . csrfField()
         . '<input type="hidden" name="action" value="' . htmlspecialchars($action) . '">'
         . '<input type="hidden" name="id" value="' . $id . '">'
-        . '<button type="submit" class="btn btn-sm ' . $class . '"' . ($title ? ' title="' . htmlspecialchars($title) . '"' : '') . '>' . $label . '</button>'
+        . '<button type="submit" class="btn btn-sm ' . $class . '"' . ($title ? ' title="' . htmlspecialchars($title) . '" aria-label="' . htmlspecialchars($title) . '"' : '') . '>' . $label . '</button>'
         . '</form>';
 }
 
-$pageTitle = 'Gebruikersbeheer';
+$pageTitle = 'Gebruikers';
 $extraCSS = '<style>
-    .btn-sm { padding: 6px 10px; font-size: 0.8em; }
-    .actions { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; }
-    .status-badge { display: inline-block; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; white-space: nowrap; }
-    .muted { color: #999; font-size: 0.85em; }
-    .invite-form { display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 10px; align-items: end; }
-    .invite-form label { display: block; margin-bottom: 5px; font-size: 0.9em; }
-    td { vertical-align: middle; font-size: 0.9em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+    .invite-form { display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 12px; align-items: end; }
+    .invite-form .field { margin-bottom: 0; }
+    .user-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+    @media (max-width: 900px) { .invite-form { grid-template-columns: 1fr; } }
 </style>';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">👥 Gebruikersbeheer</h1>
+    <?= pageHeader('Gebruikers', '<span>Docenten en beheerders</span>') ?>
 
         <?= renderFlash() ?>
 
-        <div class="card" style="border-top: 5px solid #667eea;">
-            <div class="card-title" style="color: #667eea; font-size: 1.2em; margin-bottom: 15px;">✉️ Docent uitnodigen</div>
+        <div class="card">
+            <div class="card-title"><?= icon('mail') ?>Docent uitnodigen</div>
             <form method="POST" class="invite-form">
                 <?= csrfField() ?>
                 <input type="hidden" name="action" value="invite">
-                <div>
-                    <label>E-mailadres</label>
-                    <input type="email" name="email" placeholder="m.janssen@school.nl" required>
+                <div class="field">
+                    <label for="u-email">E-mailadres</label>
+                    <input type="email" name="email" id="u-email" placeholder="m.janssen@school.nl" required>
                 </div>
-                <div>
-                    <label>Naam (optioneel)</label>
-                    <input type="text" name="display_name" placeholder="Bijv. M. Janssen" maxlength="100">
+                <div class="field">
+                    <label for="u-name">Naam <span class="muted">(optioneel)</span></label>
+                    <input type="text" name="display_name" id="u-name" placeholder="Bijv. M. Janssen" maxlength="100">
                 </div>
-                <div>
-                    <label>Rol</label>
-                    <select name="role">
-                        <option value="user">Docent (User)</option>
-                        <option value="admin">Beheerder (Admin)</option>
+                <div class="field">
+                    <label for="u-role">Rol</label>
+                    <select name="role" id="u-role">
+                        <option value="user">Docent</option>
+                        <option value="admin">Beheerder</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-primary" style="padding: 12px 20px;">🚀 Uitnodigen</button>
+                <button type="submit" class="btn btn-primary"><?= icon('send') ?>Uitnodigen</button>
             </form>
-            <p class="muted" style="margin-top: 10px;">De docent krijgt een link (72 uur geldig) om zelf een gebruikersnaam en wachtwoord te kiezen.</p>
+            <p class="muted small" style="margin-top: 10px;">De docent krijgt een link (72 uur geldig) om zelf een gebruikersnaam en wachtwoord te kiezen.</p>
         </div>
 
         <div class="card">
-            <div class="card-title" style="margin-bottom: 10px;">🛡️ Docenten en beheerders</div>
-            <table>
+            <div class="card-title"><?= icon('users') ?>Docenten en beheerders</div>
+            <div class="table-scroll">
+            <table class="table">
                 <thead>
                     <tr>
-                        <th>Naam</th>
-                        <th>Gebruikersnaam</th>
-                        <th>E-mail</th>
-                        <th>Rol</th>
-                        <th>Status</th>
-                        <th>Laatst ingelogd</th>
-                        <th style="text-align: right;">Acties</th>
+                        <th scope="col">Naam</th>
+                        <th scope="col">Gebruikersnaam</th>
+                        <th scope="col">E-mail</th>
+                        <th scope="col">Rol</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Laatst ingelogd</th>
+                        <th scope="col" class="col-actions">Acties</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($users as $u):
                         $uid = (int)$u['id'];
-                        [$statusLabel, $statusColor] = userStatus($u);
+                        [$statusLabel, $statusClass] = userStatus($u);
                         $invited = (int)$u['is_invited'] === 1;
                         $active = (int)$u['is_active'] === 1;
                     ?>
                         <tr>
                             <td>
                                 <?= $u['display_name'] !== null && $u['display_name'] !== '' ? htmlspecialchars($u['display_name']) : '<span class="muted">—</span>' ?>
-                                <?php if ($uid === $adminId): ?><span class="muted">(jij)</span><?php endif; ?>
+                                <?php if ($uid === $adminId): ?><span class="muted small">(jij)</span><?php endif; ?>
                             </td>
                             <td><?= $u['username'] !== null ? '<strong>' . htmlspecialchars($u['username']) . '</strong>' : '<span class="muted">nog niet gekozen</span>' ?></td>
                             <td><?= $u['email'] !== null ? htmlspecialchars($u['email']) : '<span class="muted">—</span>' ?></td>
-                            <td><span class="status-badge" style="background:<?= $u['role'] === 'admin' ? '#667eea' : '#888' ?>;"><?= htmlspecialchars($u['role']) ?></span></td>
+                            <td><span class="badge<?= $u['role'] === 'admin' ? ' badge-brand' : '' ?>"><?= $u['role'] === 'admin' ? 'Beheerder' : 'Docent' ?></span></td>
                             <td>
-                                <span class="status-badge" style="background:<?= $statusColor ?>;">● <?= $statusLabel ?></span>
-                                <?php if ((int)$u['force_password_change']): ?>
-                                    <span class="status-badge" style="background:#fbc02d;">⚠️ Wijzigen verplicht</span>
-                                <?php endif; ?>
-                                <?php if ((int)$u['totp_enabled']): ?>
-                                    <span class="status-badge" style="background:#00897b;">🔐 2FA</span>
-                                <?php endif; ?>
+                                <div class="user-badges">
+                                    <span class="badge <?= $statusClass ?>"><span class="dot"></span><?= $statusLabel ?></span>
+                                    <?php if ((int)$u['force_password_change']): ?>
+                                        <span class="badge badge-warning"><?= icon('alert') ?>Wachtwoord wijzigen</span>
+                                    <?php endif; ?>
+                                    <?php if ((int)$u['totp_enabled']): ?>
+                                        <span class="badge badge-signal"><?= icon('shield-check') ?>2FA</span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
-                            <td><?= formatDateTime($u['last_login_at']) ?></td>
+                            <td class="muted nowrap"><?= formatDateTime($u['last_login_at']) ?></td>
                             <td>
                                 <div class="actions">
-                                    <a href="user_edit.php?id=<?= $uid ?>" class="btn btn-sm btn-outline">✏️ Bewerken</a>
+                                    <a href="user_edit.php?id=<?= $uid ?>" class="btn btn-sm btn-secondary"><?= icon('pencil') ?>Bewerken</a>
                                     <?php if ($invited): ?>
                                         <?php if ($active): ?>
-                                            <?= actionButton('resend_invite', $uid, '📨 Opnieuw versturen') ?>
+                                            <?= actionButton('resend_invite', $uid, icon('send') . 'Opnieuw versturen') ?>
                                         <?php endif; ?>
                                         <?= actionButton('revoke_invite', $uid, 'Intrekken', 'btn-danger', 'Uitnodiging intrekken? De gebruiker wordt verwijderd.') ?>
                                     <?php else: ?>
                                         <?php if ((int)$u['force_password_change']): ?>
-                                            <?= actionButton('unforce_pwd', $uid, 'Opheffen', 'btn-outline', null, 'Verplichte wachtwoordwijziging opheffen') ?>
+                                            <?= actionButton('unforce_pwd', $uid, 'Opheffen', 'btn-secondary', null, 'Verplichte wachtwoordwijziging opheffen') ?>
                                         <?php else: ?>
                                             <?= actionButton('force_pwd', $uid, 'Wachtwoord wijzigen verplichten') ?>
                                         <?php endif; ?>
                                         <?php if ($active && $u['email']): ?>
-                                            <?= actionButton('send_reset', $uid, 'Reset-link sturen') ?>
+                                            <?= actionButton('send_reset', $uid, icon('key') . 'Reset-link') ?>
                                         <?php elseif ($active): ?>
-                                            <span title="Geen e-mailadres bekend. Vul eerst een e-mailadres in via Bewerken."><button type="button" class="btn btn-sm btn-outline" disabled style="opacity: 0.5; pointer-events: none;">Reset-link sturen</button></span>
+                                            <button type="button" class="btn btn-sm btn-secondary" disabled title="Geen e-mailadres bekend. Vul eerst een e-mailadres in via Bewerken."><?= icon('key') ?>Reset-link</button>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                     <?php if ($active): ?>
-                                        <?= actionButton('disable_user', $uid, '🚫', 'btn-outline', null, 'Deactiveren') ?>
+                                        <?= actionButton('disable_user', $uid, icon('ban'), 'btn-secondary btn-icon', null, 'Deactiveren') ?>
                                     <?php else: ?>
-                                        <?= actionButton('enable_user', $uid, '✅', 'btn-outline', null, 'Activeren') ?>
+                                        <?= actionButton('enable_user', $uid, icon('check'), 'btn-secondary btn-icon', null, 'Activeren') ?>
                                     <?php endif; ?>
                                     <?php if (!$invited): ?>
-                                        <?= actionButton('delete_user', $uid, '🗑️', 'btn-danger', 'Permanent verwijderen?', 'Verwijderen') ?>
+                                        <?= actionButton('delete_user', $uid, icon('trash'), 'btn-danger btn-icon', 'Permanent verwijderen?', 'Verwijderen') ?>
                                     <?php endif; ?>
                                 </div>
                             </td>
@@ -319,5 +320,6 @@ include 'admin_header.php';
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
         </div>
 <?php include 'admin_footer.php'; ?>

@@ -139,108 +139,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $pageTitle = 'Gebruiker bewerken';
 $extraCSS = '<style>
-    .form-row { margin-bottom: 15px; }
-    .form-row label { display: block; margin-bottom: 5px; font-size: 0.9em; font-weight: 600; }
-    .edit-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 30px; align-items: start; }
-    .muted { color: #888; font-size: 0.85em; }
+    .edit-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--s-5); align-items: start; }
+    @media (max-width: 1100px) { .edit-grid { grid-template-columns: minmax(0, 1fr); } }
+    .back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; text-decoration: none; margin-bottom: 12px; }
+    dl.details { display: grid; grid-template-columns: 140px 1fr; gap: 6px 14px; font-size: 14px; }
+    dl.details dt { color: var(--text-muted); }
 </style>';
 include 'admin_header.php';
 ?>
-    <p style="margin-bottom: 15px;"><a href="users.php" style="color: #667eea; text-decoration: none;">← Terug naar gebruikersbeheer</a></p>
-    <h1 style="margin-bottom: 30px;">✏️ <?= htmlspecialchars($label) ?></h1>
+    <a href="users.php" class="back-link"><?= icon('arrow-left') ?>Terug naar gebruikers</a>
+    <?= pageHeader($label, '<span class="badge' . ($user['role'] === 'admin' ? ' badge-brand' : '') . '">' . ($user['role'] === 'admin' ? 'Beheerder' : 'Docent') . '</span>') ?>
 
     <?= renderFlash() ?>
     <?php if ($error): ?>
-        <div class="error-msg"><?= htmlspecialchars($error) ?></div>
+        <?= alertBox('error', htmlspecialchars($error)) ?>
     <?php endif; ?>
 
     <div class="edit-grid">
         <div class="card">
-            <div class="card-title" style="margin-bottom: 15px; font-weight: bold;">Gegevens</div>
+            <div class="card-title"><?= icon('user') ?>Gegevens</div>
             <form method="POST">
                 <?= csrfField() ?>
                 <input type="hidden" name="action" value="save">
-                <div class="form-row">
-                    <label>Naam</label>
-                    <input type="text" name="display_name" value="<?= htmlspecialchars($form['display_name']) ?>" maxlength="100">
+                <div class="field">
+                    <label for="e-name">Naam</label>
+                    <input type="text" name="display_name" id="e-name" value="<?= htmlspecialchars($form['display_name']) ?>" maxlength="100">
                 </div>
-                <div class="form-row">
-                    <label>E-mailadres</label>
-                    <input type="email" name="email" value="<?= htmlspecialchars($form['email']) ?>" <?= $isInvited ? 'required' : '' ?>>
+                <div class="field">
+                    <label for="e-email">E-mailadres</label>
+                    <input type="email" name="email" id="e-email" value="<?= htmlspecialchars($form['email']) ?>" <?= $isInvited ? 'required' : '' ?>>
                 </div>
-                <div class="form-row">
-                    <label>Gebruikersnaam</label>
-                    <input type="text" name="username" value="<?= htmlspecialchars($form['username']) ?>" <?= $isInvited ? 'placeholder="Kiest de gebruiker zelf bij het activeren"' : 'required' ?>>
+                <div class="field">
+                    <label for="e-user">Gebruikersnaam</label>
+                    <input type="text" name="username" id="e-user" value="<?= htmlspecialchars($form['username']) ?>" <?= $isInvited ? 'placeholder="Kiest de gebruiker zelf bij het activeren"' : 'required' ?>>
                 </div>
-                <div class="form-row">
-                    <label>Rol</label>
-                    <select name="role" <?= $isSelf ? 'disabled' : '' ?>>
-                        <option value="user" <?= $form['role'] === 'user' ? 'selected' : '' ?>>Docent (User)</option>
-                        <option value="admin" <?= $form['role'] === 'admin' ? 'selected' : '' ?>>Beheerder (Admin)</option>
+                <div class="field">
+                    <label for="e-role">Rol</label>
+                    <select name="role" id="e-role" <?= $isSelf ? 'disabled' : '' ?>>
+                        <option value="user" <?= $form['role'] === 'user' ? 'selected' : '' ?>>Docent</option>
+                        <option value="admin" <?= $form['role'] === 'admin' ? 'selected' : '' ?>>Beheerder</option>
                     </select>
                     <?php if ($isSelf): ?>
                         <input type="hidden" name="role" value="<?= htmlspecialchars($user['role']) ?>">
-                        <div class="muted" style="margin-top: 5px;">Je kunt je eigen rol niet wijzigen.</div>
+                        <div class="hint">Je kunt je eigen rol niet wijzigen.</div>
                     <?php endif; ?>
                 </div>
-                <button type="submit" class="btn btn-primary">Opslaan</button>
+                <button type="submit" class="btn btn-primary"><?= icon('save') ?>Opslaan</button>
             </form>
         </div>
 
         <div>
             <?php if ($isInvited): ?>
                 <div class="card">
-                    <div class="card-title" style="margin-bottom: 10px; font-weight: bold;">Uitnodiging</div>
-                    <p class="muted">Deze gebruiker heeft de uitnodiging nog niet geaccepteerd. Opnieuw versturen of intrekken doe je in het <a href="users.php">overzicht</a>.</p>
+                    <div class="card-title"><?= icon('mail') ?>Uitnodiging</div>
+                    <p class="muted text-sm">Deze gebruiker heeft de uitnodiging nog niet geaccepteerd. Opnieuw versturen of intrekken doe je in het <a href="users.php">overzicht</a>.</p>
                 </div>
             <?php elseif ($isSelf): ?>
                 <div class="card">
-                    <div class="card-title" style="margin-bottom: 10px; font-weight: bold;">Je eigen account</div>
-                    <p class="muted">Je wachtwoord en 2FA beheer je via je <a href="profile.php">profiel</a>.</p>
+                    <div class="card-title"><?= icon('user') ?>Je eigen account</div>
+                    <p class="muted text-sm">Je wachtwoord en 2FA beheer je via je <a href="profile.php">profiel</a>.</p>
                 </div>
             <?php else: ?>
                 <div class="card">
-                    <div class="card-title" style="margin-bottom: 15px; font-weight: bold;">🔑 Wachtwoord instellen</div>
+                    <div class="card-title"><?= icon('key') ?>Wachtwoord instellen</div>
                     <form method="POST">
                         <?= csrfField() ?>
                         <input type="hidden" name="action" value="set_password">
-                        <div class="form-row">
-                            <label>Nieuw wachtwoord (minimaal <?= PASSWORD_MIN_LENGTH ?> tekens)</label>
-                            <input type="password" name="new_password" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
+                        <div class="field">
+                            <label for="e-pw">Nieuw wachtwoord</label>
+                            <input type="password" name="new_password" id="e-pw" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
+                            <div class="hint">Minimaal <?= PASSWORD_MIN_LENGTH ?> tekens.</div>
                         </div>
-                        <div class="form-row">
-                            <label>Bevestig wachtwoord</label>
-                            <input type="password" name="confirm_password" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
+                        <div class="field">
+                            <label for="e-pw2">Bevestig wachtwoord</label>
+                            <input type="password" name="confirm_password" id="e-pw2" minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password" required>
                         </div>
-                        <div class="form-row">
-                            <label style="font-weight: normal; display: flex; align-items: center; gap: 8px;">
-                                <input type="checkbox" name="force_change" value="1" checked style="width: auto;">
-                                Wijzigen verplicht bij volgende login
-                            </label>
-                        </div>
+                        <label class="check field">
+                            <input type="checkbox" name="force_change" value="1" checked> Wijzigen verplicht bij volgende login
+                        </label>
                         <button type="submit" class="btn btn-primary">Wachtwoord instellen</button>
-                        <p class="muted" style="margin-top: 10px;">Open sessies van deze gebruiker worden uitgelogd.</p>
+                        <p class="muted small" style="margin-top: 10px;">Open sessies van deze gebruiker worden uitgelogd.</p>
                     </form>
                 </div>
 
                 <div class="card">
-                    <div class="card-title" style="margin-bottom: 10px; font-weight: bold;">🔐 Tweestapsverificatie</div>
+                    <div class="card-title"><?= icon('shield') ?>Tweestapsverificatie</div>
                     <?php if ((int)$user['totp_enabled']): ?>
-                        <p class="muted" style="margin-bottom: 15px;">2FA staat aan. Resetten wist het secret en de herstelcodes; de gebruiker wordt uitgelogd en kan daarna inloggen zonder code.</p>
+                        <p style="margin-bottom: 10px;"><span class="badge badge-signal"><?= icon('shield-check') ?>2FA staat aan</span></p>
+                        <p class="muted text-sm" style="margin-bottom: 15px;">Resetten wist het secret en de herstelcodes; de gebruiker wordt uitgelogd en kan daarna inloggen zonder code.</p>
                         <form method="POST" onsubmit="return confirm('2FA van deze gebruiker resetten?');">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="reset_2fa">
-                            <button type="submit" class="btn btn-danger">2FA resetten</button>
+                            <button type="submit" class="btn btn-danger"><?= icon('rotate-ccw') ?>2FA resetten</button>
                         </form>
                     <?php else: ?>
-                        <p class="muted">2FA staat uit. De gebruiker kan het zelf aanzetten in het eigen profiel.</p>
+                        <p class="muted text-sm">2FA staat uit. De gebruiker kan het zelf aanzetten in het eigen profiel.</p>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
 
             <div class="card">
-                <div class="card-title" style="margin-bottom: 10px; font-weight: bold;">Overig</div>
-                <p class="muted">Aangemaakt: <?= formatDateTime($user['created_at']) ?><br>Laatst ingelogd: <?= formatDateTime($user['last_login_at']) ?></p>
+                <div class="card-title"><?= icon('info') ?>Overig</div>
+                <dl class="details">
+                    <dt>Aangemaakt</dt><dd><?= formatDateTime($user['created_at']) ?></dd>
+                    <dt>Laatst ingelogd</dt><dd><?= formatDateTime($user['last_login_at']) ?></dd>
+                </dl>
             </div>
         </div>
     </div>

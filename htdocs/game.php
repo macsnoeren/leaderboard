@@ -142,156 +142,161 @@ $actions = allowedGameActions($game);
 $teamCount = count(rankedTeams($db, $gameId));
 
 $statusForms = [
-    'start' => ['🚀 Start', 'btn-primary', 'Bericht bij de start (optioneel)', 'Het spel starten? Alle ' . $teamCount . ' teams gaan tegelijk naar level 1.'],
-    'pause' => ['⏸️ Pauze', 'btn-outline', 'Bijv. "We hebben pauze tot 11:00"', null],
-    'resume' => ['▶️ Hervat', 'btn-primary', 'Bericht (optioneel)', null],
-    'finish' => ['🏁 Beëindig', 'btn-danger', 'Bijv. "Kom naar lokaal X"', 'Het spel beëindigen? Teams kunnen daarna geen berichten meer sturen.'],
+    'start' => ['play', 'Start', 'btn-primary', 'Bericht bij de start (optioneel)', 'Het spel starten? Alle ' . $teamCount . ' teams gaan tegelijk naar level 1.'],
+    'pause' => ['pause', 'Pauze', 'btn-secondary', 'Bijv. "We hebben pauze tot 11:00"', null],
+    'resume' => ['play', 'Hervat', 'btn-primary', 'Bericht (optioneel)', null],
+    'finish' => ['flag', 'Beëindig', 'btn-danger', 'Bijv. "Kom naar lokaal X"', 'Het spel beëindigen? Teams kunnen daarna geen berichten meer sturen.'],
 ];
 
-$pageTitle = 'Spel';
+$pageTitle = 'Spelinstellingen';
 $extraCSS = '<style>
-    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start; }
-    @media (max-width: 1100px) { .settings-grid { grid-template-columns: 1fr; } }
-    .form-row { margin-bottom: 15px; }
-    .form-row label { display: block; margin-bottom: 5px; font-size: 0.9em; }
-    .muted { color: #999; font-size: 0.85em; }
-    .status-form { display: flex; gap: 10px; margin-top: 12px; }
+    .status-form { display: flex; gap: 8px; margin-top: 12px; }
     .status-form input { flex: 1; }
-    .join-code { font-family: monospace; font-size: 2em; letter-spacing: 6px; font-weight: bold; color: #333; }
-    #qrcode { margin: 15px 0; }
-    #qrcode img, #qrcode canvas { border: 8px solid white; }
-    .danger-zone { border: 2px solid #ffcdd2; }
-    .logo-preview { max-width: 200px; max-height: 120px; object-fit: contain; display: block; margin-bottom: 10px; }
+    .status-form .btn { min-width: 130px; }
+    .join-code { font-family: var(--font-mono); font-size: 32px; letter-spacing: .14em; font-weight: 800; line-height: 1.1; }
+    .join-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: start; margin-top: 16px; }
+    .join-url { overflow-wrap: anywhere; font-size: 13px; }
+    .logo-preview { max-width: 200px; max-height: 120px; object-fit: contain; display: block; margin-bottom: 10px; border-radius: var(--radius-sm); background: #FFFFFF; padding: 6px; border: 1px solid var(--line); }
+    .state-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 600px) { .status-form { flex-direction: column; } .join-grid { grid-template-columns: 1fr; } }
 </style>';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">⚙️ <?= htmlspecialchars($game['name']) ?> <?= gameStatusBadge($status) ?></h1>
+    <?= pageHeader('Spelinstellingen', gameSubtitle($game),
+        '<a href="beamer.php" target="_beamer" class="btn btn-secondary">' . icon('monitor') . 'Beamer' . icon('external') . '</a>') ?>
 
     <?= renderFlash() ?>
 
-    <div class="settings-grid">
+    <div class="grid-halves">
         <div>
             <div class="card">
-                <div class="card-title" style="font-size: 1.2em; margin-bottom: 10px;">🎬 Status</div>
-                <p>Het spel is <strong><?= htmlspecialchars(gameStatusLabel($status)) ?></strong>.
-                    <?php if ($status === 'finished' && $game['status'] !== 'finished'): ?>De eindtijd is verstreken; zet een latere eindtijd om door te gaan.<?php endif; ?>
+                <div class="card-title"><?= icon('play') ?>Status</div>
+                <p class="state-line">Het spel is <?= gameStatusBadge($status) ?>
+                    <?php if ($status === 'finished' && $game['status'] !== 'finished'): ?><span class="muted text-sm">De eindtijd is verstreken; zet een latere eindtijd om door te gaan.</span><?php endif; ?>
                 </p>
                 <?php if ($game['status_message']): ?>
-                    <p class="muted" style="margin-top: 5px;">Statustekst voor de teams: “<?= htmlspecialchars($game['status_message']) ?>”</p>
+                    <p class="muted text-sm" style="margin-top: 6px;">Statustekst voor de teams: “<?= htmlspecialchars($game['status_message']) ?>”</p>
                 <?php endif; ?>
                 <?php if ($status === 'draft' && $game['ends_at'] && $game['seconds_left'] !== null && (int)$game['seconds_left'] === 0): ?>
-                    <p class="error-msg" style="margin: 10px 0 0;">Let op: de eindtijd ligt in het verleden. Na de start is het spel meteen afgelopen.</p>
+                    <div style="margin-top: 12px;"><?= alertBox('warning', 'Let op: de eindtijd ligt in het verleden. Na de start is het spel meteen afgelopen.') ?></div>
                 <?php endif; ?>
-                <?php foreach ($actions as $act): [$label, $class, $placeholder, $confirm] = $statusForms[$act]; ?>
+                <?php foreach ($actions as $act): [$iconName, $label, $class, $placeholder, $confirm] = $statusForms[$act]; ?>
                     <form method="POST" class="status-form"<?= $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '' ?>>
                         <?= csrfField() ?>
                         <input type="hidden" name="action" value="<?= $act ?>">
-                        <input type="text" name="status_message" maxlength="500" placeholder="<?= htmlspecialchars($placeholder) ?>">
-                        <button type="submit" class="btn <?= $class ?>" style="white-space: nowrap; min-width: 120px;"><?= $label ?></button>
+                        <input type="text" name="status_message" maxlength="500" placeholder="<?= htmlspecialchars($placeholder) ?>" aria-label="Bericht bij <?= htmlspecialchars(strtolower($label)) ?>">
+                        <button type="submit" class="btn <?= $class ?>"><?= icon($iconName) ?><?= $label ?></button>
                     </form>
                 <?php endforeach; ?>
-                <p class="muted" style="margin-top: 12px;">Pauze toont de tekst als banner bij de teams; ze kunnen doorwerken. Beëindigen sluit de chat en toont het eindscherm.</p>
+                <p class="muted small" style="margin-top: 12px;">Pauze toont de tekst als banner bij de teams; ze kunnen doorwerken. Beëindigen sluit de chat en toont het eindscherm.</p>
             </div>
 
             <div class="card">
-                <div class="card-title" style="font-size: 1.2em; margin-bottom: 15px;">🛠️ Instellingen</div>
+                <div class="card-title"><?= icon('sliders') ?>Algemeen</div>
                 <form method="POST" enctype="multipart/form-data">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="update_settings">
-                    <div class="form-row">
-                        <label>Naam</label>
-                        <input type="text" name="name" value="<?= htmlspecialchars($game['name']) ?>" maxlength="100" required>
+                    <div class="field">
+                        <label for="g-name">Naam</label>
+                        <input type="text" name="name" id="g-name" value="<?= htmlspecialchars($game['name']) ?>" maxlength="100" required>
                     </div>
-                    <div class="form-row">
-                        <label>Eindtijd (leeg = geen eindtijd)</label>
-                        <input type="datetime-local" name="ends_at" value="<?= htmlspecialchars(utcToLocalInput($game['ends_at'])) ?>">
-                        <?php if ($game['ends_at']): ?><div class="muted" style="margin-top: 4px;">Nu: <?= formatDateTime($game['ends_at']) ?></div><?php endif; ?>
+                    <div class="field">
+                        <label for="g-ends">Eindtijd</label>
+                        <input type="datetime-local" name="ends_at" id="g-ends" value="<?= htmlspecialchars(utcToLocalInput($game['ends_at'])) ?>">
+                        <div class="hint">Leeg = geen eindtijd.<?= $game['ends_at'] ? ' Nu: ' . formatDateTime($game['ends_at']) . '.' : '' ?></div>
                     </div>
-                    <div class="form-row">
-                        <label>Logo (PNG, JPG of WebP, max. 5 MB)</label>
+                    <div class="field">
+                        <label for="g-logo">Logo</label>
                         <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="Huidig logo" class="logo-preview"><?php endif; ?>
-                        <input type="file" name="logo" accept="image/png,image/jpeg,image/webp">
+                        <input type="file" name="logo" id="g-logo" accept="image/png,image/jpeg,image/webp">
+                        <div class="hint">PNG, JPG of WebP, max. 5 MB. Komt terug op het leaderboard, de beamer en het teamdashboard.</div>
                     </div>
-                    <button type="submit" class="btn btn-primary">Opslaan</button>
+                    <button type="submit" class="btn btn-primary"><?= icon('save') ?>Opslaan</button>
                 </form>
             </div>
         </div>
 
         <div>
             <div class="card">
-                <div class="card-title" style="font-size: 1.2em; margin-bottom: 15px;">🤖 AI</div>
+                <div class="card-title"><?= icon('bot') ?>AI</div>
                 <form method="POST">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="update_ai">
-                    <div class="form-row">
-                        <label>Standaardmodus voor nieuwe teams</label>
-                        <select name="ai_mode">
+                    <div class="field">
+                        <label for="g-ai">Standaardmodus voor nieuwe teams</label>
+                        <select name="ai_mode" id="g-ai">
                             <?php foreach (AI_MODES as $mode): ?>
                                 <option value="<?= $mode ?>" <?= ($game['ai_mode'] ?: 'suggest') === $mode ? 'selected' : '' ?>><?= htmlspecialchars(aiModeLabel($mode) . ' – ' . AI_MODE_DESCRIPTIONS[$mode]) ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="muted" style="margin-top: 4px;">Bestaande teams houden hun eigen modus; die zet je op het <a href="teacher.php" style="color: #667eea;">dashboard</a> (per team of voor alle teams).</div>
+                        <div class="hint">Bestaande teams houden hun eigen modus; die zet je op het <a href="teacher.php">dashboard</a> (per team of voor alle teams).</div>
                     </div>
-                    <div class="form-row" style="display: flex; gap: 15px;">
-                        <div style="flex: 1;">
-                            <label>Max. antwoorden per 10 min</label>
-                            <input type="number" name="ai_max_attempts" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_attempts'] ?? 5) ?>" required>
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="g-att">Max. antwoorden per 10 min</label>
+                            <input type="number" name="ai_max_attempts" id="g-att" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_attempts'] ?? 5) ?>" required>
                         </div>
-                        <div style="flex: 1;">
-                            <label>Max. vragen per 10 min</label>
-                            <input type="number" name="ai_max_questions" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_questions'] ?? 5) ?>" required>
+                        <div class="field">
+                            <label for="g-q">Max. vragen per 10 min</label>
+                            <input type="number" name="ai_max_questions" id="g-q" min="<?= AI_LIMIT_MIN ?>" max="<?= AI_LIMIT_MAX ?>" value="<?= (int)($game['ai_max_questions'] ?? 5) ?>" required>
                         </div>
                     </div>
-                    <p class="muted" style="margin-bottom: 15px;">Per team per level. Daarboven beoordeelt de AI niet zelf meer, maar vraagt ze een docent (🙋).</p>
-                    <button type="submit" class="btn btn-primary">Opslaan</button>
+                    <p class="muted small" style="margin: -6px 0 16px;">Per team per level. Daarboven beoordeelt de AI niet zelf meer, maar vraagt ze een docent.</p>
+                    <button type="submit" class="btn btn-primary"><?= icon('save') ?>Opslaan</button>
                 </form>
             </div>
 
             <div class="card">
-                <div class="card-title" style="font-size: 1.2em; margin-bottom: 10px;">📱 Zelf aanmelden</div>
-                <p>Registratie is <strong style="color: <?= (int)$game['registration_open'] ? '#2e7d32' : '#c62828' ?>;"><?= (int)$game['registration_open'] ? 'open' : 'dicht' ?></strong>.</p>
-                <form method="POST" style="margin: 10px 0 20px;">
+                <div class="card-header">
+                    <div class="card-title"><?= icon('phone') ?>Zelf aanmelden</div>
+                    <?= (int)$game['registration_open'] ? '<span class="badge badge-success">' . icon('unlock') . 'open</span>' : '<span class="badge">' . icon('lock') . 'gesloten</span>' ?>
+                </div>
+                <form method="POST">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="toggle_registration">
-                    <button type="submit" class="btn <?= (int)$game['registration_open'] ? 'btn-outline' : 'btn-primary' ?>"><?= (int)$game['registration_open'] ? '🔒 Registratie sluiten' : '🔓 Registratie openen' ?></button>
+                    <button type="submit" class="btn <?= (int)$game['registration_open'] ? 'btn-secondary' : 'btn-primary' ?>"><?= (int)$game['registration_open'] ? icon('lock') . 'Registratie sluiten' : icon('unlock') . 'Registratie openen' ?></button>
                 </form>
-                <div class="muted">Spelcode</div>
-                <div class="join-code"><?= htmlspecialchars((string)$game['join_code']) ?></div>
-                <div id="qrcode"></div>
-                <p style="word-break: break-all;"><a href="<?= htmlspecialchars($joinUrl) ?>" target="_blank" style="color: #667eea;"><?= htmlspecialchars($joinUrl) ?></a></p>
-                <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
-                    <a href="beamer.php" target="_blank" class="btn btn-primary">📺 Beamerweergave</a>
-                    <form method="POST" style="margin: 0;" onsubmit="return confirm('Nieuwe spelcode maken? De oude code en QR-code werken dan niet meer.');">
-                        <?= csrfField() ?>
-                        <input type="hidden" name="action" value="new_code">
-                        <button type="submit" class="btn btn-outline">🔄 Nieuwe code</button>
-                    </form>
-                </div>
-                <?php if ($status === 'finished'): ?><p class="muted" style="margin-top: 10px;">Het spel is afgelopen: aanmelden kan niet meer.</p><?php endif; ?>
-            </div>
-
-            <div class="card danger-zone">
-                <div class="card-title" style="font-size: 1.2em; margin-bottom: 10px; color: #c62828;">🧹 Alles leegmaken</div>
-                <p class="muted" style="margin-bottom: 15px;">Verwijdert alle <?= $teamCount ?> teams met hun chats, downloads en de mededelingen, en zet het spel terug op concept. Het archief, de opdrachten en de instellingen blijven.</p>
-                <form method="POST" onsubmit="return confirm('Weet je het zeker? Dit kan niet ongedaan worden gemaakt.');">
-                    <?= csrfField() ?>
-                    <input type="hidden" name="action" value="reset">
-                    <div class="form-row">
-                        <label>Typ de naam van het spel ter bevestiging: <strong><?= htmlspecialchars($game['name']) ?></strong></label>
-                        <input type="text" name="confirm_name" autocomplete="off" required>
+                <div class="join-grid">
+                    <div>
+                        <div class="section-label" style="margin-top: 0;">Spelcode</div>
+                        <div class="join-code"><?= htmlspecialchars((string)$game['join_code']) ?></div>
+                        <p class="join-url" style="margin-top: 10px;"><a href="<?= htmlspecialchars($joinUrl) ?>" target="_blank"><?= htmlspecialchars($joinUrl) ?></a></p>
+                        <div class="btn-row" style="margin-top: 14px;">
+                            <button type="button" class="btn btn-secondary btn-sm" data-copy="<?= htmlspecialchars($joinUrl) ?>"><?= icon('copy') ?><span class="copy-label">Link kopiëren</span></button>
+                            <form method="POST" class="inline" onsubmit="return confirm('Nieuwe spelcode maken? De oude code en QR-code werken dan niet meer.');">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="action" value="new_code">
+                                <button type="submit" class="btn btn-secondary btn-sm"><?= icon('refresh') ?>Nieuwe code</button>
+                            </form>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-danger">Alles leegmaken</button>
-                </form>
+                    <div class="qr-card" id="qrcode" role="img" aria-label="QR-code naar de aanmeldpagina"></div>
+                </div>
+                <?php if ($status === 'finished'): ?><p class="muted small" style="margin-top: 12px;">Het spel is afgelopen: aanmelden kan niet meer.</p><?php endif; ?>
             </div>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <div class="card card-danger">
+        <div class="card-title"><?= icon('alert') ?>Gevarenzone: alles leegmaken</div>
+        <p class="text-sm" style="margin-bottom: 16px;">Verwijdert alle <?= $teamCount ?> teams met hun chats, downloads en de mededelingen, en zet het spel terug op concept. Het archief, de opdrachten en de instellingen blijven. Dit kan niet ongedaan worden gemaakt.</p>
+        <form method="POST" class="btn-row" style="align-items: flex-end;" onsubmit="return confirm('Weet je het zeker? Dit kan niet ongedaan worden gemaakt.');">
+            <?= csrfField() ?>
+            <input type="hidden" name="action" value="reset">
+            <div class="field" style="margin: 0; flex: 1; min-width: 240px; max-width: 420px;">
+                <label for="g-confirm">Typ ter bevestiging de naam van het spel: <strong><?= htmlspecialchars($game['name']) ?></strong></label>
+                <input type="text" name="confirm_name" id="g-confirm" autocomplete="off" required>
+            </div>
+            <button type="submit" class="btn btn-danger-solid"><?= icon('trash') ?>Alles leegmaken</button>
+        </form>
+    </div>
+
+    <script src="<?= QRCODE_SRC ?>"></script>
     <script>
         new QRCode(document.getElementById('qrcode'), {
             text: <?= json_encode($joinUrl) ?>,
-            width: 180,
-            height: 180,
+            width: 150,
+            height: 150,
             correctLevel: QRCode.CorrectLevel.M
         });
     </script>

@@ -17,12 +17,6 @@ const GAME_STATUS_LABELS = [
     'paused' => 'pauze',
     'finished' => 'afgelopen',
 ];
-const GAME_STATUS_COLORS = [
-    'draft' => '#888',
-    'running' => '#4caf50',
-    'paused' => '#ff9800',
-    'finished' => '#667eea',
-];
 // Geen tekens die op elkaar lijken: 0/O, 1/I/L
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_LENGTH = 6;
@@ -120,10 +114,20 @@ function gameStatusLabel(string $status): string {
     return GAME_STATUS_LABELS[$status] ?? $status;
 }
 
+/**
+ * Status als badge (.badge-draft/-running/-paused/-finished); altijd met tekst, niet alleen kleur.
+ */
 function gameStatusBadge(string $status): string {
-    $color = GAME_STATUS_COLORS[$status] ?? '#888';
-    return '<span class="status-badge" style="display:inline-block; color:white; padding:2px 8px; border-radius:10px; font-size:0.75em; background:' . $color . ';">'
+    $class = isset(GAME_STATUS_LABELS[$status]) ? $status : 'draft';
+    return '<span class="badge badge-' . $class . '">' . ($class === 'running' ? '<span class="dot"></span>' : '')
         . htmlspecialchars(gameStatusLabel($status)) . '</span>';
+}
+
+/**
+ * Subtitel voor pageHeader(): spelnaam met status-badge.
+ */
+function gameSubtitle(array $game): string {
+    return '<span>' . htmlspecialchars($game['name']) . '</span>' . gameStatusBadge($game['effective_status']);
 }
 
 /**

@@ -23,6 +23,8 @@ services:
       FROM_EMAIL: ${FROM_EMAIL:-}
       FROM_NAME: ${FROM_NAME:-Assignment System}
       REQUIRE_2FA_ADMIN: ${REQUIRE_2FA_ADMIN:-false}
+      # Link onder "Tools" in de admin-zijbalk; leeg = niet tonen
+      DARKNET_CHAT_URL: ${DARKNET_CHAT_URL:-}
       # Maakt de API key 'docker-agent' aan voor de agent-container
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
     volumes:

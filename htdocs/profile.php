@@ -155,141 +155,138 @@ $twoFactorRequired = needsTwoFactorSetup($user);
 $pageTitle = 'Profiel';
 $loadMarked = false;
 $extraCSS = '<style>
-    .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start; }
-    .form-row { margin-bottom: 15px; }
-    .form-row label { display: block; margin-bottom: 5px; font-size: 0.9em; font-weight: 600; }
-    .card-title { font-weight: bold; font-size: 1.1em; margin-bottom: 15px; }
-    .muted { color: #888; font-size: 0.85em; line-height: 1.5; }
-    dl.details { display: grid; grid-template-columns: 140px 1fr; gap: 8px 15px; }
-    dl.details dt { color: #888; }
-    .secret { font-family: monospace; font-size: 1.05em; letter-spacing: 1px; word-break: break-all; background: #f5f5f5; padding: 8px 10px; border-radius: 6px; }
-    .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-family: monospace; font-size: 1.1em; margin: 15px 0; }
-    .codes span { background: #f5f5f5; padding: 6px 10px; border-radius: 6px; text-align: center; }
-    #qrcode { margin: 15px 0; }
-    #qrcode img, #qrcode canvas { border: 8px solid white; }
+    dl.details { display: grid; grid-template-columns: 140px 1fr; gap: 8px 15px; font-size: 14px; margin-bottom: 20px; }
+    dl.details dt { color: var(--text-muted); }
+    .secret { font-family: var(--font-mono); font-size: 15px; letter-spacing: .08em; word-break: break-all; background: var(--surface-2); border: 1px solid var(--line); padding: 8px 10px; border-radius: var(--radius-sm); margin: 8px 0 20px; }
+    .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-family: var(--font-mono); font-size: 16px; margin: 15px 0; }
+    .codes span { background: var(--surface-2); border: 1px solid var(--line); padding: 6px 10px; border-radius: var(--radius-sm); text-align: center; }
+    .qr-card { margin: 12px 0; }
+    .steps { color: var(--text-muted); font-size: 14px; }
 </style>';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">👤 Profiel</h1>
+    <?= pageHeader('Profiel', '<span>' . htmlspecialchars($user['username']) . '</span>') ?>
 
     <?= renderFlash() ?>
     <?php if ($error): ?>
-        <div class="error-msg"><?= htmlspecialchars($error) ?></div>
+        <?= alertBox('error', htmlspecialchars($error)) ?>
     <?php endif; ?>
     <?php if ($twoFactorRequired): ?>
-        <div class="error-msg"><strong>2FA verplicht:</strong> als beheerder moet je tweestapsverificatie instellen voordat je verder kunt.</div>
+        <?= alertBox('warning', '<strong>2FA verplicht:</strong> als beheerder moet je tweestapsverificatie instellen voordat je verder kunt.') ?>
     <?php endif; ?>
 
     <?php if ($recoveryCodes): ?>
-        <div class="card" style="border-top: 5px solid #fbc02d;">
-            <div class="card-title">🧾 Je herstelcodes</div>
-            <p class="muted">Gebruik een herstelcode als je je authenticator-app kwijt bent. Elke code werkt één keer. Bewaar ze nu op een veilige plek: <strong>ze worden niet nog een keer getoond.</strong></p>
+        <div class="card" style="border-color: var(--warning);">
+            <div class="card-title"><?= icon('key') ?>Je herstelcodes</div>
+            <p class="muted text-sm">Gebruik een herstelcode als je je authenticator-app kwijt bent. Elke code werkt één keer. Bewaar ze nu op een veilige plek: <strong>ze worden niet nog een keer getoond.</strong></p>
             <div class="codes" id="recovery-codes">
                 <?php foreach ($recoveryCodes as $code): ?>
                     <span><?= htmlspecialchars($code) ?></span>
                 <?php endforeach; ?>
             </div>
-            <button type="button" class="btn btn-outline" onclick="navigator.clipboard.writeText(<?= htmlspecialchars(json_encode(implode("\n", $recoveryCodes))) ?>); this.innerText='Gekopieerd';">Kopiëren</button>
+            <button type="button" class="btn btn-secondary" data-copy="<?= htmlspecialchars(implode("\n", $recoveryCodes)) ?>"><?= icon('copy') ?><span class="copy-label">Kopiëren</span></button>
         </div>
     <?php endif; ?>
 
-    <div class="profile-grid">
+    <div class="grid-halves">
         <div>
             <div class="card">
-                <div class="card-title">Mijn gegevens</div>
-                <dl class="details" style="margin-bottom: 20px;">
+                <div class="card-title"><?= icon('user') ?>Mijn gegevens</div>
+                <dl class="details">
                     <dt>Gebruikersnaam</dt><dd><?= htmlspecialchars($user['username']) ?></dd>
                     <dt>E-mailadres</dt><dd><?= $user['email'] ? htmlspecialchars($user['email']) : '<span class="muted">nog niet ingesteld</span>' ?></dd>
-                    <dt>Rol</dt><dd><?= $user['role'] === 'admin' ? 'Beheerder (admin)' : 'Docent (user)' ?></dd>
+                    <dt>Rol</dt><dd><?= $user['role'] === 'admin' ? 'Beheerder' : 'Docent' ?></dd>
                     <dt>Laatst ingelogd</dt><dd><?= formatDateTime($user['last_login_at']) ?></dd>
                 </dl>
                 <form method="POST">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="update_name">
-                    <div class="form-row">
-                        <label>Naam</label>
-                        <input type="text" name="display_name" value="<?= htmlspecialchars($user['display_name'] ?? '') ?>" maxlength="100">
+                    <div class="field">
+                        <label for="p-name">Naam</label>
+                        <input type="text" name="display_name" id="p-name" value="<?= htmlspecialchars($user['display_name'] ?? '') ?>" maxlength="100">
                     </div>
-                    <button type="submit" class="btn btn-primary">Naam opslaan</button>
+                    <button type="submit" class="btn btn-primary"><?= icon('save') ?>Naam opslaan</button>
                 </form>
             </div>
 
             <div class="card">
-                <div class="card-title">✉️ E-mailadres wijzigen</div>
+                <div class="card-title"><?= icon('mail') ?>E-mailadres wijzigen</div>
                 <?php if ($pendingEmail): ?>
-                    <p class="muted" style="margin-bottom: 15px;">Er wacht een bevestiging voor <strong><?= htmlspecialchars($pendingEmail) ?></strong>. Klik op de link in die mail om de wijziging af te ronden.</p>
+                    <?= alertBox('info', 'Er wacht een bevestiging voor <strong>' . htmlspecialchars($pendingEmail) . '</strong>. Klik op de link in die mail om de wijziging af te ronden.') ?>
                 <?php endif; ?>
                 <form method="POST">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="change_email">
-                    <div class="form-row">
-                        <label>Nieuw e-mailadres</label>
-                        <input type="email" name="new_email" autocomplete="email" required>
+                    <div class="field">
+                        <label for="p-email">Nieuw e-mailadres</label>
+                        <input type="email" name="new_email" id="p-email" autocomplete="email" required>
                     </div>
-                    <div class="form-row">
-                        <label>Huidig wachtwoord</label>
-                        <input type="password" name="current_password" autocomplete="current-password" required>
+                    <div class="field">
+                        <label for="p-cur">Huidig wachtwoord</label>
+                        <input type="password" name="current_password" id="p-cur" autocomplete="current-password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Bevestigingslink sturen</button>
-                    <p class="muted" style="margin-top: 10px;">Je adres verandert pas na een klik op de link in de mail naar het nieuwe adres. Je oude adres krijgt daarna een melding.</p>
+                    <button type="submit" class="btn btn-primary"><?= icon('send') ?>Bevestigingslink sturen</button>
+                    <p class="muted small" style="margin-top: 10px;">Je adres verandert pas na een klik op de link in de mail naar het nieuwe adres. Je oude adres krijgt daarna een melding.</p>
                 </form>
             </div>
 
             <div class="card">
-                <div class="card-title">🔑 Wachtwoord</div>
-                <a href="password.php" class="btn btn-outline">Wachtwoord wijzigen</a>
+                <div class="card-title"><?= icon('key') ?>Wachtwoord</div>
+                <a href="password.php" class="btn btn-secondary">Wachtwoord wijzigen</a>
             </div>
         </div>
 
         <div>
             <div class="card">
-                <div class="card-title">🔐 Tweestapsverificatie (2FA)</div>
+                <div class="card-title"><?= icon('shield') ?>Tweestapsverificatie (2FA)</div>
                 <?php if ((int)$user['totp_enabled']): ?>
-                    <p style="margin-bottom: 10px;"><span class="badge" style="background:#00897b; margin-left: 0;">Aan</span></p>
-                    <p class="muted" style="margin-bottom: 20px;">Bij het inloggen vragen we een code uit je authenticator-app. Je hebt nog <strong><?= countRecoveryCodes($db, $userId) ?></strong> ongebruikte herstelcodes.</p>
+                    <p style="margin-bottom: 10px;"><span class="badge badge-signal"><?= icon('shield-check') ?>Aan</span></p>
+                    <p class="muted text-sm" style="margin-bottom: 20px;">Bij het inloggen vragen we een code uit je authenticator-app. Je hebt nog <strong><?= countRecoveryCodes($db, $userId) ?></strong> ongebruikte herstelcodes.</p>
 
-                    <form method="POST" style="margin-bottom: 25px;">
+                    <form method="POST" style="margin-bottom: 24px;">
                         <?= csrfField() ?>
                         <input type="hidden" name="action" value="2fa_regenerate">
-                        <div class="form-row">
-                            <label>Nieuwe herstelcodes (code uit je app)</label>
-                            <input type="text" name="code" autocomplete="one-time-code" maxlength="10" placeholder="123456" required>
+                        <div class="field">
+                            <label for="p-regen">Nieuwe herstelcodes (code uit je app)</label>
+                            <input type="text" name="code" id="p-regen" class="input-mono" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" required>
                         </div>
-                        <button type="submit" class="btn btn-outline">Nieuwe herstelcodes</button>
+                        <button type="submit" class="btn btn-secondary">Nieuwe herstelcodes</button>
                     </form>
 
                     <?php if (!(defined('REQUIRE_2FA_ADMIN') && REQUIRE_2FA_ADMIN && $user['role'] === 'admin')): ?>
                         <form method="POST" onsubmit="return confirm('2FA uitschakelen?');">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="2fa_disable">
-                            <div class="form-row">
-                                <label>Huidig wachtwoord</label>
-                                <input type="password" name="current_password" autocomplete="current-password" required>
+                            <div class="field">
+                                <label for="p-dis-pw">Huidig wachtwoord</label>
+                                <input type="password" name="current_password" id="p-dis-pw" autocomplete="current-password" required>
                             </div>
-                            <div class="form-row">
-                                <label>Code uit je app of een herstelcode</label>
-                                <input type="text" name="code" autocomplete="one-time-code" maxlength="20" required>
+                            <div class="field">
+                                <label for="p-dis-code">Code uit je app of een herstelcode</label>
+                                <input type="text" name="code" id="p-dis-code" class="input-mono" autocomplete="one-time-code" maxlength="20" required>
                             </div>
                             <button type="submit" class="btn btn-danger">2FA uitschakelen</button>
                         </form>
                     <?php endif; ?>
 
                 <?php elseif ($setupSecret !== null): ?>
-                    <p class="muted">1. Scan deze QR-code met een authenticator-app (bijvoorbeeld Google of Microsoft Authenticator, 1Password of Bitwarden).</p>
-                    <div id="qrcode"></div>
-                    <p class="muted">Scannen lukt niet? Voer dan dit secret handmatig in:</p>
-                    <p class="secret" style="margin: 8px 0 20px;"><?= htmlspecialchars(trim(chunk_split($setupSecret, 4, ' '))) ?></p>
+                    <p class="steps">1. Scan deze QR-code met een authenticator-app (bijvoorbeeld Google of Microsoft Authenticator, 1Password of Bitwarden).</p>
+                    <div class="qr-card" id="qrcode"></div>
+                    <p class="steps">Scannen lukt niet? Voer dan dit secret handmatig in:</p>
+                    <p class="secret"><?= htmlspecialchars(trim(chunk_split($setupSecret, 4, ' '))) ?></p>
                     <form method="POST">
                         <?= csrfField() ?>
                         <input type="hidden" name="action" value="2fa_confirm">
-                        <div class="form-row">
-                            <label>2. Voer de code uit de app in</label>
-                            <input type="text" name="code" autocomplete="one-time-code" maxlength="10" placeholder="123456" required autofocus>
+                        <div class="field">
+                            <label for="p-confirm">2. Voer de code uit de app in</label>
+                            <input type="text" name="code" id="p-confirm" class="input-mono" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" required autofocus>
                         </div>
-                        <button type="submit" class="btn btn-primary">2FA inschakelen</button>
-                        <a href="profile.php" class="btn btn-outline">Annuleren</a>
+                        <div class="btn-row">
+                            <button type="submit" class="btn btn-primary"><?= icon('shield-check') ?>2FA inschakelen</button>
+                            <a href="profile.php" class="btn btn-secondary">Annuleren</a>
+                        </div>
                     </form>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                    <script src="<?= QRCODE_SRC ?>"></script>
                     <script>
                         // De QR-code wordt in de browser getekend: het secret gaat niet naar een externe dienst
                         new QRCode(document.getElementById('qrcode'), {
@@ -301,8 +298,8 @@ include 'admin_header.php';
                     </script>
 
                 <?php else: ?>
-                    <p class="muted" style="margin-bottom: 20px;">Met 2FA heb je bij het inloggen naast je wachtwoord ook een code uit een app op je telefoon nodig.</p>
-                    <a href="profile.php?2fa=setup" class="btn btn-primary">2FA inschakelen</a>
+                    <p class="muted text-sm" style="margin-bottom: 20px;">Met 2FA heb je bij het inloggen naast je wachtwoord ook een code uit een app op je telefoon nodig.</p>
+                    <a href="profile.php?2fa=setup" class="btn btn-primary"><?= icon('shield-check') ?>2FA inschakelen</a>
                 <?php endif; ?>
             </div>
         </div>

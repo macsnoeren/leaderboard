@@ -71,43 +71,47 @@ foreach ($db->query("SELECT gt.game_id, t.* FROM game_teachers gt JOIN teachers 
 }
 $teachers = $db->query("SELECT * FROM teachers WHERE is_active = 1 ORDER BY role DESC, username")->fetchAll(PDO::FETCH_ASSOC);
 
-function gameButton(string $action, int $gameId, array $fields, string $label, string $class = 'btn-outline', ?string $confirm = null): string {
+function gameButton(string $action, int $gameId, array $fields, string $label, string $class = 'btn-secondary', ?string $confirm = null, string $ariaLabel = ''): string {
     $onsubmit = $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '';
-    $html = '<form method="POST" style="display:inline;"' . $onsubmit . '>' . csrfField()
+    $html = '<form method="POST" class="inline"' . $onsubmit . '>' . csrfField()
         . '<input type="hidden" name="action" value="' . htmlspecialchars($action) . '">'
         . '<input type="hidden" name="game_id" value="' . $gameId . '">';
     foreach ($fields as $name => $value) {
         $html .= '<input type="hidden" name="' . htmlspecialchars($name) . '" value="' . htmlspecialchars((string)$value) . '">';
     }
-    return $html . '<button type="submit" class="btn btn-sm ' . $class . '">' . $label . '</button></form>';
+    return $html . '<button type="submit" class="btn btn-sm ' . $class . '"' . ($ariaLabel !== '' ? ' aria-label="' . htmlspecialchars($ariaLabel) . '" title="' . htmlspecialchars($ariaLabel) . '"' : '') . '>' . $label . '</button></form>';
 }
 
 $pageTitle = 'Spellen';
 $extraCSS = '<style>
-    .btn-sm { padding: 5px 10px; font-size: 0.8em; }
-    .muted { color: #999; font-size: 0.85em; }
-    .game-row { display: grid; grid-template-columns: 100px 1fr; gap: 20px; align-items: start; }
-    .game-row img { max-width: 100px; max-height: 80px; object-fit: contain; }
-    .teacher-chip { display: inline-flex; align-items: center; gap: 6px; background: #f0f4ff; border-radius: 15px; padding: 3px 4px 3px 12px; margin: 0 6px 6px 0; font-size: 0.85em; }
-    .teacher-chip .btn { padding: 2px 8px; border-radius: 12px; }
-    .add-teacher { display: flex; gap: 8px; margin-top: 8px; max-width: 450px; }
-    .add-teacher select { padding: 6px; }
+    .game-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .game-logo { width: 96px; height: 72px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: #FFFFFF; display: grid; place-items: center; overflow: hidden; }
+    .game-logo img { max-width: 90px; max-height: 66px; object-fit: contain; }
+    .game-logo.is-empty { background: var(--surface-2); color: var(--text-muted); }
+    .game-name { font-size: 17px; font-weight: 700; }
+    .game-facts { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .game-facts span { display: inline-flex; align-items: center; gap: 4px; }
+    .game-facts .icon { width: 14px; height: 14px; }
+    .chip .btn { width: 22px; height: 22px; border-radius: 50%; }
+    .chip .btn .icon { width: 12px; height: 12px; }
+    .add-teacher { display: flex; gap: 8px; margin-top: 8px; max-width: 460px; }
+    @media (max-width: 600px) { .game-row { grid-template-columns: 1fr; } }
 </style>';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">🎮 Spellen</h1>
+    <?= pageHeader('Spellen', '<span>Beheerders kunnen elk spel besturen; docenten alleen de spellen waaraan ze gekoppeld zijn</span>') ?>
 
     <?= renderFlash() ?>
 
-    <div class="card" style="border-top: 5px solid #667eea;">
-        <div class="card-title" style="color: #667eea; font-size: 1.2em; margin-bottom: 15px;">➕ Nieuw spel</div>
-        <form method="POST" style="display: flex; gap: 10px;">
+    <div class="card">
+        <div class="card-title"><?= icon('plus') ?>Nieuw spel</div>
+        <form method="POST" class="btn-row">
             <?= csrfField() ?>
             <input type="hidden" name="action" value="create_game">
-            <input type="text" name="name" placeholder="Bijv. Operation Gameplay klas 2B" maxlength="100" required>
-            <button type="submit" class="btn btn-primary" style="white-space: nowrap;">🚀 Aanmaken</button>
+            <input type="text" name="name" placeholder="Bijv. Operation Gameplay klas 2B" maxlength="100" required style="flex: 1; width: auto; min-width: 220px;" aria-label="Naam van het spel">
+            <button type="submit" class="btn btn-primary"><?= icon('plus') ?>Aanmaken</button>
         </form>
-        <p class="muted" style="margin-top: 10px;">Een nieuw spel begint als concept. Beheerders kunnen elk spel besturen; docenten alleen de spellen waaraan je ze hieronder koppelt.</p>
+        <p class="muted small" style="margin-top: 10px;">Een nieuw spel begint als concept.</p>
     </div>
 
     <?php foreach ($gameRows as $row):
@@ -118,49 +122,50 @@ include 'admin_header.php';
     ?>
         <div class="card">
             <div class="game-row">
-                <div><?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt=""><?php else: ?><span class="muted">geen logo</span><?php endif; ?></div>
+                <div class="game-logo<?= $logo ? '' : ' is-empty' ?>"><?= $logo ? '<img src="' . htmlspecialchars($logo) . '" alt="">' : icon('gamepad') ?></div>
                 <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div class="card-header" style="margin-bottom: 12px;">
                         <div>
-                            <strong style="font-size: 1.2em;"><?= htmlspecialchars($row['name']) ?></strong>
-                            <?= gameStatusBadge($row['effective_status']) ?>
-                            <span class="muted">· <?= (int)$row['team_count'] ?> teams · <?= (int)$row['assignment_count'] ?> opdrachten · code <?= htmlspecialchars((string)$row['join_code']) ?></span>
+                            <div class="btn-row"><span class="game-name"><?= htmlspecialchars($row['name']) ?></span><?= gameStatusBadge($row['effective_status']) ?></div>
+                            <div class="game-facts">
+                                <span><?= icon('users') ?><?= (int)$row['team_count'] ?> teams</span>
+                                <span><?= icon('book') ?><?= (int)$row['assignment_count'] ?> opdrachten</span>
+                                <span><?= icon('qr') ?>code <span class="mono"><?= htmlspecialchars((string)$row['join_code']) ?></span></span>
+                            </div>
                         </div>
-                        <form method="POST" action="choose_game.php" style="margin: 0;">
+                        <form method="POST" action="choose_game.php" class="inline">
                             <?= csrfField() ?>
                             <input type="hidden" name="game_id" value="<?= $rowId ?>">
                             <input type="hidden" name="return" value="game.php">
-                            <button type="submit" class="btn btn-sm btn-outline">⚙️ Openen</button>
+                            <button type="submit" class="btn btn-sm btn-secondary"><?= icon('sliders') ?>Openen</button>
                         </form>
                     </div>
-                    <div style="margin-top: 15px;">
-                        <div class="muted" style="margin-bottom: 6px;">Docenten</div>
-                        <?php foreach ($linked[$rowId] ?? [] as $t): ?>
-                            <span class="teacher-chip">
-                                <?= htmlspecialchars(teacherLabel($t)) ?><?= $t['role'] === 'admin' ? ' <span class="muted">(admin)</span>' : '' ?>
-                                <?= gameButton('remove_teacher', $rowId, ['teacher_id' => $t['id']], '✕', 'btn-danger', 'Docent ontkoppelen van dit spel?') ?>
-                            </span>
-                        <?php endforeach; ?>
-                        <?php if (empty($linked[$rowId])): ?><span class="muted">Nog geen docenten gekoppeld (beheerders hebben altijd toegang).</span><?php endif; ?>
-                        <?php if ($unlinked): ?>
-                            <form method="POST" class="add-teacher">
-                                <?= csrfField() ?>
-                                <input type="hidden" name="action" value="add_teacher">
-                                <input type="hidden" name="game_id" value="<?= $rowId ?>">
-                                <select name="teacher_id" required>
-                                    <?php foreach ($unlinked as $t): ?>
-                                        <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars(teacherLabel($t)) ?><?= $t['role'] === 'admin' ? ' (admin)' : '' ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <button type="submit" class="btn btn-sm btn-primary" style="white-space: nowrap;">Koppelen</button>
-                            </form>
-                        <?php endif; ?>
-                    </div>
+                    <div class="section-label" style="margin-top: 0;">Docenten</div>
+                    <?php foreach ($linked[$rowId] ?? [] as $t): ?>
+                        <span class="chip">
+                            <?= htmlspecialchars(teacherLabel($t)) ?><?= $t['role'] === 'admin' ? ' <span class="muted">(admin)</span>' : '' ?>
+                            <?= gameButton('remove_teacher', $rowId, ['teacher_id' => $t['id']], icon('x'), 'btn-ghost btn-icon', 'Docent ontkoppelen van dit spel?', 'Ontkoppelen') ?>
+                        </span>
+                    <?php endforeach; ?>
+                    <?php if (empty($linked[$rowId])): ?><p class="muted small">Nog geen docenten gekoppeld (beheerders hebben altijd toegang).</p><?php endif; ?>
+                    <?php if ($unlinked): ?>
+                        <form method="POST" class="add-teacher">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="action" value="add_teacher">
+                            <input type="hidden" name="game_id" value="<?= $rowId ?>">
+                            <select name="teacher_id" required aria-label="Docent om te koppelen">
+                                <?php foreach ($unlinked as $t): ?>
+                                    <option value="<?= (int)$t['id'] ?>"><?= htmlspecialchars(teacherLabel($t)) ?><?= $t['role'] === 'admin' ? ' (admin)' : '' ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-secondary"><?= icon('plus') ?>Koppelen</button>
+                        </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
     <?php endforeach; ?>
     <?php if (empty($gameRows)): ?>
-        <div class="card muted" style="text-align: center;">Nog geen spellen.</div>
+        <div class="card"><?= emptyState('gamepad', 'Nog geen spellen.') ?></div>
     <?php endif; ?>
 <?php include 'admin_footer.php'; ?>

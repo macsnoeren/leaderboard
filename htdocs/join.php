@@ -56,54 +56,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $logo = $game ? gameLogoUrl($game) : null;
 ?>
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $game ? htmlspecialchars($game['name']) . ' - ' : '' ?>Aanmelden</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .box { background: white; padding: 35px; border-radius: 15px; width: 100%; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-        .logo { display: block; max-width: 100%; max-height: 160px; object-fit: contain; margin: 0 auto 20px; }
-        h1 { text-align: center; color: #333; margin-bottom: 5px; font-size: 1.6em; }
-        .sub { text-align: center; color: #888; margin-bottom: 25px; }
-        .form-group { margin-bottom: 18px; }
-        label { display: block; margin-bottom: 6px; font-weight: bold; color: #444; }
-        .hint { font-weight: normal; color: #999; font-size: 0.85em; }
-        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; }
-        input:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
-        input.code { font-family: monospace; font-size: 1.6em; text-align: center; letter-spacing: 6px; text-transform: uppercase; }
-        button { width: 100%; padding: 14px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1.05em; }
-        button:hover { background: #5568d3; }
-        .privacy { margin-top: 18px; font-size: 0.8em; color: #777; line-height: 1.4; text-align: center; }
-        .error { background: #ffebee; color: #c62828; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f44336; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <?php if ($logo): ?><img src="<?= htmlspecialchars($logo) ?>" alt="" class="logo"><?php endif; ?>
-        <h1>🕵️ Aanmelden</h1>
-        <p class="sub"><?= $game ? htmlspecialchars($game['name']) : 'Doe mee met je team' ?></p>
-        <?php if ($error): ?><div class="error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+<?= authPageStart($game ? $game['name'] : 'Aanmelden', ['logo' => $logo, 'subtitle' => 'Meld je team aan en ga op onderzoek uit.', 'css' => '<style>
+    .join-code { font-family: var(--font-mono); font-size: 30px; font-weight: 700; text-align: center; letter-spacing: .3em; text-transform: uppercase; padding: 12px; }
+    .privacy { display: flex; gap: 8px; font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 18px; }
+    .privacy .icon { width: 14px; height: 14px; margin-top: 2px; }
+</style>']) ?>
+        <?php if ($error): ?><?= alertBox('error', htmlspecialchars($error)) ?><?php endif; ?>
         <form method="POST" action="join.php">
             <?= csrfField() ?>
-            <div class="form-group">
-                <label>Spelcode</label>
-                <input type="text" name="code" class="code" value="<?= htmlspecialchars($code) ?>" maxlength="<?= JOIN_CODE_LENGTH ?>" autocomplete="off" autocapitalize="characters" required <?= $code === '' ? 'autofocus' : '' ?>>
+            <div class="field">
+                <label for="j-code">Spelcode</label>
+                <input type="text" name="code" id="j-code" class="join-code" value="<?= htmlspecialchars($code) ?>" maxlength="<?= JOIN_CODE_LENGTH ?>" autocomplete="off" autocapitalize="characters" spellcheck="false" required <?= $code === '' ? 'autofocus' : '' ?>>
+                <div class="hint">De code staat op het scherm in het lokaal.</div>
             </div>
-            <div class="form-group">
-                <label>Teamnaam</label>
-                <input type="text" name="team_name" value="<?= htmlspecialchars($teamName) ?>" maxlength="<?= TEAM_NAME_MAX_LENGTH ?>" placeholder="Bijv. De Speurders" required <?= $code !== '' ? 'autofocus' : '' ?>>
+            <div class="field">
+                <label for="j-team">Teamnaam</label>
+                <input type="text" name="team_name" id="j-team" value="<?= htmlspecialchars($teamName) ?>" maxlength="<?= TEAM_NAME_MAX_LENGTH ?>" placeholder="Bijv. De Speurders" required <?= $code !== '' ? 'autofocus' : '' ?>>
             </div>
-            <div class="form-group">
-                <label>E-mailadres <span class="hint">(optioneel: dan mailen we jullie de teamlink)</span></label>
-                <input type="email" name="email" value="<?= htmlspecialchars($emailInput) ?>" autocomplete="email">
+            <div class="field">
+                <label for="j-email">E-mailadres <span class="muted">(optioneel)</span></label>
+                <input type="email" name="email" id="j-email" value="<?= htmlspecialchars($emailInput) ?>" autocomplete="email">
+                <div class="hint">Dan mailen we jullie de link naar het teamdashboard.</div>
             </div>
-            <button type="submit">🚀 Meedoen</button>
+            <button type="submit" class="btn btn-primary btn-lg btn-block"><?= icon('login') ?>Meedoen</button>
         </form>
-        <p class="privacy">🔒 <?= htmlspecialchars(PRIVACY_NOTICE) ?></p>
-    </div>
-</body>
-</html>
+        <p class="privacy"><?= icon('lock') ?><span><?= htmlspecialchars(PRIVACY_NOTICE) ?></span></p>
+<?= authPageEnd() ?>

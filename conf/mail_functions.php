@@ -45,6 +45,54 @@ function createMailer(): PHPMailer {
 }
 
 /**
+ * HTML van een accountmail (TASKS-DESIGN §3.5): tabellen en inline stijl, want mailclients negeren
+ * de meeste CSS. Kopbalk in merkkleur, witte inhoud, knop na de eerste alinea met de link ook als
+ * tekst, en een grijze voetregel. Alle tekst wordt ge-escaped (teamnamen komen van teams zelf).
+ * Mailclients met een donkere modus krijgen via de <style> in de <head> donkere kleuren.
+ */
+function accountEmailHtml(string $heading, array $paragraphs, ?string $buttonText = null, ?string $link = null): string {
+    $brand = '#5B4BDB';
+    $font = "font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;";
+    $rows = '';
+    foreach ($paragraphs as $i => $text) {
+        $rows .= '<p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #141A2B;" class="zw-text">' . htmlspecialchars($text) . '</p>';
+        // De knop staat na de eerste alinea
+        if ($i === 0 && $link !== null) {
+            $href = htmlspecialchars($link);
+            $rows .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 8px 0 12px;"><tr>'
+                . '<td style="border-radius: 8px; background: ' . $brand . ';" bgcolor="' . $brand . '">'
+                . '<a href="' . $href . '" style="display: inline-block; padding: 12px 24px; ' . $font . ' font-size: 15px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 8px;">' . htmlspecialchars((string)$buttonText) . '</a>'
+                . '</td></tr></table>'
+                . '<p style="margin: 0 0 20px; font-size: 13px; line-height: 1.5; color: #5F6B85;" class="zw-muted">Werkt de knop niet? Kopieer dan deze link naar je browser:<br>'
+                . '<a href="' . $href . '" style="color: ' . $brand . '; word-break: break-all;" class="zw-link">' . $href . '</a></p>';
+        }
+    }
+    return '<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
+        . '<title>' . htmlspecialchars($heading) . '</title>'
+        . '<style>@media (prefers-color-scheme: dark) { .zw-bg { background: #0B1020 !important; } .zw-card { background: #121A2E !important; border-color: #26314F !important; }'
+        . ' .zw-text, .zw-heading { color: #E6EAF2 !important; } .zw-muted, .zw-foot { color: #9AA4BF !important; } .zw-link { color: #A396FF !important; } }</style>'
+        . '</head><body style="margin: 0; padding: 0; background: #F4F6FB;" class="zw-bg">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #F4F6FB;" bgcolor="#F4F6FB" class="zw-bg"><tr><td align="center" style="padding: 32px 16px;">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; ' . $font . '">'
+        // Kopbalk
+        . '<tr><td style="background: #0B1020; border-radius: 12px 12px 0 0; padding: 18px 28px;" bgcolor="#0B1020">'
+        . '<span style="' . $font . ' font-size: 18px; font-weight: 800; letter-spacing: .03em; color: #FFFFFF;">Zebra<span style="color: #8B7CFF;">wave</span></span>'
+        . '</td></tr>'
+        . '<tr><td style="height: 4px; background: ' . $brand . '; font-size: 0; line-height: 0;" bgcolor="' . $brand . '">&nbsp;</td></tr>'
+        // Inhoud
+        . '<tr><td style="background: #FFFFFF; border: 1px solid #E3E7F0; border-top: none; border-radius: 0 0 12px 12px; padding: 28px;" bgcolor="#FFFFFF" class="zw-card">'
+        . '<h1 style="margin: 0 0 16px; ' . $font . ' font-size: 22px; line-height: 1.3; color: #141A2B;" class="zw-heading">' . htmlspecialchars($heading) . '</h1>'
+        . $rows
+        . '</td></tr>'
+        // Voetregel
+        . '<tr><td style="padding: 16px 28px; ' . $font . ' font-size: 12px; line-height: 1.5; color: #8C96AD; text-align: center;" class="zw-foot">'
+        . 'Deze mail is automatisch verstuurd door het Zebrawave leaderboard. Je kunt er niet op antwoorden.'
+        . '</td></tr>'
+        . '</table></td></tr></table></body></html>';
+}
+
+/**
  * Verstuurt een accountmail met één knop. $paragraphs is platte tekst en wordt ge-escaped.
  * Geeft true terug, of de foutmelding van PHPMailer.
  */
@@ -58,21 +106,15 @@ function sendAccountEmail($to, $subject, $heading, array $paragraphs, $buttonTex
         $mail->addAddress($to);
         $mail->Subject = $subject;
 
-        $body = '<h2>' . htmlspecialchars($heading) . '</h2>';
         $alt = "$heading\n\n";
         foreach ($paragraphs as $i => $text) {
-            $body .= '<p>' . htmlspecialchars($text) . '</p>';
             $alt .= "$text\n\n";
-            // De knop staat na de eerste alinea
             if ($i === 0 && $link !== null) {
-                $href = htmlspecialchars($link);
-                $body .= "<p><a href=\"$href\" style=\"background: #667eea; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;\">" . htmlspecialchars($buttonText) . "</a></p>"
-                    . "<p style=\"font-size: 0.85em; color: #666;\">Werkt de knop niet? Kopieer dan deze link naar je browser:<br>$href</p>";
                 $alt .= "$link\n\n";
             }
         }
 
-        $mail->Body = "<html><body style='font-family: Arial, sans-serif;'>$body</body></html>";
+        $mail->Body = accountEmailHtml($heading, $paragraphs, $buttonText, $link);
         $mail->AltBody = trim($alt);
 
         $mail->send();

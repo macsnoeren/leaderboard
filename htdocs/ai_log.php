@@ -90,10 +90,10 @@ function renderAgentJson(string $title, ?string $json): string {
     foreach ($runs as $run) {
         $meta = array_filter([$run['model'] ?? null, isset($run['think']) ? 'think ' . $run['think'] : null, isset($run['duration_ms']) ? round($run['duration_ms'] / 1000, 1) . ' s' : null]);
         if ($meta) {
-            $html .= '<div class="muted">' . htmlspecialchars(implode(' · ', $meta)) . '</div>';
+            $html .= '<div class="muted small">' . htmlspecialchars(implode(' · ', $meta)) . '</div>';
         }
         if (isset($run['error'])) {
-            $html .= '<div class="error-msg" style="margin: 5px 0; padding: 8px;">' . htmlspecialchars((string)$run['error']) . '</div>';
+            $html .= '<div class="agent-error">' . htmlspecialchars((string)$run['error']) . '</div>';
         }
         if (isset($run['output'])) {
             $html .= '<pre>' . htmlspecialchars(json_encode($run['output'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . '</pre>';
@@ -106,102 +106,105 @@ function renderAgentJson(string $title, ?string $json): string {
 }
 
 $pageTitle = 'AI-logboek';
+$decisionClass = ['level_up' => 'badge-success', 'reply' => 'badge-info', 'escalate' => 'badge-warning', 'suggest' => 'badge-brand', 'stale' => '', 'ignored' => ''];
 $extraCSS = '<style>
-    .filters { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
-    .filters label { font-size: 0.8em; color: #888; display: block; margin-bottom: 4px; }
-    .filters select { width: auto; min-width: 160px; }
-    .eval { border: 1px solid #eee; border-radius: 10px; padding: 15px; margin-bottom: 12px; }
-    .eval-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .decision { padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: bold; color: white; background: #888; }
-    .decision.level_up { background: #43a047; } .decision.reply { background: #1e88e5; } .decision.escalate { background: #fb8c00; }
-    .decision.suggest { background: #8e24aa; } .decision.stale, .decision.ignored { background: #bbb; }
-    .verdict { font-weight: bold; }
-    .verdict.onvoldoende { color: #e53935; } .verdict.voldoende { color: #fb8c00; } .verdict.goed { color: #43a047; }
-    .quote { background: #e3f2fd; border-radius: 6px; padding: 8px 10px; margin: 8px 0; font-size: 0.9em; }
+    .eval-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+    .eval-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+    .eval-meta .sep { color: var(--line-strong); }
+    .eval-id { font-family: var(--font-mono); font-weight: 700; }
+    .eval .quote { background: var(--brand-soft); border-radius: var(--radius-sm); padding: 8px 12px; margin: 12px 0 8px; font-size: 14px; }
+    .eval-body { font-size: 14px; display: grid; gap: 4px; }
     .agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-top: 10px; }
-    .agent { background: #fafafa; border-radius: 8px; padding: 10px; font-size: 0.85em; min-width: 0; }
-    .agent h4 { margin-bottom: 4px; color: #6a1b9a; }
-    .agent pre { white-space: pre-wrap; word-break: break-word; font-size: 0.9em; background: white; padding: 6px; border-radius: 6px; margin-top: 4px; }
-    .agent pre.thinking { color: #666; max-height: 300px; overflow-y: auto; }
-    .muted { color: #999; font-size: 0.85em; }
-    .verdict-btns form { display: inline; }
-    .verdict-btns .btn { padding: 4px 10px; font-size: 0.8em; }
-    .btn.selected { outline: 3px solid #667eea; }
+    .agent { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; min-width: 0; }
+    .agent h4 { margin-bottom: 4px; font-size: 13px; }
+    .agent pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 12px; background: var(--surface); border: 1px solid var(--line); padding: 6px 8px; border-radius: 4px; margin-top: 4px; }
+    .agent pre.thinking { color: var(--text-muted); max-height: 300px; overflow-y: auto; }
+    .agent-error { background: var(--danger-soft); color: var(--danger); border-radius: 4px; padding: 6px 8px; margin: 4px 0; }
+    .eval details > summary { cursor: pointer; color: var(--brand); font-size: 14px; margin-top: 10px; }
+    .agreement-cell { font-family: var(--font-mono); font-weight: 700; }
 </style>';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">🤖 AI-logboek <span style="font-size: 0.6em; color: #888; font-weight: normal;"><?= htmlspecialchars($game['name']) ?></span></h1>
+    <?= pageHeader('AI-logboek', gameSubtitle($game)) ?>
 
     <?= renderFlash() ?>
 
     <div class="card">
-        <div class="card-title" style="font-size: 1.2em; margin-bottom: 10px;">📈 Overeenstemming per opdracht</div>
-        <p class="muted" style="margin-bottom: 10px;">Markeer beoordelingen hieronder met <em>AI had gelijk</em> of <em>AI had ongelijk</em> (de escalatieknoppen in ✉️ Messages tellen ook mee). Voorstel: zet <strong>Automatisch</strong> pas aan bij ≥ 90 % overeenstemming en nul onterechte level-ups.</p>
-        <table>
-            <thead><tr><th>#</th><th>Opdracht</th><th>Beoordelingen</th><th>Level-ups</th><th>Escalaties</th><th>Gemarkeerd</th><th>Overeenstemming</th></tr></thead>
-            <tbody>
-                <?php foreach ($agreement as $row): $marked = (int)$row['agree'] + (int)$row['disagree']; ?>
-                    <tr>
-                        <td><?= (int)$row['assignment_number'] ?></td>
-                        <td><?= htmlspecialchars((string)($row['title'] ?? '—')) ?></td>
-                        <td><?= (int)$row['total'] ?></td>
-                        <td><?= (int)$row['level_ups'] ?></td>
-                        <td><?= (int)$row['escalations'] ?></td>
-                        <td><?= $marked ?></td>
-                        <td><strong><?= $marked ? round((int)$row['agree'] / $marked * 100) . ' %' : '—' ?></strong></td>
-                    </tr>
-                <?php endforeach; ?>
-                <?php if (!$agreement): ?><tr><td colspan="7" style="text-align: center; color: #999;">Nog geen beoordelingen in dit spel.</td></tr><?php endif; ?>
-            </tbody>
-        </table>
+        <div class="card-title"><?= icon('trending-up') ?>Overeenstemming per opdracht</div>
+        <p class="muted text-sm" style="margin-bottom: 12px;">Markeer beoordelingen hieronder met <em>AI had gelijk</em> of <em>AI had ongelijk</em> (de escalatieknoppen in Berichten tellen ook mee). Voorstel: zet <strong>Automatisch</strong> pas aan bij ≥ 90 % overeenstemming en nul onterechte level-ups.</p>
+        <?php if (!$agreement): ?>
+            <?= emptyState('bot', 'Nog geen beoordelingen in dit spel.') ?>
+        <?php else: ?>
+        <div class="table-scroll">
+            <table class="table">
+                <thead><tr><th>#</th><th>Opdracht</th><th class="col-num">Beoordelingen</th><th class="col-num">Level-ups</th><th class="col-num">Escalaties</th><th class="col-num">Gemarkeerd</th><th class="col-num">Overeenstemming</th></tr></thead>
+                <tbody>
+                    <?php foreach ($agreement as $row): $marked = (int)$row['agree'] + (int)$row['disagree']; ?>
+                        <tr>
+                            <td class="mono"><?= (int)$row['assignment_number'] ?></td>
+                            <td><?= htmlspecialchars((string)($row['title'] ?? '—')) ?></td>
+                            <td class="col-num"><?= (int)$row['total'] ?></td>
+                            <td class="col-num"><?= (int)$row['level_ups'] ?></td>
+                            <td class="col-num"><?= (int)$row['escalations'] ?></td>
+                            <td class="col-num"><?= $marked ?></td>
+                            <td class="col-num agreement-cell"><?= $marked ? round((int)$row['agree'] / $marked * 100) . ' %' : '—' ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
     </div>
 
     <div class="card">
-        <form method="GET" class="filters">
-            <div><label>Team</label><select name="team"><option value="">Alle teams</option>
+        <form method="GET" class="toolbar">
+            <div class="field"><label for="f-team">Team</label><select name="team" id="f-team"><option value="">Alle teams</option>
                 <?php foreach ($teams as $t): ?><option value="<?= (int)$t['team_id'] ?>" <?= $filters['team'] === (int)$t['team_id'] ? 'selected' : '' ?>><?= htmlspecialchars((string)$t['team_name']) ?></option><?php endforeach; ?>
             </select></div>
-            <div><label>Opdracht</label><select name="assignment"><option value="">Alle opdrachten</option>
+            <div class="field"><label for="f-asg">Opdracht</label><select name="assignment" id="f-asg"><option value="">Alle opdrachten</option>
                 <?php foreach ($numbers as $n): ?><option value="<?= (int)$n ?>" <?= $filters['assignment'] === (int)$n ? 'selected' : '' ?>>Opdracht <?= (int)$n ?></option><?php endforeach; ?>
             </select></div>
-            <div><label>Beslissing</label><select name="decision"><option value="">Alle beslissingen</option>
+            <div class="field"><label for="f-dec">Beslissing</label><select name="decision" id="f-dec"><option value="">Alle beslissingen</option>
                 <?php foreach (AI_DECISION_LABELS as $key => $label): ?><option value="<?= $key ?>" <?= $filters['decision'] === $key ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option><?php endforeach; ?>
             </select></div>
-            <button type="submit" class="btn btn-primary">Filteren</button>
-            <?php if ($query !== ''): ?><a href="ai_log.php" class="btn btn-outline">Wissen</a><?php endif; ?>
+            <button type="submit" class="btn btn-primary"><?= icon('search') ?>Filteren</button>
+            <?php if ($query !== ''): ?><a href="ai_log.php" class="btn btn-ghost"><?= icon('x') ?>Wissen</a><?php endif; ?>
         </form>
     </div>
 
     <?php foreach ($evaluations as $e): ?>
         <div class="card eval" id="eval-<?= (int)$e['id'] ?>">
             <div class="eval-head">
-                <div>
-                    <strong>#<?= (int)$e['id'] ?></strong> · <?= htmlspecialchars(formatDateTime($e['created_at'])) ?> ·
-                    <a href="ai_log.php?team=<?= (int)$e['team_id'] ?>" style="color: #667eea;"><?= htmlspecialchars((string)$e['team_name']) ?></a> ·
-                    opdracht <?= (int)$e['assignment_number'] ?> ·
-                    <?= htmlspecialchars((string)$e['intent']) ?>
-                    <?php if ($e['verdict']): ?> · <span class="verdict <?= htmlspecialchars($e['verdict']) ?>"><?= htmlspecialchars($e['verdict']) ?></span><?php endif; ?>
-                    <span class="decision <?= htmlspecialchars((string)$e['decision']) ?>"><?= htmlspecialchars(AI_DECISION_LABELS[$e['decision']] ?? (string)$e['decision']) ?></span>
-                    <?php if ($e['decision'] === 'escalate'): ?><span class="muted"><?= $e['resolved_at'] ? '(afgehandeld ' . htmlspecialchars(formatDateTime($e['resolved_at'])) . ')' : '(open)' ?></span><?php endif; ?>
+                <div class="eval-meta">
+                    <span class="eval-id">#<?= (int)$e['id'] ?></span><span class="sep">·</span>
+                    <span class="muted"><?= htmlspecialchars(formatDateTime($e['created_at'])) ?></span><span class="sep">·</span>
+                    <a href="ai_log.php?team=<?= (int)$e['team_id'] ?>"><?= htmlspecialchars((string)$e['team_name']) ?></a><span class="sep">·</span>
+                    <span>opdracht <?= (int)$e['assignment_number'] ?></span><span class="sep">·</span>
+                    <span><?= htmlspecialchars((string)$e['intent']) ?></span>
+                    <?php if ($e['verdict']): ?><span class="badge badge-<?= htmlspecialchars($e['verdict']) ?>"><?= htmlspecialchars($e['verdict']) ?></span><?php endif; ?>
+                    <span class="badge <?= $decisionClass[$e['decision']] ?? '' ?>"><?= htmlspecialchars(AI_DECISION_LABELS[$e['decision']] ?? (string)$e['decision']) ?></span>
+                    <?php if ($e['decision'] === 'escalate'): ?><span class="muted small"><?= $e['resolved_at'] ? '(afgehandeld ' . htmlspecialchars(formatDateTime($e['resolved_at'])) . ')' : '(open)' ?></span><?php endif; ?>
                 </div>
-                <div class="verdict-btns">
-                    <?php foreach (['agree' => '👍 AI had gelijk', 'disagree' => '👎 AI had ongelijk'] as $value => $label): ?>
-                        <form method="POST" action="<?= htmlspecialchars($back) ?>">
+                <div class="btn-row">
+                    <?php foreach (['agree' => ['thumbs-up', 'AI had gelijk', 'btn-success'], 'disagree' => ['thumbs-down', 'AI had ongelijk', 'btn-danger']] as $value => [$iconName, $label, $class]): $selected = $e['teacher_verdict'] === $value; ?>
+                        <form method="POST" action="<?= htmlspecialchars($back) ?>" class="inline">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="teacher_verdict">
                             <input type="hidden" name="evaluation_id" value="<?= (int)$e['id'] ?>">
                             <input type="hidden" name="verdict" value="<?= $value ?>">
-                            <button type="submit" class="btn <?= $value === 'agree' ? 'btn-success' : 'btn-danger' ?><?= $e['teacher_verdict'] === $value ? ' selected' : '' ?>"><?= $label ?></button>
+                            <button type="submit" class="btn btn-sm <?= $selected ? $class : 'btn-secondary' ?>" aria-pressed="<?= $selected ? 'true' : 'false' ?>"><?= icon($iconName) ?><?= $label ?></button>
                         </form>
                     <?php endforeach; ?>
                 </div>
             </div>
             <?php if ($e['team_message'] !== null): ?><div class="quote"><strong>Team:</strong> <?= nl2br(htmlspecialchars($e['team_message'])) ?></div><?php endif; ?>
-            <?php if (trim((string)$e['reason']) !== ''): ?><div><strong>Reden:</strong> <?= nl2br(htmlspecialchars($e['reason'])) ?></div><?php endif; ?>
-            <?php if (trim((string)$e['reply_text']) !== ''): ?><div style="margin-top: 5px;"><strong><?= in_array($e['decision'], ['reply', 'level_up'], true) ? 'Verstuurd aan het team' : 'Voorgestelde reactie' ?>:</strong> <?= nl2br(htmlspecialchars($e['reply_text'])) ?></div><?php endif; ?>
-            <div class="muted" style="margin-top: 5px;">Agent <?= htmlspecialchars((string)$e['agent_id']) ?> · <?= htmlspecialchars((string)$e['models']) ?><?= $e['duration_ms'] !== null ? ' · ' . round((int)$e['duration_ms'] / 1000, 1) . ' s' : '' ?></div>
-            <details style="margin-top: 8px;">
-                <summary style="cursor: pointer; color: #667eea;">Uitvoer van de agents</summary>
+            <div class="eval-body">
+                <?php if (trim((string)$e['reason']) !== ''): ?><div><strong>Reden:</strong> <?= nl2br(htmlspecialchars($e['reason'])) ?></div><?php endif; ?>
+                <?php if (trim((string)$e['reply_text']) !== ''): ?><div><strong><?= in_array($e['decision'], ['reply', 'level_up'], true) ? 'Verstuurd aan het team' : 'Voorgestelde reactie' ?>:</strong> <?= nl2br(htmlspecialchars($e['reply_text'])) ?></div><?php endif; ?>
+                <div class="muted small">Agent <?= htmlspecialchars((string)$e['agent_id']) ?> · <?= htmlspecialchars((string)$e['models']) ?><?= $e['duration_ms'] !== null ? ' · ' . round((int)$e['duration_ms'] / 1000, 1) . ' s' : '' ?></div>
+            </div>
+            <details>
+                <summary>Uitvoer van de agents</summary>
                 <div class="agents">
                     <?= renderAgentJson('Intentie', $e['intent_json']) ?>
                     <?= renderAgentJson('Hulp-agent', $e['helper_json']) ?>
@@ -212,6 +215,6 @@ include 'admin_header.php';
         </div>
     <?php endforeach; ?>
     <?php if (!$evaluations): ?>
-        <div class="card" style="text-align: center; color: #999;">Geen beoordelingen gevonden.</div>
+        <div class="card"><?= emptyState('search', 'Geen beoordelingen gevonden.') ?></div>
     <?php endif; ?>
 <?php include 'admin_footer.php'; ?>

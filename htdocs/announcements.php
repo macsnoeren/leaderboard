@@ -71,58 +71,56 @@ $sent = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $pageTitle = 'Mededelingen';
 $extraCSS = '<style>
-    .muted { color: #999; font-size: 0.85em; }
-    .team-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 15px; margin: 10px 0 0 25px; }
-    .team-checks label, .recipient { display: flex; align-items: center; gap: 8px; font-size: 0.95em; }
-    .team-checks input, .recipient input { width: auto; }
-    .announcement { border-left: 4px solid #667eea; background: #f8f9ff; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; }
-    .announcement .meta { font-size: 0.8em; color: #888; margin-bottom: 8px; }
-    .markdown-body p { margin-bottom: 8px; }
-    .markdown-body ul, .markdown-body ol { margin-left: 20px; }
+    .team-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; margin: 10px 0 0 26px; }
+    .announcement { border-left: 3px solid var(--brand); background: var(--surface-2); padding: 14px 18px; border-radius: var(--radius-sm); margin-bottom: 12px; }
+    .announcement .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+    .announcement .meta time { font-family: var(--font-mono); }
 </style>';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">📣 Mededelingen <span style="font-size: 0.6em; color: #888; font-weight: normal;"><?= htmlspecialchars($game['name']) ?></span></h1>
+    <?= pageHeader('Mededelingen', gameSubtitle($game)) ?>
 
     <?= renderFlash() ?>
 
-    <div class="dashboard-grid">
+    <div class="grid-main">
         <div class="card">
-            <div class="card-title" style="margin-bottom: 15px;">📤 Verstuurde mededelingen</div>
+            <div class="card-title"><?= icon('megaphone') ?>Verstuurde mededelingen</div>
             <?php foreach ($sent as $a): ?>
                 <div class="announcement">
                     <div class="meta">
-                        <?= formatDateTime($a['created_at']) ?> · <?= htmlspecialchars($a['sender'] ?? 'onbekend') ?> ·
-                        aan <?= (int)$a['to_all'] ? '<strong>alle teams</strong>' : htmlspecialchars($a['team_names'] ?? 'verwijderd team') ?>
+                        <time><?= formatDateTime($a['created_at']) ?></time> · <span><?= htmlspecialchars($a['sender'] ?? 'onbekend') ?></span> ·
+                        <?= (int)$a['to_all'] ? '<span class="badge badge-brand">alle teams</span>' : '<span>aan ' . htmlspecialchars($a['team_names'] ?? 'verwijderd team') . '</span>' ?>
                     </div>
-                    <div class="markdown-body"><?= htmlspecialchars($a['message']) ?></div>
+                    <div class="markdown" data-md><?= htmlspecialchars($a['message']) ?></div>
                 </div>
             <?php endforeach; ?>
             <?php if (empty($sent)): ?>
-                <p class="muted">Nog geen mededelingen verstuurd.</p>
+                <?= emptyState('megaphone', 'Nog geen mededelingen verstuurd.') ?>
             <?php endif; ?>
         </div>
 
-        <div class="card" style="border-top: 5px solid #667eea;">
-            <div class="card-title" style="color: #667eea; font-size: 1.2em; margin-bottom: 15px;">✏️ Nieuwe mededeling</div>
+        <div class="card">
+            <div class="card-title"><?= icon('pencil') ?>Nieuwe mededeling</div>
             <form method="POST">
                 <?= csrfField() ?>
                 <input type="hidden" name="action" value="send">
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Bericht (markdown, net als bij de opdrachten)</label>
-                    <textarea name="message" rows="6" placeholder="Bijv. **Over 10 minuten** verzamelen in lokaal 1.12" required></textarea>
+                <div class="field">
+                    <label for="a-msg">Bericht</label>
+                    <textarea name="message" id="a-msg" rows="6" placeholder="Bijv. **Over 10 minuten** verzamelen in lokaal 1.12" required></textarea>
+                    <div class="hint">Markdown, net als bij de opdrachten.</div>
                 </div>
-                <div style="margin-bottom: 20px;">
-                    <label class="recipient"><input type="radio" name="recipients" value="all" checked onchange="toggleTeams()"> Alle teams</label>
-                    <label class="recipient" style="margin-top: 6px;"><input type="radio" name="recipients" value="selection" onchange="toggleTeams()" <?= empty($teams) ? 'disabled' : '' ?>> Alleen deze teams:</label>
-                    <div class="team-checks" id="team-checks" style="display: none;">
+                <fieldset class="field" style="border: none;">
+                    <legend class="field-label">Aan</legend>
+                    <label class="check"><input type="radio" name="recipients" value="all" checked onchange="toggleTeams()"> Alle teams</label>
+                    <label class="check" style="margin-top: 8px;"><input type="radio" name="recipients" value="selection" onchange="toggleTeams()" <?= empty($teams) ? 'disabled' : '' ?>> Alleen deze teams:</label>
+                    <div class="team-checks" id="team-checks" hidden>
                         <?php foreach ($teams as $t): ?>
-                            <label><input type="checkbox" name="team_ids[]" value="<?= (int)$t['id'] ?>"> <?= htmlspecialchars($t['team_name']) ?></label>
+                            <label class="check"><input type="checkbox" name="team_ids[]" value="<?= (int)$t['id'] ?>"> <?= htmlspecialchars($t['team_name']) ?></label>
                         <?php endforeach; ?>
                     </div>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">📣 Versturen</button>
-                <p class="muted" style="margin-top: 10px;">Teams zien een nieuwe mededeling als pop-up en kunnen hem daarna teruglezen onder "📣 Mededelingen".</p>
+                </fieldset>
+                <button type="submit" class="btn btn-primary btn-block"><?= icon('send') ?>Versturen</button>
+                <p class="muted small" style="margin-top: 10px;">Teams zien een nieuwe mededeling als pop-up en kunnen hem daarna teruglezen onder "Mededelingen".</p>
             </form>
         </div>
     </div>
@@ -131,9 +129,7 @@ $extraJS = "
 <script>
     function toggleTeams() {
         const selection = document.querySelector('input[name=recipients]:checked').value === 'selection';
-        document.getElementById('team-checks').style.display = selection ? 'grid' : 'none';
+        document.getElementById('team-checks').hidden = !selection;
     }
-    marked.setOptions({ breaks: true });
-    document.querySelectorAll('.markdown-body').forEach(el => { el.innerHTML = marked.parse(el.textContent.trim()); });
 </script>";
 include 'admin_footer.php'; ?>

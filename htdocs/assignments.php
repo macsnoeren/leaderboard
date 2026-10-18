@@ -38,22 +38,24 @@ function removeArtifact(PDO $db, ?string $file): void {
 
 const DESIGN_STATUS_TEXT = [
     'idle' => '',
-    'pending' => '⏳ De AI kijkt mee… dit duurt meestal minder dan een minuut.',
-    'questions' => '❓ De AI heeft vragen. Beantwoord ze hieronder; daarna kijkt ze opnieuw.',
-    'failed' => '⚠️ De AI kon deze opdracht niet bekijken (model niet bereikbaar?). Probeer het opnieuw.',
+    'pending' => 'De AI kijkt mee… dit duurt meestal minder dan een minuut.',
+    'questions' => 'De AI heeft vragen. Beantwoord ze hieronder; daarna kijkt ze opnieuw.',
+    'failed' => 'De AI kon deze opdracht niet bekijken (model niet bereikbaar?). Probeer het opnieuw.',
 ];
 
 // Dialoog van de opdracht-assistent als HTML (ook voor de live update)
 function renderDialog(array $dialog): string {
     if (!$dialog) {
-        return '<p class="muted">Nog geen vragen van de AI.</p>';
+        return '<p class="muted text-sm">Nog geen vragen van de AI.</p>';
     }
-    $html = '';
+    $html = '<div class="chat">';
     foreach ($dialog as $d) {
-        $html .= '<div class="dialog-msg ' . ($d['role'] === 'ai' ? 'ai' : 'teacher') . '"><small>' . ($d['role'] === 'ai' ? '🤖 AI' : '👤 Docent') . ' – ' . htmlspecialchars(formatDateTime($d['created_at'])) . '</small>'
+        $ai = $d['role'] === 'ai';
+        $html .= '<div class="bubble ' . ($ai ? 'bubble-suggestion' : 'bubble-teacher') . '"><div class="bubble-meta">' . ($ai ? icon('bot') . '<strong>AI</strong>' : '<strong>Docent</strong>')
+            . '<time>' . htmlspecialchars(formatDateTime($d['created_at'])) . '</time></div>'
             . '<div>' . nl2br(htmlspecialchars($d['message'])) . '</div></div>';
     }
-    return $html;
+    return $html . '</div>';
 }
 
 // Versie van de rubric: verandert als de AI (of een collega) een nieuw voorstel opslaat
@@ -160,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     removeArtifact($db, $old);
                 }
             } else {
-                flash('error', 'File upload failed.');
+                flash('error', 'Het uploaden van het bestand is mislukt.');
                 redirect($back);
             }
         }
@@ -225,7 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         removeArtifact($db, $assignment['artifact_file']);
 
         logAudit($db, $userId, 'ASSIGNMENT_DELETE', "Deleted assignment #{$assignment['assignment_number']}: {$assignment['title']} (ID {$assignment['id']}, spel #$gameId)");
-        flash('success', 'Assignment deleted successfully!');
+        flash('success', 'De opdracht is verwijderd.');
         redirect('assignments.php');
     }
 
@@ -280,49 +282,37 @@ $listField = function (string $field) use ($rubric): string {
 
 $extraCSS = '
 <style>
-    .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); overflow-y: auto; }
-    .modal-content { background-color: white; margin: 5% auto; padding: 30px; border-radius: 15px; width: 70%; max-width: 800px; box-shadow: 0 5px 30px rgba(0,0,0,0.3); position: relative; }
-    .close-modal { position: absolute; top: 20px; right: 25px; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; transition: 0.2s; }
-    .close-modal:hover { color: #333; }
-    .modal-section-title { font-weight: bold; color: #667eea; border-bottom: 2px solid #f0f4ff; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
-    .markdown-body { font-size: 1rem; line-height: 1.6; color: #4b4f56; }
-    .markdown-body h1 { font-size: 1.4em; margin: 15px 0 10px 0; color: #333; }
-    .markdown-body h2 { font-size: 1.25em; margin: 12px 0 8px 0; color: #333; }
-    .markdown-body h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #333; }
-    .markdown-body p { margin-bottom: 12px; }
-    .markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 15px; }
-    .markdown-body li { margin-bottom: 5px; }
-    .markdown-body code { background: #f0f2f5; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; }
-    .markdown-body pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 8px; overflow-x: auto; margin-bottom: 15px; }
-    .markdown-body pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
-    .clickable-title { color: #667eea; cursor: pointer; text-decoration: none; transition: 0.2s; }
-    .clickable-title:hover { color: #5568d3; text-decoration: underline; }
-    .muted { color: #999; font-size: 0.85em; }
-    .rubric-table th, .rubric-table td { padding: 6px; vertical-align: top; }
-    .rubric-table th { font-size: 0.75em; }
-    .rubric-table textarea, .rubric-table input, .rubric-table select { padding: 6px; font-size: 0.85em; }
-    .rubric-table textarea { min-height: 54px; resize: vertical; }
-    .rubric-list label { display: block; margin: 12px 0 5px; font-size: 0.9em; }
-    .dialog-msg { padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9em; line-height: 1.4; }
-    .dialog-msg small { color: #888; display: block; margin-bottom: 3px; }
-    .dialog-msg.ai { background: #f3e5f5; border-left: 4px solid #9c27b0; }
-    .dialog-msg.teacher { background: #f1f8e9; border-left: 4px solid #7cb342; }
-    .ai-status { background: #fff8e1; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9em; }
+    .title-link { background: none; border: none; padding: 0; font: inherit; font-weight: 650; color: var(--text); cursor: pointer; text-align: left; }
+    .title-link:hover { color: var(--brand); text-decoration: underline; }
+    .ai-status { margin-bottom: 12px; }
     .ai-status:empty { display: none; }
-    .notice { background: #e3f2fd; color: #0d47a1; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 0.9em; display: none; }
+    #rubric-notice { display: none; }
+    .rubric-table { min-width: 640px; }
+    .rubric-table th { white-space: normal; }
+    .rubric-table td { vertical-align: top; }
+    .rubric-table textarea, .rubric-table input, .rubric-table select { padding: 6px 8px; font-size: 13px; }
+    .rubric-table textarea { min-height: 58px; }
+    .rubric-table .col-name { width: 18%; }
+    .rubric-table .col-req { width: 90px; }
+    .rubric-table .col-del { width: 44px; }
+    .col-onv { border-top: 3px solid var(--danger); }
+    .col-vol { border-top: 3px solid var(--warning); }
+    .col-goed { border-top: 3px solid var(--success); }
+    .dialog-box { max-height: 360px; overflow-y: auto; margin-bottom: 4px; }
+    .dialog-box .bubble { font-size: 14px; }
 </style>';
 
-$pageTitle = 'Assignments';
+$pageTitle = 'Opdrachten';
 include 'admin_header.php';
 ?>
-    <h1 style="margin-bottom: 30px;">📘 Opdrachten Beheer <span style="font-size: 0.6em; color: #888; font-weight: normal;"><?= htmlspecialchars($game['name']) ?></span></h1>
+    <?= pageHeader('Opdrachten', gameSubtitle($game), $edit_assignment ? '<a href="assignments.php" class="btn btn-secondary">' . icon('plus') . 'Nieuwe opdracht</a>' : '') ?>
 
     <?= renderFlash() ?>
 
-    <div class="dashboard-grid">
-        <div class="side-panel">
+    <div class="grid-main">
+        <div>
             <div class="card">
-                <div class="card-title"><?= $edit_assignment ? "✏️ Opdracht Bewerken" : "➕ Nieuwe Opdracht" ?></div>
+                <div class="card-title"><?= icon($edit_assignment ? 'pencil' : 'plus') ?><?= $edit_assignment ? 'Opdracht ' . (int)$edit_assignment['assignment_number'] . ' bewerken' : 'Nieuwe opdracht' ?></div>
                 <form method="POST" enctype="multipart/form-data">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="<?= $edit_assignment ? 'edit_assignment' : 'add_assignment' ?>">
@@ -330,186 +320,201 @@ include 'admin_header.php';
                         <input type="hidden" name="assignment_id" value="<?= $edit_assignment['id'] ?>">
                     <?php endif; ?>
 
-                    <div style="margin-bottom: 15px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Opdracht Nummer</label>
-                        <input type="number" name="assignment_number" min="1" value="<?= $edit_assignment['assignment_number'] ?? $nextNumber ?>" required>
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="f-number">Nummer</label>
+                            <input type="number" name="assignment_number" id="f-number" min="1" value="<?= $edit_assignment['assignment_number'] ?? $nextNumber ?>" required>
+                        </div>
+                        <div class="field">
+                            <label for="f-time">Verwachte tijd (minuten)</label>
+                            <input type="number" name="time_limit" id="f-time" value="<?= $edit_assignment['time_limit'] ?? '' ?>" placeholder="0 = niet tonen">
+                        </div>
                     </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Titel</label>
-                        <input type="text" name="title" value="<?= htmlspecialchars($edit_assignment['title'] ?? '') ?>" required>
+                    <div class="field">
+                        <label for="f-title">Titel</label>
+                        <input type="text" name="title" id="f-title" value="<?= htmlspecialchars($edit_assignment['title'] ?? '') ?>" required>
                     </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beschrijving</label>
-                        <textarea name="description" rows="3"><?= htmlspecialchars($edit_assignment['description'] ?? '') ?></textarea>
+                    <div class="field">
+                        <label for="f-desc">Beschrijving</label>
+                        <textarea name="description" id="f-desc" rows="4"><?= htmlspecialchars($edit_assignment['description'] ?? '') ?></textarea>
+                        <div class="hint">Markdown. Dit is het verhaal dat het team als dossier ziet.</div>
                     </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">De Echte Opdracht (Instructie)</label>
-                        <textarea name="instruction" rows="4" placeholder="Wat moeten ze precies doen?"><?= htmlspecialchars($edit_assignment['instruction'] ?? '') ?></textarea>
+                    <div class="field">
+                        <label for="f-instr">Instructie (de echte opdracht)</label>
+                        <textarea name="instruction" id="f-instr" rows="4" placeholder="Wat moeten ze precies doen?"><?= htmlspecialchars($edit_assignment['instruction'] ?? '') ?></textarea>
                     </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Beoordelingscriteria (het antwoord)</label>
-                        <textarea name="criteria" rows="3" placeholder="Waar moet het antwoord aan voldoen?"><?= htmlspecialchars($edit_assignment['criteria'] ?? '') ?></textarea>
+                    <div class="field">
+                        <label for="f-crit">Beoordelingscriteria (het antwoord)</label>
+                        <textarea name="criteria" id="f-crit" rows="3" placeholder="Waar moet het antwoord aan voldoen?"><?= htmlspecialchars($edit_assignment['criteria'] ?? '') ?></textarea>
+                        <div class="hint">Alleen voor docenten en de AI; teams zien dit nooit.</div>
                     </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Tijdslimiet (minuten)</label>
-                        <input type="number" name="time_limit" value="<?= $edit_assignment['time_limit'] ?? '' ?>" placeholder="0 = onbeperkt">
+                    <div class="field">
+                        <label for="f-file">Bestand (PDF, ZIP, TXT, JPG of PNG)</label>
+                        <input type="file" name="artifact_file" id="f-file" accept=".pdf,.zip,.txt,.jpg,.png">
+                        <?php if ($edit_assignment && $edit_assignment['artifact_file']): ?><div class="hint">Leeg laten = het huidige bestand behouden.</div><?php endif; ?>
                     </div>
-                    <div style="margin-bottom: 20px;">
-                        <label style="display:block; margin-bottom:5px; font-size:0.9em;">Bestand (PDF/ZIP) <?= $edit_assignment && $edit_assignment['artifact_file'] ? '<span style="color: #4caf50;">(Huidig bestand behouden indien leeg)</span>' : '' ?></label>
-                        <input type="file" name="artifact_file" accept=".pdf,.zip">
-                    </div>
-                    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.9em;">
-                        <input type="checkbox" name="ai_human_only" value="1" style="width: auto;" <?= $edit_assignment && (int)$edit_assignment['ai_auto_allowed'] === 0 ? 'checked' : '' ?>>
-                        Altijd door een mens: de AI zet bij deze opdracht nooit zelf een level omhoog
+                    <label class="check field">
+                        <input type="checkbox" name="ai_human_only" value="1" <?= $edit_assignment && (int)$edit_assignment['ai_auto_allowed'] === 0 ? 'checked' : '' ?>>
+                        <span>Altijd door een mens: de AI zet bij deze opdracht nooit zelf een level omhoog</span>
                     </label>
-                    <button type="submit" class="btn btn-primary" style="width: 100%;"><?= $edit_assignment ? "Bijwerken" : "Toevoegen" ?></button>
-                    <?php if ($edit_assignment): ?>
-                        <a href="assignments.php" class="btn btn-outline" style="width: 100%; margin-top: 10px; display: block;">Annuleren</a>
-                    <?php endif; ?>
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary"><?= icon('save') ?><?= $edit_assignment ? 'Opslaan' : 'Toevoegen' ?></button>
+                        <?php if ($edit_assignment): ?>
+                            <a href="assignments.php" class="btn btn-secondary">Annuleren</a>
+                        <?php endif; ?>
+                    </div>
                 </form>
             </div>
 
             <?php if ($edit_assignment): ?>
             <div class="card" id="ai-panel">
-                <div class="card-title">🤖 AI-assistent</div>
-                <p class="muted" style="margin: 8px 0 12px;">De AI leest de opdracht en je antwoord mee, stelt vragen als iets niet eenduidig is en stelt daarna een rubric voor. Je antwoord (de criteria) blijft altijd zoals jij het schreef. De bijlage leest de AI niet: ze vraagt naar feiten die alleen daar staan.</p>
-                <div class="ai-status" id="ai-status"><?= htmlspecialchars(DESIGN_STATUS_TEXT[$designStatus] ?? '') ?></div>
-                <div id="ai-dialog"><?= renderDialog(assignmentDialog($db, (int)$edit_assignment['id'])) ?></div>
-                <form method="POST" id="ai-answer-form" style="margin-top: 10px; <?= $designStatus === 'questions' ? '' : 'display: none;' ?>">
+                <div class="card-title"><?= icon('bot') ?>AI-assistent</div>
+                <p class="muted text-sm" style="margin-bottom: 12px;">De AI leest de opdracht en je antwoord mee, stelt vragen als iets niet eenduidig is en stelt daarna een rubric voor. Je antwoord (de criteria) blijft altijd zoals jij het schreef. De bijlage leest de AI niet: ze vraagt naar feiten die alleen daar staan.</p>
+                <div class="ai-status alert alert-info" id="ai-status" role="status"><?= htmlspecialchars(DESIGN_STATUS_TEXT[$designStatus] ?? '') ?></div>
+                <div class="dialog-box" id="ai-dialog"><?= renderDialog(assignmentDialog($db, (int)$edit_assignment['id'])) ?></div>
+                <form method="POST" id="ai-answer-form" style="margin-top: 12px;"<?= $designStatus === 'questions' ? '' : ' hidden' ?>>
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="ai_answer">
                     <input type="hidden" name="assignment_id" value="<?= (int)$edit_assignment['id'] ?>">
-                    <textarea name="answer" rows="3" placeholder="Je antwoord op de vragen van de AI…" required></textarea>
-                    <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Antwoord versturen</button>
+                    <label for="ai-answer" class="sr-only">Je antwoord</label>
+                    <textarea name="answer" id="ai-answer" rows="3" placeholder="Je antwoord op de vragen van de AI…" required></textarea>
+                    <div class="card-actions"><button type="submit" class="btn btn-primary"><?= icon('send') ?>Antwoord versturen</button></div>
                 </form>
-                <form method="POST" id="ai-request-form" style="margin-top: 10px; <?= in_array($designStatus, ['idle', 'failed'], true) ? '' : 'display: none;' ?>">
+                <form method="POST" id="ai-request-form" class="card-actions"<?= in_array($designStatus, ['idle', 'failed'], true) ? '' : ' hidden' ?>>
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="ai_request">
                     <input type="hidden" name="assignment_id" value="<?= (int)$edit_assignment['id'] ?>">
-                    <button type="submit" class="btn btn-primary" <?= $canRequestAi ? '' : 'disabled title="Vul eerst de instructie en de criteria in en sla op"' ?>>🤖 Laat AI meekijken</button>
-                    <?php if (!$canRequestAi): ?><span class="muted" style="margin-left: 8px;">Vul eerst de instructie en de criteria in en sla op.</span><?php endif; ?>
+                    <button type="submit" class="btn btn-primary" <?= $canRequestAi ? '' : 'disabled' ?>><?= icon('bot') ?>Laat de AI meekijken</button>
+                    <?php if (!$canRequestAi): ?><span class="muted small">Vul eerst de instructie en de criteria in en sla op.</span><?php endif; ?>
                 </form>
             </div>
 
             <div class="card" id="rubric">
-                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>📏 Rubric</span><span id="rubric-badge"><?= rubricStatusBadge($edit_assignment['ai_rubric_status'] ?: 'none') ?></span>
+                <div class="card-header">
+                    <div class="card-title"><?= icon('clipboard') ?>Rubric</div>
+                    <span id="rubric-badge"><?= rubricStatusBadge($edit_assignment['ai_rubric_status'] ?: 'none') ?></span>
                 </div>
-                <p class="muted" style="margin: 8px 0 12px;">Hiermee beoordeelt de AI de antwoorden van teams. Zonder goedgekeurde rubric doet de AI alleen suggesties aan de docent.</p>
-                <div class="notice" id="rubric-notice">Er is een nieuw rubric-voorstel. <a href="assignments.php?edit=<?= (int)$edit_assignment['id'] ?>#rubric" style="color: #0d47a1; font-weight: bold;">Herlaad</a> om het te zien (je niet-opgeslagen wijzigingen gaan dan verloren).</div>
+                <p class="muted text-sm" style="margin-bottom: 14px;">Hiermee beoordeelt de AI de antwoorden van teams. Zonder goedgekeurde rubric doet de AI alleen suggesties aan de docent.</p>
+                <div class="alert alert-info" id="rubric-notice" role="status"><?= icon('info') ?><div>Er is een nieuw rubric-voorstel. <a href="assignments.php?edit=<?= (int)$edit_assignment['id'] ?>#rubric"><strong>Herlaad</strong></a> om het te zien (je niet-opgeslagen wijzigingen gaan dan verloren).</div></div>
                 <form method="POST" id="rubric-form">
                     <?= csrfField() ?>
                     <input type="hidden" name="assignment_id" value="<?= (int)$edit_assignment['id'] ?>">
-                    <label style="display:block; margin-bottom:5px; font-size:0.9em;">Kern: wat moet het team in elk geval geven?</label>
-                    <textarea name="rubric_kern" rows="2" placeholder="Bijv. Het team moet de dader én het motief noemen."><?= htmlspecialchars($rubric['kern'] ?? '') ?></textarea>
-                    <div class="table-container" style="margin-top: 12px; overflow-x: auto;">
-                        <table class="rubric-table">
+                    <div class="field">
+                        <label for="r-kern">Kern: wat moet het team in elk geval geven?</label>
+                        <textarea name="rubric_kern" id="r-kern" rows="2" placeholder="Bijv. Het team moet de dader én het motief noemen."><?= htmlspecialchars($rubric['kern'] ?? '') ?></textarea>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="table table-compact rubric-table">
                             <thead>
-                                <tr><th style="width: 16%;">Aspect</th><th style="width: 9%;">Verplicht</th><th>Onvoldoende</th><th>Voldoende</th><th>Goed</th><th></th></tr>
+                                <tr><th class="col-name">Aspect</th><th class="col-req">Verplicht</th><th class="col-onv">Onvoldoende</th><th class="col-vol">Voldoende</th><th class="col-goed">Goed</th><th class="col-del"><span class="sr-only">Verwijderen</span></th></tr>
                             </thead>
                             <tbody id="rubric-rows">
                                 <?php foreach ($rubricRows as $row): ?>
                                     <tr>
-                                        <td><input type="text" name="aspect_naam[]" value="<?= htmlspecialchars($row['naam']) ?>" placeholder="Bijv. Dader" maxlength="<?= RUBRIC_NAME_MAX_LENGTH ?>"></td>
-                                        <td><select name="aspect_verplicht[]"><option value="1" <?= !empty($row['verplicht']) ? 'selected' : '' ?>>ja</option><option value="0" <?= empty($row['verplicht']) ? 'selected' : '' ?>>nee</option></select></td>
-                                        <td><textarea name="aspect_onvoldoende[]" placeholder="Geen of een verkeerde persoon"><?= htmlspecialchars($row['onvoldoende']) ?></textarea></td>
-                                        <td><textarea name="aspect_voldoende[]" placeholder="De conciërge, zonder naam"><?= htmlspecialchars($row['voldoende']) ?></textarea></td>
-                                        <td><textarea name="aspect_goed[]" placeholder="Jan de Vries (de conciërge)"><?= htmlspecialchars($row['goed']) ?></textarea></td>
-                                        <td><button type="button" class="btn btn-danger" style="padding: 4px 8px;" title="Aspect verwijderen" onclick="removeRubricRow(this)">✕</button></td>
+                                        <td><input type="text" name="aspect_naam[]" value="<?= htmlspecialchars($row['naam']) ?>" placeholder="Bijv. Dader" maxlength="<?= RUBRIC_NAME_MAX_LENGTH ?>" aria-label="Aspect"></td>
+                                        <td><select name="aspect_verplicht[]" aria-label="Verplicht"><option value="1" <?= !empty($row['verplicht']) ? 'selected' : '' ?>>ja</option><option value="0" <?= empty($row['verplicht']) ? 'selected' : '' ?>>nee</option></select></td>
+                                        <td><textarea name="aspect_onvoldoende[]" placeholder="Geen of een verkeerde persoon" aria-label="Onvoldoende"><?= htmlspecialchars($row['onvoldoende']) ?></textarea></td>
+                                        <td><textarea name="aspect_voldoende[]" placeholder="De conciërge, zonder naam" aria-label="Voldoende"><?= htmlspecialchars($row['voldoende']) ?></textarea></td>
+                                        <td><textarea name="aspect_goed[]" placeholder="Jan de Vries (de conciërge)" aria-label="Goed"><?= htmlspecialchars($row['goed']) ?></textarea></td>
+                                        <td><button type="button" class="btn btn-danger btn-sm btn-icon" title="Aspect verwijderen" aria-label="Aspect verwijderen" onclick="removeRubricRow(this)"><?= icon('x') ?></button></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
-                    <button type="button" class="btn btn-outline" style="margin-top: 8px;" onclick="addRubricRow()">➕ Aspect toevoegen</button>
-                    <div class="rubric-list">
-                        <label>Ook goed (varianten en synoniemen, één per regel)</label>
-                        <textarea name="rubric_ook_goed" rows="2" placeholder="de conciërge&#10;meneer De Vries"><?= $listField('ook_goed') ?></textarea>
-                        <label>Veelgemaakte fouten (één per regel)</label>
-                        <textarea name="rubric_fouten" rows="2" placeholder="De tuinman: alibi bevestigd op camera 3"><?= $listField('veelgemaakte_fouten') ?></textarea>
-                        <label>Verduidelijkingen van de vraag (mag de AI aan teams geven; niets dat het antwoord dichterbij brengt)</label>
-                        <textarea name="rubric_verduidelijkingen" rows="2" placeholder="Met 'motief' bedoelen we: waarom deed de dader het?"><?= $listField('verduidelijkingen_vraag') ?></textarea>
-                        <label>Niveauregel</label>
-                        <input type="text" name="rubric_niveau_regel" value="<?= htmlspecialchars($rubric['niveau_regel'] ?? '') ?>" placeholder="<?= htmlspecialchars(RUBRIC_DEFAULT_RULE) ?>">
+                    <div class="card-actions" style="margin-top: 8px;"><button type="button" class="btn btn-secondary btn-sm" onclick="addRubricRow()"><?= icon('plus') ?>Aspect toevoegen</button></div>
+                    <div class="field-row" style="margin-top: 16px;">
+                        <div class="field">
+                            <label for="r-ook">Ook goed <span class="muted">(één per regel)</span></label>
+                            <textarea name="rubric_ook_goed" id="r-ook" rows="3" placeholder="de conciërge&#10;meneer De Vries"><?= $listField('ook_goed') ?></textarea>
+                            <div class="hint">Varianten en synoniemen.</div>
+                        </div>
+                        <div class="field">
+                            <label for="r-fout">Veelgemaakte fouten <span class="muted">(één per regel)</span></label>
+                            <textarea name="rubric_fouten" id="r-fout" rows="3" placeholder="De tuinman: alibi bevestigd op camera 3"><?= $listField('veelgemaakte_fouten') ?></textarea>
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
-                        <button type="submit" name="action" value="save_rubric" class="btn btn-outline">💾 Opslaan als concept</button>
-                        <button type="submit" name="action" value="approve_rubric" class="btn btn-primary">✅ Rubric goedkeuren</button>
+                    <div class="field">
+                        <label for="r-verd">Verduidelijkingen van de vraag <span class="muted">(één per regel)</span></label>
+                        <textarea name="rubric_verduidelijkingen" id="r-verd" rows="2" placeholder="Met 'motief' bedoelen we: waarom deed de dader het?"><?= $listField('verduidelijkingen_vraag') ?></textarea>
+                        <div class="hint">Mag de AI aan teams geven; niets dat het antwoord dichterbij brengt.</div>
+                    </div>
+                    <div class="field">
+                        <label for="r-regel">Niveauregel</label>
+                        <input type="text" name="rubric_niveau_regel" id="r-regel" value="<?= htmlspecialchars($rubric['niveau_regel'] ?? '') ?>" placeholder="<?= htmlspecialchars(RUBRIC_DEFAULT_RULE) ?>">
+                    </div>
+                    <div class="btn-row">
+                        <button type="submit" name="action" value="save_rubric" class="btn btn-secondary"><?= icon('save') ?>Opslaan als concept</button>
+                        <button type="submit" name="action" value="approve_rubric" class="btn btn-primary"><?= icon('check') ?>Rubric goedkeuren</button>
                     </div>
                 </form>
                 <template id="rubric-row-template">
                     <tr>
-                        <td><input type="text" name="aspect_naam[]" placeholder="Aspect" maxlength="<?= RUBRIC_NAME_MAX_LENGTH ?>"></td>
-                        <td><select name="aspect_verplicht[]"><option value="1">ja</option><option value="0" selected>nee</option></select></td>
-                        <td><textarea name="aspect_onvoldoende[]"></textarea></td>
-                        <td><textarea name="aspect_voldoende[]"></textarea></td>
-                        <td><textarea name="aspect_goed[]"></textarea></td>
-                        <td><button type="button" class="btn btn-danger" style="padding: 4px 8px;" title="Aspect verwijderen" onclick="removeRubricRow(this)">✕</button></td>
+                        <td><input type="text" name="aspect_naam[]" placeholder="Aspect" maxlength="<?= RUBRIC_NAME_MAX_LENGTH ?>" aria-label="Aspect"></td>
+                        <td><select name="aspect_verplicht[]" aria-label="Verplicht"><option value="1">ja</option><option value="0" selected>nee</option></select></td>
+                        <td><textarea name="aspect_onvoldoende[]" aria-label="Onvoldoende"></textarea></td>
+                        <td><textarea name="aspect_voldoende[]" aria-label="Voldoende"></textarea></td>
+                        <td><textarea name="aspect_goed[]" aria-label="Goed"></textarea></td>
+                        <td><button type="button" class="btn btn-danger btn-sm btn-icon" title="Aspect verwijderen" aria-label="Aspect verwijderen" onclick="removeRubricRow(this)"><?= icon('x') ?></button></td>
                     </tr>
                 </template>
             </div>
             <?php endif; ?>
         </div>
 
-        <div class="main-panel">
+        <div>
             <div class="card">
-                <div class="card-title">📂 Bestaande Opdrachten</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Titel</th>
-                            <th>AI</th>
-                            <th style="width: 100px;">Bestand</th>
-                            <th>Acties</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($assignments as $a): ?>
+                <div class="card-title"><?= icon('book') ?>Opdrachten in dit spel</div>
+                <?php if (empty($assignments)): ?>
+                    <?= emptyState('book', 'Nog geen opdrachten in dit spel.') ?>
+                <?php else: ?>
+                <div class="table-scroll">
+                    <table class="table">
+                        <thead>
                             <tr>
-                                <td><?= htmlspecialchars($a['assignment_number']) ?></td>
-                                <td>
-                                    <a href="javascript:void(0)" class="clickable-title" onclick='openViewModal(<?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria']], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'>
-                                        <strong><?= htmlspecialchars($a['title']) ?></strong>
-                                    </a>
-                                </td>
-                                <td>
-                                    <?= rubricStatusBadge($a['ai_rubric_status'] ?: 'none') ?>
-                                    <?php if ((int)$a['ai_auto_allowed'] === 0): ?><span title="Altijd door een mens" style="font-size: 0.85em;">👤</span><?php endif; ?>
-                                </td>
-                                <td>
-                                    <?php if ($a['artifact_file']): ?>
-                                        <a href="<?= htmlspecialchars($a['artifact_file']) ?>" target="_blank" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8em;">Inzien</a>
-                                    <?php else: ?>
-                                        <span style="color:#ccc; font-size:0.8em;">Geen file</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td style="text-align: right; white-space: nowrap;">
-                                    <a href="?edit=<?= $a['id'] ?>" class="btn btn-outline" style="padding: 4px 8px;" title="Bewerken">✏️</a>
-                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Verwijder deze opdracht?');">
-                                        <?= csrfField() ?>
-                                        <input type="hidden" name="action" value="delete_assignment">
-                                        <input type="hidden" name="assignment_id" value="<?= $a['id'] ?>">
-                                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px;">🗑️</button>
-                                    </form>
-                                </td>
+                                <th scope="col">#</th>
+                                <th scope="col">Titel</th>
+                                <th scope="col">AI</th>
+                                <th scope="col" class="col-actions">Acties</th>
                             </tr>
-                        <?php endforeach; ?>
-                        <?php if (empty($assignments)): ?>
-                            <tr><td colspan="5" style="text-align: center; color: #999; padding: 30px;">Nog geen opdrachten in dit spel.</td></tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($assignments as $a): ?>
+                                <tr<?= $edit_assignment && (int)$edit_assignment['id'] === (int)$a['id'] ? ' style="background: var(--brand-soft);"' : '' ?>>
+                                    <td class="mono"><?= (int)$a['assignment_number'] ?></td>
+                                    <td>
+                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(<?= json_encode(['number' => (int)$a['assignment_number'], 'title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file']], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
+                                        <?php if ($a['artifact_file']): ?><div class="small muted"><?= icon('paperclip') ?> bijlage</div><?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?= rubricStatusBadge($a['ai_rubric_status'] ?: 'none') ?>
+                                        <?php if ((int)$a['ai_auto_allowed'] === 0): ?><span class="badge" title="Altijd door een mens"><?= icon('user') ?>mens</span><?php endif; ?>
+                                    </td>
+                                    <td class="col-actions">
+                                        <a href="?edit=<?= (int)$a['id'] ?>" class="btn btn-secondary btn-sm btn-icon" title="Bewerken" aria-label="Opdracht <?= (int)$a['assignment_number'] ?> bewerken"><?= icon('pencil') ?></a>
+                                        <form method="POST" class="inline" onsubmit="return confirm('Verwijder deze opdracht?');">
+                                            <?= csrfField() ?>
+                                            <input type="hidden" name="action" value="delete_assignment">
+                                            <input type="hidden" name="assignment_id" value="<?= (int)$a['id'] ?>">
+                                            <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Verwijderen" aria-label="Opdracht <?= (int)$a['assignment_number'] ?> verwijderen"><?= icon('trash') ?></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
             </div>
 
             <?php if ($copySources): ?>
             <div class="card">
-                <div class="card-title">📋 Opdrachten kopiëren uit een ander spel</div>
-                <p style="color: #888; font-size: 0.9em; margin: 10px 0 15px;">De opdrachten, hun bestanden en rubrics worden gekopieerd; de nummering loopt door na nummer <?= $nextNumber - 1 ?>. Daarna staan beide spellen los van elkaar.</p>
-                <form method="POST" style="display: flex; gap: 10px;" onsubmit="return confirm('Opdrachten kopiëren naar dit spel?');">
+                <div class="card-title"><?= icon('copy') ?>Kopiëren uit een ander spel</div>
+                <p class="muted text-sm" style="margin-bottom: 14px;">De opdrachten, hun bestanden en rubrics worden gekopieerd; de nummering loopt door na nummer <?= $nextNumber - 1 ?>. Daarna staan beide spellen los van elkaar.</p>
+                <form method="POST" class="btn-row" onsubmit="return confirm('Opdrachten kopiëren naar dit spel?');">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="copy_assignments">
-                    <select name="from_game_id" required style="flex: 1;">
+                    <select name="from_game_id" required style="flex: 1; width: auto;" aria-label="Spel om uit te kopiëren">
                         <?php foreach ($copySources as $src): ?>
                             <option value="<?= $src['id'] ?>"><?= htmlspecialchars($src['name']) ?> (<?= $src['count'] ?> opdrachten)</option>
                         <?php endforeach; ?>
@@ -521,26 +526,25 @@ include 'admin_header.php';
         </div>
     </div>
 
-    <!-- Modal voor het inzien van de opdracht -->
-    <div id="viewAssignmentModal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal" onclick="closeViewModal()">&times;</span>
-            <h2 id="v-title" style="color: #333; margin-bottom: 20px;"></h2>
-
-            <div class="modal-section-title">Beschrijving</div>
-            <div id="v-desc" class="markdown-body"></div>
-
-            <div class="modal-section-title">📍 Instructie (De Echte Opdracht)</div>
-            <div id="v-instr" class="markdown-body" style="background: #f8f9fa; padding: 15px; border-radius: 8px;"></div>
-
-            <div class="modal-section-title">📋 Beoordelingscriteria (Intern)</div>
-            <div id="v-crit" class="markdown-body" style="color: #d32f2f; background: #fff1f0; padding: 15px; border-radius: 8px;"></div>
-
-            <div style="margin-top: 30px; text-align: right;">
-                <button class="btn btn-primary" onclick="closeViewModal()">Sluiten</button>
+    <dialog class="modal" id="view-dialog" aria-labelledby="v-title">
+        <div class="modal-header">
+            <h2 id="v-title"></h2>
+            <button type="button" class="btn btn-ghost btn-icon" data-close aria-label="Sluiten"><?= icon('x') ?></button>
+        </div>
+        <div class="modal-body">
+            <div class="section-label">Beschrijving</div>
+            <div id="v-desc" class="markdown" data-md></div>
+            <div class="section-label">Instructie (de echte opdracht)</div>
+            <div id="v-instr" class="panel markdown" data-md></div>
+            <div class="section-label">Beoordelingscriteria (alleen voor docenten)</div>
+            <div id="v-crit" class="panel panel-danger markdown" data-md></div>
+            <div id="v-file-wrap" hidden>
+                <div class="section-label">Bijlage</div>
+                <a id="v-file" href="#" target="_blank" class="btn btn-secondary btn-sm"><?= icon('download') ?>Bestand openen</a>
             </div>
         </div>
-    </div>
+        <div class="modal-footer"><button type="button" class="btn btn-primary" data-close>Sluiten</button></div>
+    </dialog>
 
 <?php
 $editId = $edit_assignment ? (int)$edit_assignment['id'] : 0;
@@ -549,25 +553,18 @@ $designStatusJs = json_encode($designStatus);
 $extraJS = "
 <script>
     function openViewModal(assignment) {
-        document.getElementById('v-title').innerText = 'Opdracht Details: ' + assignment.title;
-        document.getElementById('v-desc').textContent = assignment.description || 'Geen beschrijving.';
-        document.getElementById('v-instr').textContent = assignment.instruction || 'Geen specifieke instructies.';
-        document.getElementById('v-crit').textContent = assignment.criteria || 'Geen criteria opgegeven.';
-
-        document.getElementById('viewAssignmentModal').style.display = 'block';
-
-        marked.setOptions({ breaks: true });
-        document.querySelectorAll('#viewAssignmentModal .markdown-body').forEach(el => {
-            el.innerHTML = marked.parse(el.textContent.trim());
+        const dialog = document.getElementById('view-dialog');
+        document.getElementById('v-title').textContent = 'Opdracht ' + assignment.number + ': ' + assignment.title;
+        const fields = { 'v-desc': assignment.description || 'Geen beschrijving.', 'v-instr': assignment.instruction || 'Geen instructie.', 'v-crit': assignment.criteria || 'Geen criteria opgegeven.' };
+        Object.keys(fields).forEach(id => {
+            const el = document.getElementById(id);
+            el.textContent = fields[id];
+            el.removeAttribute('data-rendered');
         });
-    }
-
-    function closeViewModal() {
-        document.getElementById('viewAssignmentModal').style.display = 'none';
-    }
-
-    window.onclick = function(event) {
-        if (event.target == document.getElementById('viewAssignmentModal')) closeViewModal();
+        document.getElementById('v-file-wrap').hidden = !assignment.file;
+        if (assignment.file) document.getElementById('v-file').href = assignment.file;
+        window.renderMarkdown(dialog);
+        dialog.showModal();
     }
 
     // Rubric-tabel: rijen toevoegen en verwijderen (een lege rij wordt bij opslaan overgeslagen)
@@ -599,12 +596,12 @@ $extraJS = "
                 document.getElementById('ai-status').textContent = data.status_text;
                 document.getElementById('ai-dialog').innerHTML = data.dialog_html;
                 document.getElementById('rubric-badge').innerHTML = data.rubric_badge;
-                document.getElementById('ai-answer-form').style.display = data.design_status === 'questions' ? '' : 'none';
-                document.getElementById('ai-request-form').style.display = ['idle', 'failed'].includes(data.design_status) ? '' : 'none';
+                document.getElementById('ai-answer-form').hidden = data.design_status !== 'questions';
+                document.getElementById('ai-request-form').hidden = !['idle', 'failed'].includes(data.design_status);
                 if (data.rubric_version !== rubricVersion) {
                     // Nieuw voorstel: zonder eigen wijzigingen meteen tonen, anders eerst vragen
                     if (!rubricDirty) { location.hash = 'rubric'; location.reload(); return; }
-                    document.getElementById('rubric-notice').style.display = 'block';
+                    document.getElementById('rubric-notice').style.display = 'flex';
                     rubricVersion = data.rubric_version;
                 }
                 designStatus = data.design_status;

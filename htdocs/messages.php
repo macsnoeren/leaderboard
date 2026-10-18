@@ -184,20 +184,27 @@ if ($selected_team_id) {
     $other_teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
+
 // Knop in een eigen POST-formulier met CSRF-token
 function chatButton(int $teamId, array $fields, string $label, string $class, ?string $confirm = null): string {
-    $html = '<form method="POST" style="display:inline; margin:0;"' . ($confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '') . '>' . csrfField()
+    $html = '<form method="POST" class="inline"' . ($confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '') . '>' . csrfField()
         . '<input type="hidden" name="team_id" value="' . $teamId . '">';
     foreach ($fields as $name => $value) {
         $html .= '<input type="hidden" name="' . htmlspecialchars($name) . '" value="' . htmlspecialchars((string)$value) . '">';
     }
-    return $html . '<button type="submit" class="btn ' . $class . '" style="padding: 2px 8px; font-size: 0.75em;">' . $label . '</button></form>';
+    return $html . '<button type="submit" class="btn btn-sm ' . $class . '">' . $label . '</button></form>';
+}
+
+function chatTime(?string $utc): string {
+    $when = formatDateTime($utc);
+    return '<time title="' . $when . '">' . substr($when, -5) . '</time>';
 }
 
 /**
  * De chat van een level als HTML. Suggesties met een beoordeling (ai_evaluation_id) krijgen een vaste
  * opmaak; bij een open escalatie staat het teamantwoord naast het voorlopige oordeel, met de knoppen.
  * Heeft de AI het team al geantwoord (reply/level_up), dan is het kader alleen ter informatie.
+ * Zelfde bubbels als op team.php: het team links, docent en AI rechts.
  */
 function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string {
     $evalIds = array_filter(array_map(function ($m) { return (int)$m['ai_evaluation_id']; }, $messages));
@@ -218,16 +225,15 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
 
     $html = '';
     foreach ($messages as $m) {
-        $label = ['team' => 'Team', 'teacher' => 'Jij', 'ai' => '🤖 AI'][$m['sender']] ?? '🤖 AI-suggestie';
+        $label = ['team' => '<strong>Team</strong>', 'teacher' => '<strong>Jij</strong>', 'ai' => icon('bot') . '<strong>AI</strong>'][$m['sender']] ?? icon('bot') . '<strong>AI-suggestie</strong>';
         $e = $m['sender'] === 'suggestion' ? ($evaluations[(int)$m['ai_evaluation_id']] ?? null) : null;
         if (!$e) {
-            $html .= '<div class="message ' . htmlspecialchars($m['sender']) . '">';
-            $html .= '<small>' . $label . ' - ' . htmlspecialchars($m['created_at']) . '</small><br>';
-            $html .= '<div class="msg-body">' . nl2br(htmlspecialchars($m['message'])) . '</div>';
+            $sender = in_array($m['sender'], ['team', 'teacher', 'ai', 'suggestion'], true) ? $m['sender'] : 'teacher';
+            $html .= '<div class="bubble bubble-' . $sender . '">';
+            $html .= '<div class="bubble-meta">' . $label . chatTime($m['created_at']) . '</div>';
+            $html .= '<div>' . nl2br(htmlspecialchars($m['message'])) . '</div>';
             if ($m['sender'] === 'suggestion') {
-                $html .= '<div style="display:flex; gap:5px; margin-top:8px;">';
-                $html .= '<button class="btn btn-danger" style="padding: 2px 8px; font-size: 0.75em; background:#fff1f0;" onclick="rejectSuggestion(' . (int)$m['id'] . ')">Verwerpen</button>';
-                $html .= '</div>';
+                $html .= '<div class="bubble-actions"><button type="button" class="btn btn-sm btn-danger" onclick="rejectSuggestion(' . (int)$m['id'] . ')">' . icon('x') . 'Verwerpen</button></div>';
             }
             $html .= '</div>';
             continue;
@@ -239,52 +245,53 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
         // De reactie staat dan al als AI-bericht in de chat
         $sent = in_array($e['decision'], ['reply', 'level_up'], true);
         $reply = $sent ? '' : (string)$e['reply_text'];
-        $title = $escalation ? '🙋 Docent nodig' . ($open ? '' : ' (afgehandeld)') : ($sent ? '🤖 AI ter info (reactie al verstuurd)' : '🤖 AI-suggestie');
-        $html .= '<div class="message suggestion' . ($escalation ? ' escalation' : '') . ($sent ? ' info' : '') . '">';
-        $html .= '<small>' . $title . ' - ' . htmlspecialchars($m['created_at']) . '</small>';
+        $title = $escalation ? icon('hand') . '<strong>Docent nodig' . ($open ? '' : ' (afgehandeld)') . '</strong>'
+            : icon('bot') . '<strong>' . ($sent ? 'AI ter info (reactie al verstuurd)' : 'AI-suggestie') . '</strong>';
+        $html .= '<div class="bubble bubble-suggestion' . ($escalation ? ' bubble-escalation' : '') . ($sent ? ' bubble-info' : '') . '">';
+        $html .= '<div class="bubble-meta">' . $title . chatTime($m['created_at']) . '</div>';
         $html .= '<dl class="ai-fields">';
         $html .= '<dt>Intentie</dt><dd>' . htmlspecialchars($e['intent']) . '</dd>';
         if ($e['verdict']) {
-            $html .= '<dt>Oordeel</dt><dd><span class="verdict ' . htmlspecialchars($e['verdict']) . '">' . htmlspecialchars($e['verdict']) . '</span>'
-                . ($levelUpAdvice ? ' <strong class="levelup-advice">⬆️ level-up-advies</strong>' : '') . '</dd>';
+            $html .= '<dt>Oordeel</dt><dd><span class="badge badge-' . htmlspecialchars($e['verdict']) . '">' . htmlspecialchars($e['verdict']) . '</span>'
+                . ($levelUpAdvice ? ' <span class="badge badge-success">' . icon('arrow-up') . 'level-up-advies</span>' : '') . '</dd>';
         }
         if (trim((string)$e['reason']) !== '') {
             $html .= '<dt>Reden</dt><dd>' . nl2br(htmlspecialchars($e['reason'])) . '</dd>';
         }
         if ($reply !== '') {
-            $html .= '<dt>Voorgestelde reactie</dt><dd class="proposal">' . nl2br(htmlspecialchars($reply)) . '</dd>';
+            $html .= '<dt>Voorstel</dt><dd class="proposal">' . nl2br(htmlspecialchars($reply)) . '</dd>';
         }
         $html .= '</dl>';
 
         if ($open) {
             $answer = $teamTexts[(int)$e['message_id']] ?? null;
             $html .= '<div class="escalation-compare">';
-            $html .= '<div><strong>Antwoord van het team</strong><div class="quote">' . ($answer === null ? '<em>(bericht niet meer in deze chat)</em>' : nl2br(htmlspecialchars($answer))) . '</div></div>';
-            $html .= '<div><strong>Voorlopig oordeel van de AI</strong><div class="quote">' . htmlspecialchars($e['verdict'] ?: $e['intent']) . '</div></div>';
-            $html .= '</div><div class="ai-buttons">';
+            $html .= '<div><div class="section-label">Antwoord van het team</div><div class="quote">' . ($answer === null ? '<em>(bericht niet meer in deze chat)</em>' : nl2br(htmlspecialchars($answer))) . '</div></div>';
+            $html .= '<div><div class="section-label">Voorlopig oordeel van de AI</div><div class="quote">' . htmlspecialchars($e['verdict'] ?: $e['intent']) . '</div></div>';
+            $html .= '</div><div class="bubble-actions">';
             if ($levelUpAdvice) {
-                $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'agree_level_up'], 'Eens → level up', 'btn-success', 'Eens met de AI: dit team gaat een level omhoog?');
+                $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'agree_level_up'], icon('arrow-up') . 'Eens → level up', 'btn-success', 'Eens met de AI: dit team gaat een level omhoog?');
             }
             if ($reply !== '') {
-                $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'agree_reply'], 'Eens → reactie sturen', 'btn-primary', 'De voorgestelde reactie naar het team sturen?');
+                $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'agree_reply'], icon('send') . 'Eens → reactie sturen', 'btn-primary', 'De voorgestelde reactie naar het team sturen?');
             }
-            $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'disagree'], 'Oneens → zelf antwoorden', 'btn-outline');
-            $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'handled'], 'Afgehandeld', 'btn-outline');
+            $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'disagree'], 'Oneens → zelf antwoorden', 'btn-secondary');
+            $html .= chatButton($teamId, ['action' => 'escalation', 'evaluation_id' => $e['id'], 'choice' => 'handled'], icon('check') . 'Afgehandeld', 'btn-secondary');
             $html .= '</div>';
         } elseif ($sent) {
-            $html .= '<div class="ai-buttons">';
+            $html .= '<div class="bubble-actions">';
             if ($levelUpAdvice) {
-                $html .= chatButton($teamId, ['action' => 'level_up'], 'Level up', 'btn-success', 'Dit team een level omhoog zetten?');
+                $html .= chatButton($teamId, ['action' => 'level_up'], icon('arrow-up') . 'Level up', 'btn-success', 'Dit team een level omhoog zetten?');
             }
-            $html .= '<button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em;" onclick="rejectSuggestion(' . (int)$m['id'] . ')">Sluiten</button>';
+            $html .= '<button type="button" class="btn btn-sm btn-secondary" onclick="rejectSuggestion(' . (int)$m['id'] . ')">Sluiten</button>';
             $html .= '</div>';
         } else {
-            $html .= '<div class="ai-buttons">';
+            $html .= '<div class="bubble-actions">';
             if ($reply !== '') {
-                $html .= chatButton($teamId, ['action' => 'send_suggestion', 'evaluation_id' => $e['id']], 'Versturen', 'btn-primary', 'De voorgestelde reactie ongewijzigd naar het team sturen?');
-                $html .= '<button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75em;" data-reply="' . htmlspecialchars($reply) . '" onclick="useSuggestion(this)">Overnemen</button>';
+                $html .= chatButton($teamId, ['action' => 'send_suggestion', 'evaluation_id' => $e['id']], icon('send') . 'Versturen', 'btn-primary', 'De voorgestelde reactie ongewijzigd naar het team sturen?');
+                $html .= '<button type="button" class="btn btn-sm btn-secondary" data-reply="' . htmlspecialchars($reply) . '" onclick="useSuggestion(this)">' . icon('pencil') . 'Overnemen</button>';
             }
-            $html .= '<button class="btn btn-danger" style="padding: 2px 8px; font-size: 0.75em; background:#fff1f0;" onclick="rejectSuggestion(' . (int)$m['id'] . ')">Verwerpen</button>';
+            $html .= '<button type="button" class="btn btn-sm btn-danger" onclick="rejectSuggestion(' . (int)$m['id'] . ')">' . icon('x') . 'Verwerpen</button>';
             $html .= '</div>';
         }
         $html .= '</div>';
@@ -295,33 +302,41 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
 // Tussenstand van het huidige level (alleen voor docenten, nooit op team.php)
 function renderProgress(?array $progress, int $teamId): string {
     if (!$progress) {
-        return '<p class="muted">Nog geen tussenstand: de AI heeft op dit level nog geen antwoord beoordeeld.</p>';
+        return '<p class="muted text-sm">Nog geen tussenstand: de AI heeft op dit level nog geen antwoord beoordeeld.</p>';
     }
-    $html = $progress['summary'] !== '' ? '<p>' . nl2br(htmlspecialchars($progress['summary'])) . '</p>' : '';
+    $html = $progress['summary'] !== '' ? '<p class="text-sm">' . nl2br(htmlspecialchars($progress['summary'])) . '</p>' : '';
     if ($progress['aspects']) {
-        $html .= '<table class="progress-table"><tr><th>Aspect</th><th>Niveau</th><th>Citaat (bericht)</th></tr>';
+        $html .= '<div class="table-scroll"><table class="table table-compact progress-table"><thead><tr><th>Aspect</th><th>Niveau</th><th>Citaat</th></tr></thead><tbody>';
         foreach ($progress['aspects'] as $a) {
-            $html .= '<tr><td>' . htmlspecialchars((string)$a['naam']) . '</td><td><span class="verdict ' . htmlspecialchars((string)$a['niveau']) . '">' . htmlspecialchars((string)$a['niveau']) . '</span></td>'
-                . '<td>“' . htmlspecialchars((string)$a['bewijs']) . '” (#' . (int)$a['bericht'] . ')</td></tr>';
+            $html .= '<tr><td>' . htmlspecialchars((string)$a['naam']) . '</td><td><span class="badge badge-' . htmlspecialchars((string)$a['niveau']) . '">' . htmlspecialchars((string)$a['niveau']) . '</span></td>'
+                . '<td>“' . htmlspecialchars((string)$a['bewijs']) . '” <span class="muted">(#' . (int)$a['bericht'] . ')</span></td></tr>';
         }
-        $html .= '</table>';
+        $html .= '</tbody></table></div>';
     }
-    $html .= '<div style="margin-top: 8px;">' . chatButton($teamId, ['action' => 'clear_progress'], '🧹 Wissen', 'btn-danger', 'De AI-tussenstand van dit level wissen? De AI begint dan opnieuw met de hele chat.') . '</div>';
+    $html .= '<div class="card-actions">' . chatButton($teamId, ['action' => 'clear_progress'], icon('eraser') . 'Tussenstand wissen', 'btn-danger', 'De AI-tussenstand van dit level wissen? De AI begint dan opnieuw met de hele chat.') . '</div>';
     return $html;
 }
 
 function renderSidebar(array $teams, ?int $selectedId, array $escalations): string {
+    if (!$teams) {
+        return '<p class="muted text-sm team-list-empty">Nog geen berichten van teams.</p>';
+    }
     $html = '';
     foreach ($teams as $t) {
-        $html .= '<a href="?team_id=' . (int)$t['id'] . '" class="team-item ' . ($selectedId == $t['id'] ? 'active' : '') . '">';
-        $html .= '<strong>' . htmlspecialchars($t['team_name']) . '</strong>';
+        $name = (string)$t['team_name'];
+        $lower = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+        $active = $selectedId == $t['id'];
+        $html .= '<a href="?team_id=' . (int)$t['id'] . '" class="team-item' . ($active ? ' active' : '') . '" data-name="' . htmlspecialchars($lower) . '"' . ($active ? ' aria-current="page"' : '') . '>';
+        $html .= '<span class="team-item-name">' . htmlspecialchars($name) . '</span>';
+        $html .= '<span class="team-item-badges">';
         if ($t['unread_count'] > 0) {
-            $html .= ' <span style="background:red; color:white; padding:1px 5px; border-radius:10px; font-size:0.7em;">' . (int)$t['unread_count'] . '</span>';
+            $html .= '<span class="count" title="Ongelezen berichten">' . (int)$t['unread_count'] . '<span class="sr-only"> ongelezen</span></span>';
         }
         if (isset($escalations[(int)$t['id']])) {
-            $html .= ' <span class="needs-teacher">🙋 Docent nodig</span>';
+            $html .= '<span class="count count-warning" title="Docent nodig">' . icon('hand') . '<span class="sr-only">Docent nodig</span></span>';
         }
-        $html .= '<br><small>Level: ' . (int)$t['current_level'] . '</small>';
+        $html .= '</span>';
+        $html .= '<span class="team-item-level">Level ' . (int)$t['current_level'] . '</span>';
         $html .= '</a>';
     }
     return $html;
@@ -335,9 +350,7 @@ if (isset($_GET['ajax'])) {
            ->execute([$selected_team_id, $selected_team['current_level']]);
 
         if (!empty($other_teachers)) {
-            echo '<div style="background: #fff9c4; color: #827717; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85em; border: 1px solid #fbc02d;">';
-            echo '⚠️ <strong>Let op:</strong> ' . htmlspecialchars(implode(', ', $other_teachers)) . ' bekijkt deze chat op dit moment ook.';
-            echo '</div>';
+            echo alertBox('warning', '<strong>Let op:</strong> ' . htmlspecialchars(implode(', ', $other_teachers)) . ' bekijkt deze chat op dit moment ook.');
         }
         // Haal de berichten OPNIEUW op binnen de AJAX call voor de meest verse data
         echo renderChat($db, chatMessages($db, $selected_team_id, (int)$selected_team['current_level']), $gameId, $selected_team_id);
@@ -350,209 +363,265 @@ if (isset($_GET['ajax'])) {
 }
 
 $pageTitle = 'Berichten';
+$mainClass = 'is-app';
 $extraCSS = '
 <style>
-    .main-content { display: flex; flex-direction: column; height: 100vh; overflow: hidden; padding: 0 !important; }
-    .test-mode-banner { padding: 15px 40px 0 40px; flex-shrink: 0; }
-    .messages-layout-wrapper { display: flex; flex: 1; overflow: hidden; width: 100%; }
-    .team-list-panel { width: 300px; background: white; border-right: 1px solid #ddd; overflow-y: auto; display: flex; flex-direction: column; }
-    .team-list-header { padding: 20px; border-bottom: 1px solid #eee; font-weight: bold; }
-    .chat-area { flex: 1; padding: 40px; display: flex; flex-direction: column; overflow-y: auto; }
-    .team-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; text-decoration: none; color: #333; display: block; }
-    .team-item:hover, .team-item.active { background: #f0f4ff; }
-    .needs-teacher { background: #fff3e0; color: #e65100; padding: 1px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold; white-space: nowrap; }
-    .chat-window { background: white; border-radius: 10px; padding: 20px; flex: 1; display: flex; flex-direction: column; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .messages-box { flex: 1; height: 500px; overflow-y: auto; margin-bottom: 20px; padding: 10px; display: flex; flex-direction: column; min-height: 0; position: relative; z-index: 1; }
-    /* Logo van het spel als vast watermerk achter de berichten */
-    .chat-watermark { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .chat-watermark::before { content: ""; position: absolute; inset: 10%; background: var(--logo) center / contain no-repeat; opacity: 0.08; pointer-events: none; }
-    .btn[disabled] { opacity: 0.35; cursor: not-allowed; }
-    .message { margin-bottom: 15px; padding: 12px; border-radius: 10px; max-width: 75%; font-size: 0.95em; line-height: 1.4; }
-    .message.team { background: #e3f2fd; align-self: flex-start; }
-    .message.teacher { background: #f1f8e9; align-self: flex-end; margin-left: auto; }
-    .message.ai { background: #e0f2f1; border-left: 4px solid #00897b; align-self: flex-end; margin-left: auto; }
-    .message.ai small { color: #00695c; font-weight: bold; }
-    .message.suggestion { background: #f3e5f5; border: 1px dashed #9c27b0; align-self: flex-start; color: #4a148c; }
-    .message.suggestion.escalation { background: #fff3e0; border: 2px solid #ff9800; color: #5d4037; }
-    .message.suggestion.info { background: #f5f5f5; border: 1px dashed #9e9e9e; color: #424242; }
-    .ai-fields { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 8px 0; font-size: 0.92em; }
-    .ai-fields dt { font-weight: bold; }
-    .ai-fields dd { margin: 0; }
-    .ai-fields .proposal { background: rgba(255,255,255,0.7); padding: 6px 8px; border-radius: 6px; }
-    .verdict { padding: 1px 7px; border-radius: 8px; font-size: 0.85em; font-weight: bold; color: white; background: #999; }
-    .verdict.onvoldoende { background: #e53935; }
-    .verdict.voldoende { background: #fb8c00; }
-    .verdict.goed { background: #43a047; }
-    .levelup-advice { color: #2e7d32; }
-    .escalation-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; font-size: 0.9em; }
-    .escalation-compare .quote { background: white; border-radius: 6px; padding: 6px 8px; margin-top: 3px; }
-    .ai-buttons { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
-    .ai-progress { background: white; border-radius: 10px; padding: 12px 20px; margin-bottom: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); font-size: 0.9em; }
-    .ai-progress summary { cursor: pointer; font-weight: bold; color: #6a1b9a; }
-    .progress-table { margin-top: 8px; font-size: 0.9em; }
-    .progress-table th, .progress-table td { padding: 5px 8px; }
-    .muted { color: #999; }
-
-    .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); overflow-y: auto; }
-    .modal-content { background-color: white; margin: 5% auto; padding: 30px; border-radius: 15px; width: 70%; max-width: 800px; box-shadow: 0 5px 30px rgba(0,0,0,0.3); position: relative; }
-    .close-modal { position: absolute; top: 20px; right: 25px; font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; transition: 0.2s; }
-    .close-modal:hover { color: #333; }
-    .modal-section-title { font-weight: bold; color: #667eea; border-bottom: 2px solid #f0f4ff; padding-bottom: 5px; margin-top: 20px; margin-bottom: 10px; }
-
-    /* Markdown Styling binnen Modal */
-    .markdown-body { font-size: 1rem; line-height: 1.6; color: #4b4f56; }
-    .markdown-body h1 { font-size: 1.4em; margin: 15px 0 10px 0; color: #333; }
-    .markdown-body h2 { font-size: 1.25em; margin: 12px 0 8px 0; color: #333; }
-    .markdown-body h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #333; }
-    .markdown-body p { margin-bottom: 12px; }
-    .markdown-body ul, .markdown-body ol { margin-left: 20px; margin-bottom: 15px; }
-    .markdown-body li { margin-bottom: 5px; }
-    .markdown-body code { background: #f0f2f5; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; }
-    .markdown-body pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 8px; overflow-x: auto; margin-bottom: 15px; }
-    .markdown-body pre code { background: transparent; padding: 0; color: inherit; font-size: 0.85em; }
+    .msg-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr) 340px; }
+    .msg-layout.no-team { grid-template-columns: 280px minmax(0, 1fr); }
+    .msg-teams { grid-column: 1; grid-row: 1; }
+    .msg-chat { grid-column: 2; grid-row: 1; }
+    .msg-ai { grid-column: 3; grid-row: 1; }
+    /* Teamlijst */
+    .msg-teams { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--line); }
+    .msg-teams-head { padding: 18px 16px 12px; border-bottom: 1px solid var(--line); }
+    .msg-teams-head h1 { font-size: 18px; margin-bottom: 10px; }
+    .search { position: relative; }
+    .search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted); pointer-events: none; }
+    .search input { padding-left: 34px; }
+    .msg-team-list { flex: 1; overflow-y: auto; padding: 6px; }
+    .team-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 10px 12px; border-radius: var(--radius-sm); color: var(--text); text-decoration: none; }
+    .team-item:hover { background: var(--surface-2); color: var(--text); }
+    .team-item.active { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+    .team-item-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .team-item-badges { display: inline-flex; gap: 4px; justify-self: end; }
+    .team-item-badges .icon { width: 12px; height: 12px; }
+    .team-item-level { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+    .team-list-empty { padding: 14px; }
+    /* Chat */
+    .msg-chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    .msg-chat-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .msg-chat-head h1 { font-size: 20px; }
+    .msg-chat-head .page-subtitle { margin-top: 2px; }
+    .msg-chat > .alert { margin: 12px 24px 0; }
+    .chat-watermark { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .chat-watermark::before { content: ""; position: absolute; inset: 12%; background: var(--logo) center / contain no-repeat; opacity: .06; pointer-events: none; }
+    @media (prefers-color-scheme: dark) { .chat-watermark::before { filter: grayscale(1) invert(1); } }
+    .msg-scroll { position: relative; z-index: 1; flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; }
+    .msg-reply { padding: 14px 24px 18px; border-top: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+    .msg-reply textarea { min-height: 72px; }
+    .msg-reply-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .ai-fields { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0; font-size: 14px; }
+    .ai-fields dt { font-weight: 600; color: var(--text-muted); }
+    .ai-fields dd { margin: 0; min-width: 0; }
+    .ai-fields .proposal { background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; border-radius: var(--radius-sm); }
+    .escalation-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 4px; font-size: 14px; }
+    .escalation-compare .section-label { margin: 0 0 4px; }
+    .escalation-compare .quote { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; }
+    .chat > .alert { margin-bottom: 0; }
+    /* AI-paneel */
+    .msg-ai { background: var(--surface); border-left: 1px solid var(--line); overflow-y: auto; min-height: 0; }
+    .msg-ai > summary { display: none; }
+    .msg-ai-inner { padding: 20px; display: flex; flex-direction: column; gap: 22px; }
+    .msg-ai h2 { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .msg-ai h2 .icon { width: 15px; height: 15px; }
+    .msg-ai .alert { margin-bottom: 0; }
+    .progress-table td { font-size: 13px; }
+    @media (max-width: 1400px) {
+        .msg-layout { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+        .msg-teams { grid-row: 1 / 3; }
+        .msg-layout.no-team .msg-chat { grid-row: 1 / 3; }
+        .msg-ai { grid-column: 2; grid-row: 1; border-left: none; border-bottom: 1px solid var(--line); max-height: 34vh; }
+        .msg-ai > summary { display: flex; align-items: center; gap: 8px; padding: 10px 24px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        .msg-ai-inner { padding: 4px 24px 18px; }
+        .msg-ai > summary .chev { margin-left: auto; transition: transform var(--t-fast); }
+        .msg-ai[open] > summary .chev { transform: rotate(180deg); }
+        .msg-chat { grid-column: 2; grid-row: 2; }
+    }
+    @media (max-width: 999px) {
+        .msg-layout, .msg-layout.no-team { display: flex; flex-direction: column; }
+        .msg-teams { border-right: none; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; }
+        .msg-team-list { max-height: 220px; }
+        .msg-ai { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; max-height: none; }
+        .msg-chat { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+        .msg-scroll { max-height: 65vh; min-height: 300px; }
+        .escalation-compare { grid-template-columns: 1fr; }
+    }
 </style>';
 
 $chatHtml = $selected_team ? renderChat($db, $chat_messages, $gameId, $selected_team_id) : '';
+$selectedLevel = $selected_team ? (int)$selected_team['current_level'] : 0;
+$hasOpenEscalation = $selected_team && isset($escalations[$selected_team_id]);
 include 'admin_header.php';
 ?>
-    <?php if (defined('ENABLE_EMAIL') && ENABLE_EMAIL === false): ?>
-        <div class="test-mode-banner"></div> <!-- CSS zorgt voor de correcte uitlijning van de banner uit de header -->
-    <?php endif; ?>
+    <div class="msg-layout<?= $selected_team ? '' : ' no-team' ?>">
+        <aside class="msg-teams" aria-label="Teams">
+            <div class="msg-teams-head">
+                <h1>Berichten</h1>
+                <div class="search">
+                    <?= icon('search') ?>
+                    <input type="search" id="team-search" placeholder="Zoek een team…" aria-label="Zoek een team" autocomplete="off">
+                </div>
+            </div>
+            <nav class="msg-team-list" id="sidebar-list"><?= renderSidebar($teams_with_msgs, $selected_team_id, $escalations) ?></nav>
+        </aside>
 
-    <div class="messages-layout-wrapper">
-        <div class="team-list-panel" id="sidebar-list">
-            <div class="team-list-header">Teams</div>
-            <?= renderSidebar($teams_with_msgs, $selected_team_id, $escalations) ?>
-        </div>
+        <?php if ($selected_team): ?>
+        <details class="msg-ai" open>
+            <summary><?= icon('bot') ?>AI-paneel<?= $hasOpenEscalation ? ' <span class="badge badge-warning">' . icon('hand') . 'Docent nodig</span>' : '' ?><?= icon('chevron-down', 'chev') ?></summary>
+            <div class="msg-ai-inner">
+                <section>
+                    <h2><?= icon('bot') ?>AI-modus</h2>
+                    <p><?= aiModeBadge($selected_team['ai_mode'] ?: 'suggest') ?></p>
+                    <p class="small muted" style="margin-top: 6px;">Wijzigen doe je op het <a href="teacher.php">dashboard</a>.</p>
+                </section>
+                <?php if ($hasOpenEscalation): ?>
+                    <?= alertBox('warning', '<strong>Docent nodig.</strong> De AI wacht op jou: gebruik de knoppen bij de melding in de chat, of antwoord het team zelf.') ?>
+                <?php endif; ?>
+                <section>
+                    <h2><?= icon('trending-up') ?>Tussenstand van dit level</h2>
+                    <div id="ai-progress"><?= renderProgress(getTeamProgress($db, $selected_team_id, $selectedLevel), $selected_team_id) ?></div>
+                </section>
+                <?php if ($assignment): ?>
+                    <section>
+                        <h2><?= icon('book') ?>Opdracht <?= (int)$assignment['assignment_number'] ?></h2>
+                        <p class="text-sm"><strong><?= htmlspecialchars($assignment['title']) ?></strong></p>
+                        <p style="margin-top: 6px;"><?= rubricStatusBadge($assignment['ai_rubric_status'] ?: 'none') ?></p>
+                        <div class="card-actions"><button type="button" class="btn btn-secondary btn-sm" data-open="assignment-dialog"><?= icon('eye') ?>Opdracht bekijken</button></div>
+                    </section>
+                <?php endif; ?>
+            </div>
+        </details>
+        <?php endif; ?>
 
-        <div class="chat-area">
+        <section class="msg-chat">
             <?php if ($selected_team): ?>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h1 style="margin-bottom: 0;">Chat met <?= htmlspecialchars($selected_team['team_name']) ?> (Level <?= levelLabel((int)$selected_team['current_level'], $total_assignments) ?>)
-                        <span style="font-size: 0.45em; color: #888; font-weight: normal; vertical-align: middle;">🤖 <?= htmlspecialchars(aiModeLabel($selected_team['ai_mode'] ?: 'suggest')) ?></span>
-                    </h1>
-                    <div style="display: flex; gap: 10px;">
+                <header class="msg-chat-head">
+                    <div>
+                        <h1><?= htmlspecialchars($selected_team['team_name']) ?></h1>
+                        <div class="page-subtitle">
+                            <span class="mono">Level <?= htmlspecialchars(levelLabel($selectedLevel, $total_assignments)) ?><?= $selectedLevel >= 1 && $selectedLevel <= $total_assignments ? '/' . $total_assignments : '' ?></span>
+                            <?= aiModeBadge($selected_team['ai_mode'] ?: 'suggest') ?>
+                        </div>
+                    </div>
+                    <div class="btn-row">
                         <?php if ($assignment): ?>
-                            <button class="btn btn-outline" onclick="openAssignmentModal()">📄 Opdracht</button>
+                            <button type="button" class="btn btn-secondary" data-open="assignment-dialog"><?= icon('book') ?>Opdracht</button>
                         <?php endif; ?>
-                        <form method="POST" onsubmit="return confirm('Team een level terugzetten? Het gesprek van het vorige level komt terug en de archiefregel van dat level verdwijnt.');" style="margin:0;">
+                        <form method="POST" class="inline" onsubmit="return confirm('Team een level terugzetten? Het gesprek van het vorige level komt terug en de archiefregel van dat level verdwijnt.');">
                             <?= csrfField() ?>
                             <input type="hidden" name="action" value="level_down">
-                            <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
-                            <button type="submit" class="btn btn-outline" style="margin-top: 0; padding: 8px 16px;" title="Level terug" <?= (int)$selected_team['current_level'] <= 1 ? 'disabled' : '' ?>>⬇️</button>
+                            <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
+                            <button type="submit" class="btn btn-secondary btn-icon" title="Level terug" aria-label="Level terug" <?= $selectedLevel <= 1 ? 'disabled' : '' ?>><?= icon('arrow-down') ?></button>
                         </form>
                         <?php if ($assignment): ?>
-                            <form method="POST" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');" style="margin:0;">
+                            <form method="POST" class="inline" onsubmit="return confirm('Weet je zeker dat dit team een level omhoog mag?');">
                                 <?= csrfField() ?>
                                 <input type="hidden" name="action" value="level_up">
-                                <input type="hidden" name="team_id" value="<?= $selected_team['id'] ?>">
-                                <button type="submit" class="btn btn-success" style="margin-top: 0; padding: 8px 16px;">🚀 Level Up!</button>
+                                <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
+                                <button type="submit" class="btn btn-success"><?= icon('arrow-up') ?>Level up</button>
                             </form>
                         <?php endif; ?>
                     </div>
-                </div>
-
-                <?php if ($assignment): ?>
-                    <div id="assignmentModal" class="modal">
-                        <div class="modal-content">
-                            <span class="close-modal" onclick="closeAssignmentModal()">&times;</span>
-                            <h2 style="color: #333; margin-bottom: 20px;">Opdracht Details: <?= htmlspecialchars($assignment['title']) ?></h2>
-
-                            <div class="modal-section-title">Beschrijving</div>
-                            <div class="markdown-body"><?= htmlspecialchars($assignment['description']) ?></div>
-
-                            <?php if (!empty($assignment['instruction'])): ?>
-                                <div class="modal-section-title">📍 Instructie</div>
-                                <div class="markdown-body" style="background: #f8f9fa; padding: 15px; border-radius: 8px;"><?= htmlspecialchars($assignment['instruction']) ?></div>
-                            <?php endif; ?>
-
-                            <?php if (!empty($assignment['criteria'])): ?>
-                                <div class="modal-section-title">📋 Beoordelingscriteria</div>
-                                <div class="markdown-body" style="color: #d32f2f; background: #fff1f0; padding: 15px; border-radius: 8px;"><?= htmlspecialchars($assignment['criteria']) ?></div>
-                            <?php endif; ?>
-
-                            <?php if (!empty($assignment['artifact_file'])): ?>
-                                <div class="modal-section-title">📁 Bijlage</div>
-                                <div style="background: #f0f4ff; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 0.9em; color: #444;">Er is een bestand gekoppeld aan deze opdracht.</span>
-                                    <a href="<?= htmlspecialchars($assignment['artifact_file']) ?>" target="_blank" class="btn btn-outline" style="padding: 6px 15px; font-size: 0.85em; background: white; text-decoration: none;">⬇️ Download Bestand</a>
-                                </div>
-                            <?php endif; ?>
-
-                            <div style="margin-top: 30px; text-align: right;">
-                                <button class="btn btn-primary" onclick="closeAssignmentModal()">Sluiten</button>
-                            </div>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
+                </header>
                 <?= renderFlash() ?>
-                <details class="ai-progress">
-                    <summary>🧠 AI-tussenstand van dit level</summary>
-                    <div id="ai-progress"><?= renderProgress(getTeamProgress($db, $selected_team_id, (int)$selected_team['current_level']), $selected_team_id) ?></div>
-                </details>
-                <div class="chat-window">
-                    <div class="chat-watermark"<?= $logo ? ' style="--logo: url(\'' . htmlspecialchars($logo) . '\')"' : '' ?>>
-                    <div class="messages-box" id="chat-box"><?= $chatHtml ?></div>
+                <div class="chat-watermark"<?= $logo ? ' style="--logo: url(\'' . htmlspecialchars($logo) . '\')"' : '' ?>>
+                    <div class="msg-scroll" id="chat-scroll">
+                        <div class="chat" id="chat-box"><?= $chatHtml ?></div>
                     </div>
-                    <form method="POST">
-                        <?= csrfField() ?>
-                        <input type="hidden" name="action" value="reply">
-                        <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
-                        <textarea id="teacher-reply-box" name="message" rows="3" placeholder="Type je reactie..." required></textarea>
-                        <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Verstuur Antwoord</button>
-                    </form>
                 </div>
+                <form method="POST" class="msg-reply" id="reply-form">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="reply">
+                    <input type="hidden" name="team_id" value="<?= $selected_team_id ?>">
+                    <label for="teacher-reply-box" class="sr-only">Je reactie</label>
+                    <textarea id="teacher-reply-box" name="message" rows="3" placeholder="Typ je reactie…" required></textarea>
+                    <div class="msg-reply-foot">
+                        <span class="small muted"><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> om te versturen</span>
+                        <button type="submit" class="btn btn-primary" id="reply-send"><?= icon('send') ?>Versturen</button>
+                    </div>
+                </form>
             <?php else: ?>
                 <?= renderFlash() ?>
-                <div style="flex: 1; display: flex; align-items: center; justify-content: center; color: #888;">
-                    <h2>Selecteer een team om de chat te openen</h2>
-                </div>
+                <?= emptyState('message', 'Kies links een team om de chat te openen.') ?>
             <?php endif; ?>
-        </div>
+        </section>
     </div>
+
+    <?php if ($assignment): ?>
+        <dialog class="modal" id="assignment-dialog" aria-labelledby="assignment-dialog-title">
+            <div class="modal-header">
+                <h2 id="assignment-dialog-title">Opdracht <?= (int)$assignment['assignment_number'] ?>: <?= htmlspecialchars($assignment['title']) ?></h2>
+                <button type="button" class="btn btn-ghost btn-icon" data-close aria-label="Sluiten"><?= icon('x') ?></button>
+            </div>
+            <div class="modal-body">
+                <div class="section-label">Beschrijving</div>
+                <div class="markdown" data-md><?= htmlspecialchars((string)$assignment['description']) ?></div>
+                <?php if (!empty($assignment['instruction'])): ?>
+                    <div class="section-label">Instructie</div>
+                    <div class="panel markdown" data-md><?= htmlspecialchars($assignment['instruction']) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($assignment['criteria'])): ?>
+                    <div class="section-label">Beoordelingscriteria (alleen voor docenten)</div>
+                    <div class="panel panel-danger markdown" data-md><?= htmlspecialchars($assignment['criteria']) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($assignment['artifact_file'])): ?>
+                    <div class="section-label">Bijlage</div>
+                    <div class="panel btn-row" style="justify-content: space-between;">
+                        <span class="text-sm">Er is een bestand gekoppeld aan deze opdracht.</span>
+                        <a href="<?= htmlspecialchars($assignment['artifact_file']) ?>" target="_blank" class="btn btn-secondary btn-sm"><?= icon('download') ?>Bestand downloaden</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-primary" data-close>Sluiten</button></div>
+        </dialog>
+    <?php endif; ?>
 
 <?php
 $extraJS = "
     <script>
         function scrollToBottom() {
-            const chatBox = document.getElementById('chat-box');
-            if (chatBox) {
-                setTimeout(() => {
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                }, 50);
-            }
+            const scroller = document.getElementById('chat-scroll');
+            if (scroller) setTimeout(() => { scroller.scrollTop = scroller.scrollHeight; }, 50);
         }
+        // Teamlijst filteren op naam (ook na het verversen van de lijst)
+        function filterTeams() {
+            const q = (document.getElementById('team-search').value || '').trim().toLowerCase();
+            document.querySelectorAll('#sidebar-list .team-item').forEach(a => { a.hidden = q !== '' && !a.dataset.name.includes(q); });
+        }
+        document.getElementById('team-search').addEventListener('input', filterTeams);
+
         let lastChatHtml = " . json_encode($chatHtml, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ";
         function updateChat() {
             " . ($selected_team_id ? "
             fetch('messages.php?team_id=$selected_team_id&ajax=chat')
-                .then(r => r.text()).then(html => {
+                .then(r => r.ok ? r.text() : null).then(html => {
                     // Vergelijk met het vorige antwoord: innerHTML schrijft entiteiten soms anders terug
-                    const cb = document.getElementById('chat-box');
+                    if (html === null) return;
                     if (html !== lastChatHtml) {
-                        cb.innerHTML = html;
+                        document.getElementById('chat-box').innerHTML = html;
                         scrollToBottom();
                         lastChatHtml = html;
                     }
                 });
             fetch('messages.php?team_id=$selected_team_id&ajax=progress')
-                .then(r => r.text()).then(html => {
+                .then(r => r.ok ? r.text() : null).then(html => {
                     const p = document.getElementById('ai-progress');
-                    if (p && p.innerHTML !== html) p.innerHTML = html;
+                    if (p && html !== null && p.innerHTML !== html) p.innerHTML = html;
                 });
             " : "") . "
 
             const teamId = " . ($selected_team_id ?: '0') . ";
             fetch('messages.php?ajax=sidebar' + (teamId ? '&team_id=' + teamId : ''))
-                .then(r => r.text()).then(html => {
+                .then(r => r.ok ? r.text() : null).then(html => {
                     const sl = document.getElementById('sidebar-list');
-                    if (sl) sl.innerHTML = '<div class=\"team-list-header\">Teams</div>' + html;
+                    if (sl && html !== null) { sl.innerHTML = html; filterTeams(); }
                 });
         }
         setInterval(updateChat, 5000);
+        // Op een smaller scherm begint het AI-paneel ingeklapt, zodat de chat de ruimte heeft
+        const aiPanel = document.querySelector('.msg-ai');
+        if (aiPanel && window.matchMedia('(max-width: 1400px)').matches) aiPanel.open = false;
         scrollToBottom();
         " . (isset($_GET['focus']) && $_GET['focus'] === 'reply' ? "document.getElementById('teacher-reply-box')?.focus();" : '') . "
+
+        // Versturen met Ctrl/⌘+Enter; de knop uit tijdens het versturen
+        const replyForm = document.getElementById('reply-form');
+        if (replyForm) {
+            document.getElementById('teacher-reply-box').addEventListener('keydown', e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); replyForm.requestSubmit(); }
+            });
+            replyForm.addEventListener('submit', () => { document.getElementById('reply-send').disabled = true; });
+        }
 
         // De voorgestelde reactie komt uit de beoordeling (data-reply), niet uit de tekst van de suggestie
         function useSuggestion(btn) {
@@ -564,7 +633,7 @@ $extraJS = "
         }
 
         function rejectSuggestion(id) {
-            if (!confirm('Weet je zeker dat je deze AI suggestie wilt verwijderen?')) return;
+            if (!confirm('Weet je zeker dat je deze AI-suggestie wilt verwijderen?')) return;
             const form = document.createElement('form');
             form.method = 'POST';
             form.innerHTML = `
@@ -574,33 +643,6 @@ $extraJS = "
             `;
             document.body.appendChild(form);
             form.submit();
-        }
-
-        function openAssignmentModal() {
-            document.getElementById('assignmentModal').style.display = 'block';
-            renderModalMarkdown();
-        }
-
-        function closeAssignmentModal() {
-            document.getElementById('assignmentModal').style.display = 'none';
-        }
-
-        // Sluit modal als je buiten de content klikt
-        window.onclick = function(event) {
-            const modal = document.getElementById('assignmentModal');
-            if (event.target == modal) {
-                closeAssignmentModal();
-            }
-        }
-
-        function renderModalMarkdown() {
-            marked.setOptions({ breaks: true });
-            document.querySelectorAll('.markdown-body').forEach(el => {
-                if (el.getAttribute('data-rendered') !== 'true') {
-                    el.innerHTML = marked.parse(el.textContent.trim());
-                    el.setAttribute('data-rendered', 'true');
-                }
-            });
         }
     </script>";
 include 'admin_footer.php'; ?>

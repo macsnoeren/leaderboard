@@ -44,7 +44,6 @@ const RUBRIC_TEXT_MAX_LENGTH = 2000;
 const RUBRIC_NAME_MAX_LENGTH = 100;
 const RUBRIC_DEFAULT_RULE = 'voldoende = alle verplichte aspecten minimaal voldoende; goed = alle aspecten goed';
 const RUBRIC_STATUS_LABELS = ['none' => 'Geen rubric', 'draft' => 'Concept', 'approved' => 'AI-klaar ✓'];
-const RUBRIC_STATUS_COLORS = ['none' => '#999', 'draft' => '#ff9800', 'approved' => '#4caf50'];
 
 // ---------------------------------------------------------------------------
 // AI-modus per team en per spel
@@ -56,6 +55,12 @@ function isValidAiMode($mode): bool {
 
 function aiModeLabel(string $mode): string {
     return AI_MODE_LABELS[$mode] ?? $mode;
+}
+
+function aiModeBadge(string $mode): string {
+    $class = ['off' => '', 'suggest' => ' badge-info', 'reply' => ' badge-brand', 'auto' => ' badge-success'][$mode] ?? '';
+    return '<span class="badge' . $class . '" title="' . htmlspecialchars(AI_MODE_DESCRIPTIONS[$mode] ?? '') . '">' . icon('bot')
+        . 'AI: ' . htmlspecialchars(aiModeLabel($mode)) . '</span>';
 }
 
 /**
@@ -112,9 +117,8 @@ function updateGameAiSettings(PDO $db, int $gameId, string $mode, int $maxAttemp
 // ---------------------------------------------------------------------------
 
 function rubricStatusBadge(string $status): string {
-    $color = RUBRIC_STATUS_COLORS[$status] ?? '#999';
-    return '<span class="rubric-badge" style="display:inline-block; color:white; padding:2px 8px; border-radius:10px; font-size:0.75em; white-space:nowrap; background:' . $color . ';">'
-        . htmlspecialchars(RUBRIC_STATUS_LABELS[$status] ?? $status) . '</span>';
+    $class = ['none' => '', 'draft' => ' badge-warning', 'approved' => ' badge-success'][$status] ?? '';
+    return '<span class="badge rubric-badge' . $class . '">' . htmlspecialchars(RUBRIC_STATUS_LABELS[$status] ?? $status) . '</span>';
 }
 
 function textLength(string $text): int {

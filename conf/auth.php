@@ -8,6 +8,7 @@
  */
 
 require_once __DIR__ . '/totp.php';
+require_once __DIR__ . '/theme.php';
 
 const PASSWORD_MIN_LENGTH = 8;
 const INVITE_TTL_MINUTES = 72 * 60;
@@ -159,20 +160,28 @@ function flash(string $type, string $message, ?string $link = null): void {
 function renderFlash(): string {
     $html = '';
     if (isset($_SESSION['success'])) {
-        $html .= '<div class="success">' . htmlspecialchars($_SESSION['success']) . '</div>';
+        $html .= alertBox('success', htmlspecialchars($_SESSION['success']));
     }
     if (isset($_SESSION['error'])) {
-        $html .= '<div class="error-msg">' . htmlspecialchars($_SESSION['error']) . '</div>';
+        $html .= alertBox('error', htmlspecialchars($_SESSION['error']));
     }
     if (isset($_SESSION['flash_link'])) {
         $link = htmlspecialchars($_SESSION['flash_link']);
-        $html .= '<div class="card" style="display:flex; gap:10px; align-items:center;">'
-            . '<input type="text" readonly value="' . $link . '" onclick="this.select()" style="flex:1; font-family:monospace;">'
-            . '<button type="button" class="btn btn-outline" onclick="navigator.clipboard.writeText(this.previousElementSibling.value); this.innerText=\'Gekopieerd\';">Kopiëren</button>'
-            . '</div>';
+        $html .= alertBox('info', 'Kopieer deze link en geef hem zelf door:'
+            . '<div class="copy-field"><input type="text" readonly value="' . $link . '" onclick="this.select()" aria-label="Link">'
+            . '<button type="button" class="btn btn-secondary" data-copy="' . $link . '">' . icon('copy') . '<span class="copy-label">Kopiëren</span></button></div>');
     }
     unset($_SESSION['success'], $_SESSION['error'], $_SESSION['flash_link']);
     return $html;
+}
+
+/**
+ * Melding (.alert) met icoon. $html wordt niet ge-escaped.
+ */
+function alertBox(string $type, string $html): string {
+    $icons = ['success' => 'check-circle', 'error' => 'alert-circle', 'warning' => 'alert', 'info' => 'info'];
+    $role = $type === 'error' ? 'alert' : 'status';
+    return '<div class="alert alert-' . $type . '" role="' . $role . '">' . icon($icons[$type] ?? 'info') . '<div>' . $html . '</div></div>';
 }
 
 // ---------------------------------------------------------------------------

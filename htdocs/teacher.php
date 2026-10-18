@@ -147,190 +147,209 @@ $escalations = openEscalationsByTeam($db, $gameId);
 function aiModeSelect(string $current, bool $submitOnChange): string {
     $html = '<select name="ai_mode" class="ai-mode-select"' . ($submitOnChange ? ' onchange="this.form.submit()"' : '') . ' aria-label="AI-modus">';
     foreach (AI_MODES as $mode) {
-        $html .= '<option value="' . $mode . '"' . ($mode === $current ? ' selected' : '') . ' title="' . htmlspecialchars(AI_MODE_DESCRIPTIONS[$mode]) . '">🤖 ' . htmlspecialchars(aiModeLabel($mode)) . '</option>';
+        $html .= '<option value="' . $mode . '"' . ($mode === $current ? ' selected' : '') . ' title="' . htmlspecialchars(AI_MODE_DESCRIPTIONS[$mode]) . '">' . htmlspecialchars(aiModeLabel($mode)) . '</option>';
     }
     return $html . '</select>';
 }
 
-// Knop in een eigen POST-formulier met CSRF-token
-function teamButton(string $action, int $teamId, string $label, string $class, string $title, bool $disabled = false, ?string $confirm = null): string {
+// Iconknop in een eigen POST-formulier met CSRF-token
+function teamButton(string $action, int $teamId, string $iconName, string $class, string $title, bool $disabled = false, ?string $confirm = null): string {
     $onsubmit = $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '';
-    return '<form method="POST" style="display: inline;"' . $onsubmit . '>' . csrfField()
+    return '<form method="POST" class="inline"' . $onsubmit . '>' . csrfField()
         . '<input type="hidden" name="action" value="' . $action . '">'
         . '<input type="hidden" name="team_id" value="' . $teamId . '">'
-        . '<button type="submit" class="btn ' . $class . '" style="padding: 6px 12px; border-radius: 6px;" title="' . htmlspecialchars($title) . '"' . ($disabled ? ' disabled' : '') . '>' . $label . '</button>'
+        . '<button type="submit" class="btn btn-sm btn-icon ' . $class . '" title="' . htmlspecialchars($title) . '" aria-label="' . htmlspecialchars($title) . '"' . ($disabled ? ' disabled' : '') . '>' . icon($iconName) . '</button>'
         . '</form>';
 }
 
+// Regel in het ⋯-menu als POST-formulier
+function teamMenuItem(string $action, int $teamId, string $iconName, string $label, ?string $confirm = null, bool $danger = false): string {
+    $onsubmit = $confirm ? ' onsubmit="return confirm(' . htmlspecialchars(json_encode($confirm)) . ');"' : '';
+    return '<form method="POST"' . $onsubmit . '>' . csrfField()
+        . '<input type="hidden" name="action" value="' . $action . '">'
+        . '<input type="hidden" name="team_id" value="' . $teamId . '">'
+        . '<button type="submit" class="menu-item' . ($danger ? ' is-danger' : '') . '" role="menuitem">' . icon($iconName) . htmlspecialchars($label) . '</button>'
+        . '</form>';
+}
+
+$escalationCount = count($escalations);
 $pageTitle = 'Dashboard';
 $extraCSS = '<style>
-    .disabled-btn { opacity: 0.4; pointer-events: none; }
-    .btn[disabled] { opacity: 0.35; cursor: not-allowed; }
-    .stats-overview { grid-template-columns: repeat(4, 1fr); }
-    .ai-mode-select { padding: 4px 6px; font-size: 0.8em; width: auto; border-radius: 6px; }
-    .needs-teacher { background: #fff3e0; color: #e65100; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold; text-decoration: none; white-space: nowrap; }
+    .team-cell { display: flex; flex-direction: column; gap: 3px; min-width: 180px; }
+    .team-name-link { font-weight: 650; color: var(--text); text-decoration: none; }
+    .team-name-link:hover { color: var(--brand); text-decoration: underline; }
+    .team-sub { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+    .team-sub span { display: inline-flex; align-items: center; gap: 4px; }
+    .team-sub .icon { width: 13px; height: 13px; }
+    .needs-teacher { text-decoration: none; }
+    .dash { grid-template-columns: minmax(0, 1fr) 320px; }
+    @media (max-width: 1280px) { .dash { grid-template-columns: minmax(0, 1fr); } .dash-aside { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5); } }
+    @media (max-width: 800px) { .dash-aside { grid-template-columns: 1fr; } }
+    .progress-cell { min-width: 130px; }
+    .progress-cell .progress { margin: 4px 0; }
+    .level { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+    .ai-mode-select { width: auto; padding: 5px 8px; font-size: 13px; }
+    .row-actions { display: inline-flex; gap: 4px; align-items: center; }
+    .mode-list { list-style: none; display: grid; gap: 6px; margin-top: 14px; font-size: 13px; color: var(--text-muted); }
+    .mode-list strong { color: var(--text); }
+    .inline-form { display: flex; gap: 8px; }
+    .inline-form select { flex: 1; }
 </style>';
 include 'admin_header.php';
 ?>
-        <header class="content-header">
-            <h1>Dashboard <span style="font-size: 0.6em; color: #888; font-weight: normal;"><?= htmlspecialchars($game['name']) ?></span> <?= gameStatusBadge($game['effective_status']) ?></h1>
-            <a target="_leaderboard" href="index.php?game=<?= urlencode((string)$game['join_code']) ?>" class="btn btn-outline">View Public Leaderboard</a>
-        </header>
-        
+        <?= pageHeader('Dashboard', gameSubtitle($game),
+            '<a target="_leaderboard" href="index.php?game=' . urlencode((string)$game['join_code']) . '" class="btn btn-secondary">' . icon('trophy') . 'Publiek leaderboard' . icon('external') . '</a>'
+            . '<a target="_beamer" href="beamer.php" class="btn btn-secondary">' . icon('monitor') . 'Beamer' . icon('external') . '</a>') ?>
+
         <?= renderFlash() ?>
 
         <?php if ($game['effective_status'] === 'draft'): ?>
-            <div class="card" style="background: #fff8e1; border-left: 5px solid #ffb300; padding: 15px 20px;">
-                Dit spel is nog niet gestart: teams zien een wachtscherm. Start het spel via <a href="game.php" style="color: #667eea;">⚙️ Spel</a>.
-            </div>
+            <?= alertBox('info', 'Dit spel is nog niet gestart: teams zien een wachtscherm. Start het spel via <a href="game.php">Spelinstellingen</a>.') ?>
         <?php endif; ?>
 
-        <div class="stats-overview">
-            <div class="stat-card">
-                <div class="stat-label">Total Teams</div>
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-label"><?= icon('users') ?>Teams</div>
                 <div class="stat-value"><?= count($teams) ?></div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">Assignments</div>
+            <div class="stat">
+                <div class="stat-label"><?= icon('book') ?>Opdrachten</div>
                 <div class="stat-value"><?= $total_assignments ?></div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">Unread Messages</div>
+            <div class="stat">
+                <div class="stat-label"><?= icon('message') ?>Ongelezen</div>
                 <div class="stat-value" id="unread-stat"><?= $unread_total ?></div>
+                <div class="stat-hint"><a href="messages.php">Naar berichten</a></div>
             </div>
-            <div class="stat-card" title="Teams waarbij de AI een docent nodig heeft">
-                <div class="stat-label">🙋 Docent nodig</div>
-                <div class="stat-value" id="escalation-stat" style="color: #e65100;"><?= count($escalations) ?></div>
+            <div class="stat<?= $escalationCount > 0 ? ' is-warning' : '' ?>" title="Teams waarbij de AI een docent nodig heeft">
+                <div class="stat-label"><?= icon('hand') ?>Docent nodig</div>
+                <div class="stat-value" id="escalation-stat"><?= $escalationCount ?></div>
+                <div class="stat-hint">Teams die op een docent wachten</div>
             </div>
         </div>
-        
-        <div class="dashboard-grid">
+
+        <div class="grid-main dash">
             <div class="card">
-                <div class="card-title">🛡️ Geregistreerde Teams</div>
-                <div class="table-container">
-                    <table>
+                <div class="card-header">
+                    <div class="card-title"><?= icon('users') ?>Teams</div>
+                    <span class="muted text-sm">Gerangschikt op level, daarna op tijd</span>
+                </div>
+                <?php if (empty($teams)): ?>
+                    <?= emptyState('users', 'Nog geen teams in dit spel.', $canAddTeam ? '<p class="muted text-sm">Voeg rechts een team toe, of laat teams zich aanmelden via de spelcode (Spelinstellingen).</p>' : '') ?>
+                <?php else: ?>
+                <div class="table-scroll">
+                    <table class="table">
                         <thead>
                             <tr>
-                                <th style="width: 50px;">#</th>
-                                <th>Team Details</th>
-                                <th style="text-align: center;">Level</th>
-                                <th>Progress</th>
-                                <th>AI</th>
-                                <th style="text-align: right;">Acties</th>
+                                <th scope="col">#</th>
+                                <th scope="col">Team</th>
+                                <th scope="col">Level</th>
+                                <th scope="col">AI</th>
+                                <th scope="col" class="col-actions">Acties</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($teams as $index => $team):
+                                $teamId = (int)$team['id'];
                                 $level = (int)$team['current_level'];
                                 $finished = $level > $total_assignments;
                                 $progress = progressPercent($level, $total_assignments);
                             ?>
                                 <tr>
-                                    <td style="font-weight: bold; color: #667eea; vertical-align: middle;">
-                                        <?= $index + 1 ?>
+                                    <td><?= rankBadge($index + 1) ?></td>
+                                    <td>
+                                        <div class="team-cell">
+                                            <a href="team.php?token=<?= htmlspecialchars(urlencode($team['access_token'])) ?>" target="_blank" class="team-name-link" title="Teamdashboard openen"><?= htmlspecialchars($team['team_name']) ?></a>
+                                            <div class="team-sub">
+                                                <?php if ($team['email']): ?><span><?= icon('mail') ?><?= htmlspecialchars($team['email']) ?></span><?php endif; ?>
+                                                <span title="Laatste levelwissel"><?= icon('clock') ?><?= htmlspecialchars(substr(formatDateTime($team['level_updated_at']), -5)) ?></span>
+                                                <?php if (isset($escalations[$teamId])): ?>
+                                                    <a href="messages.php?team_id=<?= $teamId ?>" class="badge badge-warning needs-teacher"><?= icon('hand') ?>Docent nodig</a>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="progress-cell">
+                                        <span class="level"><?= $level >= 1 && !$finished ? 'Level ' . $level . '/' . $total_assignments : htmlspecialchars(levelLabel($level, $total_assignments)) ?></span>
+                                        <?= progressBar($level, $total_assignments) ?>
+                                        <span class="small muted"><?= $finished ? 'Voltooid' : round($progress) . '% voltooid' ?></span>
                                     </td>
                                     <td>
-                                        <div class="team-main-info">
-                                            <a href="team.php?token=<?= htmlspecialchars($team['access_token']) ?>" target="_blank" class="team-name-link">
-                                                <?= htmlspecialchars($team['team_name']) ?>
-                                            </a>
-                                            <div style="display: flex; gap: 10px; align-items: center; margin-top: 4px;">
-                                                <?php if ($team['email']): ?>
-                                                    <span class="team-email" style="font-size: 0.85em; color: #666;">📧 <?= htmlspecialchars($team['email']) ?></span>
-                                                <?php endif; ?>
-                                                <span style="font-size: 0.75em; color: #aaa;">🕒 <?= htmlspecialchars(substr(formatDateTime($team['level_updated_at']), -5)) ?></span>
-                                                <?php if (isset($escalations[(int)$team['id']])): ?>
-                                                    <a href="messages.php?team_id=<?= (int)$team['id'] ?>" class="needs-teacher">🙋 Docent nodig</a>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td style="text-align: center; vertical-align: middle;">
-                                        <span style="background: #f0f4ff; color: #667eea; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 1.1em;">
-                                            <?= levelLabel($level, $total_assignments) ?>
-                                        </span>
-                                    </td>
-                                    <td style="vertical-align: middle;">
-                                        <div class="progress-wrapper">
-                                            <div class="progress-bg" style="height: 6px; background: #eee;">
-                                                <div class="progress-fill" style="width: <?= $progress ?>%"></div>
-                                            </div>
-                                            <div class="progress-text" style="font-size: 0.75em; font-weight: 600; color: #888;"><?= $finished ? 'Voltooid!' : round($progress) . '% voltooid' ?></div>
-                                        </div>
-                                    </td>
-                                    <td style="vertical-align: middle;">
-                                        <form method="POST" style="margin: 0;">
+                                        <form method="POST" class="inline">
                                             <?= csrfField() ?>
                                             <input type="hidden" name="action" value="set_ai_mode">
-                                            <input type="hidden" name="team_id" value="<?= (int)$team['id'] ?>">
+                                            <input type="hidden" name="team_id" value="<?= $teamId ?>">
                                             <?= aiModeSelect($team['ai_mode'] ?: 'suggest', true) ?>
-                                            <noscript><button type="submit" class="btn btn-outline" style="padding: 4px 8px;">OK</button></noscript>
+                                            <noscript><button type="submit" class="btn btn-secondary btn-sm">OK</button></noscript>
                                         </form>
                                     </td>
-                                    <td style="text-align: right; vertical-align: middle;">
-                                        <div class="action-btns" style="justify-content: flex-end; display: flex; gap: 4px; flex-wrap: wrap;">
-                                            <?= teamButton('level_up', (int)$team['id'], '⬆️', 'btn-success', 'Level omhoog', $level < 1 || $finished) ?>
-                                            <?= teamButton('level_down', (int)$team['id'], '⬇️', 'btn-outline', 'Level terug', $level <= 1, "Team '{$team['team_name']}' een level terugzetten? Het gesprek van het vorige level komt terug en de archiefregel van dat level verdwijnt.") ?>
-                                            <button type="button" class="btn btn-outline" style="padding: 6px 12px; border-radius: 6px;" title="Kopieer teamlink"
-                                                onclick="copyTeamLink(this, <?= htmlspecialchars(json_encode(teamDashboardUrl($team['access_token']))) ?>)">📋</button>
-                                            <?php if ($team['email']): ?>
-                                                <?= teamButton('send_link', (int)$team['id'], '📧', 'btn-outline', 'Teamlink opnieuw mailen', false, "Teamlink mailen naar {$team['email']}?") ?>
-                                            <?php endif; ?>
-                                            <?= teamButton('delete_team', (int)$team['id'], '🗑️', 'btn-danger', 'Team verwijderen', false, "Team '{$team['team_name']}' verwijderen? De chat gaat verloren; het archief blijft.") ?>
+                                    <td class="col-actions">
+                                        <div class="row-actions">
+                                            <?= teamButton('level_up', $teamId, 'arrow-up', 'btn-success', 'Level omhoog', $level < 1 || $finished) ?>
+                                            <?= teamButton('level_down', $teamId, 'arrow-down', 'btn-secondary', 'Level terug', $level <= 1, "Team '{$team['team_name']}' een level terugzetten? Het gesprek van het vorige level komt terug en de archiefregel van dat level verdwijnt.") ?>
+                                            <div class="menu">
+                                                <button type="button" class="btn btn-ghost btn-sm btn-icon" data-menu aria-haspopup="menu" aria-expanded="false" aria-label="Meer acties voor <?= htmlspecialchars($team['team_name']) ?>" title="Meer acties"><?= icon('more') ?></button>
+                                                <div class="menu-list" role="menu" hidden>
+                                                    <button type="button" class="menu-item" role="menuitem" data-copy="<?= htmlspecialchars(teamDashboardUrl($team['access_token'])) ?>"><?= icon('copy') ?><span class="copy-label">Teamlink kopiëren</span></button>
+                                                    <?php if ($team['email']): ?>
+                                                        <?= teamMenuItem('send_link', $teamId, 'mail', 'Teamlink opnieuw mailen', "Teamlink mailen naar {$team['email']}?") ?>
+                                                    <?php endif; ?>
+                                                    <div class="menu-sep"></div>
+                                                    <?= teamMenuItem('delete_team', $teamId, 'trash', 'Team verwijderen', "Team '{$team['team_name']}' verwijderen? De chat gaat verloren; het archief blijft.", true) ?>
+                                                </div>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (empty($teams)): ?>
-                                <tr><td colspan="6" style="text-align: center; color: #999; padding: 40px;">Nog geen teams in dit spel.</td></tr>
-                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
+                <?php endif; ?>
             </div>
 
-            <div class="side-panel">
-                <div class="card" style="border-top: 5px solid #667eea; background: #fff;">
-                    <div class="card-title" style="color: #667eea; font-size: 1.4em;">➕ Nieuw Team</div>
+            <div class="dash-aside">
+                <div class="card">
+                    <div class="card-title"><?= icon('user-plus') ?>Nieuw team</div>
                     <?php if (!$canAddTeam): ?>
-                        <p style="color: #888;">Dit spel is afgelopen; er kunnen geen teams meer bij.</p>
+                        <p class="muted">Dit spel is afgelopen; er kunnen geen teams meer bij.</p>
                     <?php else: ?>
                     <form method="POST">
                         <?= csrfField() ?>
                         <input type="hidden" name="action" value="add_team">
-                        <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="color: #555; font-size: 0.9em;">Team Naam</label>
-                            <input type="text" name="team_name" placeholder="Bijv. De Speurders" maxlength="<?= TEAM_NAME_MAX_LENGTH ?>" style="border: 1px solid #ddd; padding: 12px;" required>
+                        <div class="field">
+                            <label for="team-name">Teamnaam</label>
+                            <input type="text" name="team_name" id="team-name" placeholder="Bijv. De Speurders" maxlength="<?= TEAM_NAME_MAX_LENGTH ?>" required>
                         </div>
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label style="color: #555; font-size: 0.9em;">E-mail adres (optioneel)</label>
-                            <input type="email" name="email" id="team-email" placeholder="begeleider@school.nl" style="border: 1px solid #ddd; padding: 12px;" oninput="toggleSendLink()">
+                        <div class="field">
+                            <label for="team-email">E-mailadres <span class="muted">(optioneel)</span></label>
+                            <input type="email" name="email" id="team-email" placeholder="begeleider@school.nl" oninput="toggleSendLink()">
                         </div>
-                        <label id="send-link-row" style="display: none; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 0.9em; color: #555;">
-                            <input type="checkbox" name="send_link" value="1" checked style="width: auto;"> Stuur de dashboardlink per mail
+                        <label class="check field" id="send-link-row" hidden>
+                            <input type="checkbox" name="send_link" value="1" checked> Stuur de dashboardlink per mail
                         </label>
-                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 1em; text-transform: uppercase; letter-spacing: 1px;">🚀 Team Toevoegen</button>
-                        <p style="margin-top: 10px; font-size: 0.8em; color: #999;">
+                        <button type="submit" class="btn btn-primary btn-block"><?= icon('plus') ?>Team toevoegen</button>
+                        <p class="small muted" style="margin-top: 8px;">
                             <?= $game['effective_status'] === 'draft' ? 'Het team wacht tot het spel start.' : 'Het team begint direct op level 1.' ?>
                         </p>
                     </form>
                     <?php endif; ?>
                 </div>
 
-                <div class="card" style="border-top: 5px solid #9c27b0;">
-                    <div class="card-title" style="color: #6a1b9a; font-size: 1.2em;">🤖 AI voor alle teams</div>
-                    <form method="POST" onsubmit="return confirm('Alle teams van dit spel op deze AI-modus zetten? Nieuwe teams krijgen hem ook.');" style="display: flex; gap: 8px; margin-top: 10px;">
+                <div class="card">
+                    <div class="card-title"><?= icon('bot') ?>AI voor alle teams</div>
+                    <form method="POST" class="inline-form" onsubmit="return confirm('Alle teams van dit spel op deze AI-modus zetten? Nieuwe teams krijgen hem ook.');">
                         <?= csrfField() ?>
                         <input type="hidden" name="action" value="set_all_ai_mode">
                         <?= aiModeSelect($game['ai_mode'] ?: 'suggest', false) ?>
-                        <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Voor alle teams</button>
+                        <button type="submit" class="btn btn-primary">Toepassen</button>
                     </form>
-                    <ul style="margin: 12px 0 0 18px; font-size: 0.8em; color: #777; line-height: 1.5;">
+                    <ul class="mode-list">
                         <?php foreach (AI_MODES as $mode): ?>
                             <li><strong><?= htmlspecialchars(aiModeLabel($mode)) ?></strong>: <?= htmlspecialchars(AI_MODE_DESCRIPTIONS[$mode]) ?></li>
                         <?php endforeach; ?>
                     </ul>
-                    <p style="margin-top: 8px; font-size: 0.8em; color: #999;">Antwoorden en Automatisch werken alleen bij opdrachten met een goedgekeurde rubric (📘 Assignments); anders blijft het bij suggesties.</p>
+                    <p class="small muted" style="margin-top: 10px;">Antwoorden en Automatisch werken alleen bij opdrachten met een goedgekeurde rubric (<a href="assignments.php">Opdrachten</a>); anders blijft het bij suggesties.</p>
                 </div>
             </div>
         </div>
@@ -338,15 +357,7 @@ include 'admin_header.php';
 $extraJS = "
 <script>
     function toggleSendLink() {
-        document.getElementById('send-link-row').style.display = document.getElementById('team-email').value.trim() !== '' ? 'flex' : 'none';
-    }
-    function copyTeamLink(btn, link) {
-        // Het klembord werkt alleen via https of localhost
-        if (!navigator.clipboard) { prompt('Kopieer de teamlink:', link); return; }
-        navigator.clipboard.writeText(link).then(() => {
-            btn.innerText = '✔';
-            setTimeout(() => { btn.innerText = '📋'; }, 1500);
-        }, () => { prompt('Kopieer de teamlink:', link); });
+        document.getElementById('send-link-row').hidden = document.getElementById('team-email').value.trim() === '';
     }
 </script>";
 include 'admin_footer.php'; ?>

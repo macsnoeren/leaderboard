@@ -55,49 +55,20 @@ if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Het token staat in de URL: niet doorgeven aan andere sites -->
-    <meta name="referrer" content="no-referrer">
-    <title>E-mailadres bevestigen</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .login-box { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 100%; max-width: 420px; }
-        h1 { text-align: center; margin-bottom: 20px; color: #333; }
-        p.intro { color: #555; margin-bottom: 20px; line-height: 1.5; }
-        button { width: 100%; background: #667eea; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: 600; }
-        button:hover { background: #5568d3; }
-        .error { background: #f44336; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-        .notice { background: #e8f5e9; color: #2e7d32; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-        .back-link { text-align: center; margin-top: 20px; }
-        .back-link a { color: #667eea; text-decoration: none; }
-    </style>
-</head>
-<body>
-    <div class="login-box">
-        <h1>E-mailadres bevestigen</h1>
+<?= authPageStart('E-mailadres bevestigen', ['no_referrer' => true, 'icon' => 'mail']) ?>
         <?php if ($done): ?>
-            <div class="notice">Je e-mailadres is gewijzigd naar <strong><?= htmlspecialchars($user['new_email']) ?></strong>.</div>
+            <?= alertBox('success', 'Je e-mailadres is gewijzigd naar <strong>' . htmlspecialchars($user['new_email']) . '</strong>.') ?>
         <?php elseif (!$user): ?>
-            <div class="error">Deze link is ongeldig of verlopen. Vraag de wijziging opnieuw aan in je profiel.</div>
+            <?= alertBox('error', 'Deze link is ongeldig of verlopen. Vraag de wijziging opnieuw aan in je profiel.') ?>
         <?php else: ?>
             <?php if ($error): ?>
-                <div class="error"><?= htmlspecialchars($error) ?></div>
+                <?= alertBox('error', htmlspecialchars($error)) ?>
             <?php endif; ?>
-            <p class="intro">Wil je <strong><?= htmlspecialchars($user['new_email']) ?></strong> gebruiken als e-mailadres voor het account <strong><?= htmlspecialchars($user['username']) ?></strong>?</p>
+            <p class="auth-sub">Wil je <strong><?= htmlspecialchars($user['new_email']) ?></strong> gebruiken als e-mailadres voor het account <strong><?= htmlspecialchars($user['username']) ?></strong>?</p>
             <form method="POST">
                 <?= csrfField() ?>
                 <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
-                <button type="submit">Bevestigen</button>
+                <button type="submit" class="btn btn-primary btn-lg btn-block">Bevestigen</button>
             </form>
         <?php endif; ?>
-        <div class="back-link">
-            <a href="profile.php">← Naar je profiel</a>
-        </div>
-    </div>
-</body>
-</html>
+<?= authPageEnd('<a href="profile.php">← Naar je profiel</a>') ?>
