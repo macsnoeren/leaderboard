@@ -43,6 +43,9 @@ dashboard staat of de agent actief is.
 
 1. Maak onder **Spellen** een spel aan (of importeer een export) en zet de opdrachten klaar onder
    **Opdrachten**. Wil je dat de AI teams antwoordt, laat dan per opdracht een rubric maken en keur die goed.
+   Een nieuwe opdracht komt achteraan; de volgorde wijzig je door te slepen (of met de pijltjes) en de
+   nummering past zich aan. Opdrachten waar teams al mee bezig zijn (geweest) liggen vast: verplaatsen of
+   verwijderen zou een team aan een andere opdracht koppelen.
 2. Opdrachten die afhangen van externe omgevingen (zoals de Darknet-chat voor "Darknet Gamers!"): herstart
    die omgeving voor een schone lei, maak er een nieuwe token aan (bijv. `ZEBR-A234`) en zet die in de tekst
    van de opdracht. De link naar de Darknet-chat in de zijbalk komt uit `DARKNET_CHAT_URL` in `config.php`.

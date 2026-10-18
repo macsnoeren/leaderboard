@@ -69,6 +69,18 @@ if (isset($_GET['edit'])) {
     $edit_assignment = findAssignmentInGame($db, (int)$_GET['edit'], $gameId);
 }
 
+// Nieuwe volgorde na slepen of de pijltjes: POST assignments.php?ajax=reorder met order[] = id's.
+// Bij een fout laadt de pagina opnieuw en toont de melding.
+if (($_GET['ajax'] ?? '') === 'reorder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $error = verifyCsrf() ? reorderAssignments($db, $gameId, (array)($_POST['order'] ?? []), $userId) : CSRF_ERROR;
+    if ($error) {
+        flash('error', $error);
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => $error === null]);
+    exit;
+}
+
 // Live update van het AI-paneel: assignments.php?edit=ID&ajax=ai
 if (isset($_GET['ajax'])) {
     if ($_GET['ajax'] !== 'ai' || !$edit_assignment) {
@@ -101,7 +113,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($_POST['action'] === 'add_assignment' || $_POST['action'] === 'edit_assignment') {
-        $assignment_number = (int)$_POST['assignment_number'];
         $title = trim($_POST['title']);
         $description = trim($_POST['description']);
         $instruction = trim($_POST['instruction'] ?? '');
@@ -122,18 +133,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 redirect('assignments.php');
             }
             $artifact_file = $existing['artifact_file'];
-        }
-
-        if ($assignment_number < 1) {
-            flash('error', 'Het opdrachtnummer moet 1 of hoger zijn.');
-            redirect($back);
-        }
-        // Nummers zijn uniek per spel
-        $stmt = $db->prepare("SELECT COUNT(*) FROM assignments WHERE game_id = ? AND assignment_number = ? AND id != ?");
-        $stmt->execute([$gameId, $assignment_number, $id ?? 0]);
-        if ($stmt->fetchColumn() > 0) {
-            flash('error', "Er is in dit spel al een opdracht met nummer $assignment_number.");
-            redirect($back);
+            $assignment_number = (int)$existing['assignment_number'];
+        } else {
+            // Een nieuwe opdracht komt achteraan; de volgorde wijzig je in de lijst
+            $stmt = $db->prepare("SELECT COALESCE(MAX(assignment_number), 0) + 1 FROM assignments WHERE game_id = ?");
+            $stmt->execute([$gameId]);
+            $assignment_number = (int)$stmt->fetchColumn();
         }
 
         // File upload
@@ -170,8 +175,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($_POST['action'] === 'edit_assignment' && $id) {
             // Een goedgekeurde rubric past misschien niet meer bij een gewijzigde instructie of antwoord
             $rubricStatus = rubricStatusAfterEdit($existing, ['instruction' => $instruction, 'criteria' => $criteria]);
-            $stmt = $db->prepare("UPDATE assignments SET assignment_number = ?, title = ?, description = ?, instruction = ?, criteria = ?, time_limit = ?, artifact_file = ?, ai_auto_allowed = ?, ai_rubric_status = ? WHERE id = ? AND game_id = ?");
-            $stmt->execute([$assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file, $autoAllowed, $rubricStatus, $id, $gameId]);
+            $stmt = $db->prepare("UPDATE assignments SET title = ?, description = ?, instruction = ?, criteria = ?, time_limit = ?, artifact_file = ?, ai_auto_allowed = ?, ai_rubric_status = ? WHERE id = ? AND game_id = ?");
+            $stmt->execute([$title, $description, $instruction, $criteria, $time_limit, $artifact_file, $autoAllowed, $rubricStatus, $id, $gameId]);
             logAudit($db, $userId, 'ASSIGNMENT_UPDATE', "Updated assignment #$assignment_number: $title (spel #$gameId)" . ($rubricStatus !== $existing['ai_rubric_status'] ? ', rubric terug naar concept' : ''));
             if ($rubricStatus !== $existing['ai_rubric_status']) {
                 flash('error', 'Opdracht gewijzigd, controleer de rubric. De opdracht is niet meer AI-klaar tot je de rubric opnieuw goedkeurt.');
@@ -214,19 +219,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         redirect("assignments.php?edit=$id#ai-panel");
     }
 
-    // Verwijderen van assignment
+    // Verwijderen van assignment; de opdrachten erna schuiven één op
     if ($_POST['action'] === 'delete_assignment' && isset($_POST['assignment_id'])) {
         $assignment = findAssignmentInGame($db, (int)$_POST['assignment_id'], $gameId);
-        if (!$assignment) {
-            flash('error', 'Deze opdracht hoort niet bij het actieve spel.');
+        $error = deleteAssignment($db, (int)$_POST['assignment_id'], $gameId, $userId);
+        if ($error) {
+            flash('error', $error);
             redirect('assignments.php');
         }
-
-        $db->prepare("DELETE FROM assignments WHERE id = ?")->execute([$assignment['id']]);
-        $db->prepare("DELETE FROM assignment_ai_dialog WHERE assignment_id = ?")->execute([$assignment['id']]);
         removeArtifact($db, $assignment['artifact_file']);
-
-        logAudit($db, $userId, 'ASSIGNMENT_DELETE', "Deleted assignment #{$assignment['assignment_number']}: {$assignment['title']} (ID {$assignment['id']}, spel #$gameId)");
         flash('success', 'De opdracht is verwijderd.');
         redirect('assignments.php');
     }
@@ -253,6 +254,17 @@ $stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? ORDER BY assig
 $stmt->execute([$gameId]);
 $assignments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $nextNumber = $assignments ? (int)end($assignments)['assignment_number'] + 1 : 1;
+// Opdrachten 1..K liggen vast (teams zijn er al mee bezig geweest); de rest kun je verslepen
+$lockLevel = assignmentLockLevel($db, $gameId);
+$movableCount = count(array_filter($assignments, fn($a) => (int)$a['assignment_number'] > $lockLevel));
+$lockedCount = count($assignments) - $movableCount;
+if ($lockedCount === 0) {
+    $lockedText = '';
+} elseif ($lockedCount === count($assignments)) {
+    $lockedText = 'Alle opdrachten liggen vast';
+} else {
+    $lockedText = $lockedCount === 1 ? 'Opdracht 1 ligt vast' : "Opdrachten 1–$lockedCount liggen vast";
+}
 
 // Andere spellen om uit te kopiëren, met het aantal opdrachten
 $copySources = [];
@@ -300,6 +312,17 @@ $extraCSS = '
     .col-goed { border-top: 3px solid var(--success); }
     .dialog-box { max-height: 360px; overflow-y: auto; margin-bottom: 4px; }
     .dialog-box .bubble { font-size: 14px; }
+    .order-cell { white-space: nowrap; }
+    .order-cell > span { vertical-align: middle; }
+    .order-cell .icon { color: var(--text-muted); }
+    .order-arrows { display: inline-flex; flex-direction: column; margin-left: 2px; }
+    .order-arrows .btn { width: 22px; height: 18px; padding: 0; }
+    .assignment-table td { padding-top: 10px; padding-bottom: 10px; }
+    .order-arrows .btn:hover .icon, .order-arrows .btn:focus-visible .icon { color: var(--text); }
+    .drag-handle { cursor: grab; touch-action: none; }
+    .drag-handle:hover .icon { color: var(--text); }
+    #assignment-rows tr.dragging td { opacity: .5; background: var(--brand-soft); }
+    .order-hint { margin-bottom: 12px; }
 </style>';
 
 $pageTitle = 'Opdrachten';
@@ -312,7 +335,7 @@ include 'admin_header.php';
     <div class="grid-main">
         <div>
             <div class="card">
-                <div class="card-title"><?= icon($edit_assignment ? 'pencil' : 'plus') ?><?= $edit_assignment ? 'Opdracht ' . (int)$edit_assignment['assignment_number'] . ' bewerken' : 'Nieuwe opdracht' ?></div>
+                <div class="card-title"><?= icon($edit_assignment ? 'pencil' : 'plus') ?><?= $edit_assignment ? 'Opdracht <span data-number-of="' . (int)$edit_assignment['id'] . '">' . (int)$edit_assignment['assignment_number'] . '</span> bewerken' : 'Nieuwe opdracht' ?></div>
                 <form method="POST" enctype="multipart/form-data">
                     <?= csrfField() ?>
                     <input type="hidden" name="action" value="<?= $edit_assignment ? 'edit_assignment' : 'add_assignment' ?>">
@@ -322,17 +345,14 @@ include 'admin_header.php';
 
                     <div class="field-row">
                         <div class="field">
-                            <label for="f-number">Nummer</label>
-                            <input type="number" name="assignment_number" id="f-number" min="1" value="<?= $edit_assignment['assignment_number'] ?? $nextNumber ?>" required>
+                            <label for="f-title">Titel</label>
+                            <input type="text" name="title" id="f-title" value="<?= htmlspecialchars($edit_assignment['title'] ?? '') ?>" required>
+                            <?php if (!$edit_assignment): ?><div class="hint">Komt achteraan als opdracht <?= $nextNumber ?>. De volgorde wijzig je in de lijst.</div><?php endif; ?>
                         </div>
                         <div class="field">
                             <label for="f-time">Verwachte tijd (minuten)</label>
                             <input type="number" name="time_limit" id="f-time" value="<?= $edit_assignment['time_limit'] ?? '' ?>" placeholder="0 = niet tonen">
                         </div>
-                    </div>
-                    <div class="field">
-                        <label for="f-title">Titel</label>
-                        <input type="text" name="title" id="f-title" value="<?= htmlspecialchars($edit_assignment['title'] ?? '') ?>" required>
                     </div>
                     <div class="field">
                         <label for="f-desc">Beschrijving</label>
@@ -468,8 +488,14 @@ include 'admin_header.php';
                 <?php if (empty($assignments)): ?>
                     <?= emptyState('book', 'Nog geen opdrachten in dit spel.') ?>
                 <?php else: ?>
+                <?php if ($movableCount > 1 || $lockedText): ?>
+                    <p class="muted text-sm order-hint">
+                        <?php if ($movableCount > 1): ?>Sleep een opdracht aan het handvat (<?= icon('grip') ?>) of gebruik de pijltjes ernaast om de volgorde te wijzigen; de nummering past zich aan.<?php endif; ?>
+                        <?php if ($lockedText): ?><?= $lockedText ?> (<?= icon('lock') ?>): daar zijn teams al mee bezig (geweest).<?php endif; ?>
+                    </p>
+                <?php endif; ?>
                 <div class="table-scroll">
-                    <table class="table">
+                    <table class="table table-compact assignment-table">
                         <thead>
                             <tr>
                                 <th scope="col">#</th>
@@ -478,12 +504,28 @@ include 'admin_header.php';
                                 <th scope="col" class="col-actions">Acties</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <?php foreach ($assignments as $a): ?>
-                                <tr<?= $edit_assignment && (int)$edit_assignment['id'] === (int)$a['id'] ? ' style="background: var(--brand-soft);"' : '' ?>>
-                                    <td class="mono"><?= (int)$a['assignment_number'] ?></td>
+                        <tbody id="assignment-rows" data-csrf="<?= htmlspecialchars(csrfToken()) ?>">
+                            <?php foreach ($assignments as $a):
+                                $number = (int)$a['assignment_number'];
+                                $locked = $number <= $lockLevel;
+                            ?>
+                                <tr data-id="<?= (int)$a['id'] ?>" data-title="<?= htmlspecialchars($a['title']) ?>"<?= $locked ? ' data-locked="1"' : '' ?><?= $edit_assignment && (int)$edit_assignment['id'] === (int)$a['id'] ? ' style="background: var(--brand-soft);"' : '' ?>>
+                                    <td class="order-cell">
+                                        <?php if ($locked): ?>
+                                            <span title="Ligt vast: teams zijn al met deze opdracht bezig (geweest)"><?= icon('lock') ?><span class="sr-only">vergrendeld,</span></span>
+                                        <?php elseif ($movableCount > 1): ?>
+                                            <span class="drag-handle" title="Sleep om te verplaatsen"><?= icon('grip') ?></span>
+                                        <?php endif; ?>
+                                        <span class="mono js-number"><?= $number ?></span>
+                                        <?php if (!$locked && $movableCount > 1): ?>
+                                            <span class="order-arrows">
+                                                <button type="button" class="btn btn-ghost js-up" title="Omhoog" data-label="omhoog" aria-label="Opdracht <?= $number ?> omhoog"><?= icon('chevron-up') ?></button>
+                                                <button type="button" class="btn btn-ghost js-down" title="Omlaag" data-label="omlaag" aria-label="Opdracht <?= $number ?> omlaag"><?= icon('chevron-down') ?></button>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
-                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(<?= json_encode(['number' => (int)$a['assignment_number'], 'title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file']], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
+                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(this, <?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file']], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
                                         <?php if ($a['artifact_file']): ?><div class="small muted"><?= icon('paperclip') ?> bijlage</div><?php endif; ?>
                                     </td>
                                     <td>
@@ -491,19 +533,24 @@ include 'admin_header.php';
                                         <?php if ((int)$a['ai_auto_allowed'] === 0): ?><span class="badge" title="Altijd door een mens"><?= icon('user') ?>mens</span><?php endif; ?>
                                     </td>
                                     <td class="col-actions">
-                                        <a href="?edit=<?= (int)$a['id'] ?>" class="btn btn-secondary btn-sm btn-icon" title="Bewerken" aria-label="Opdracht <?= (int)$a['assignment_number'] ?> bewerken"><?= icon('pencil') ?></a>
-                                        <form method="POST" class="inline" onsubmit="return confirm('Verwijder deze opdracht?');">
-                                            <?= csrfField() ?>
-                                            <input type="hidden" name="action" value="delete_assignment">
-                                            <input type="hidden" name="assignment_id" value="<?= (int)$a['id'] ?>">
-                                            <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Verwijderen" aria-label="Opdracht <?= (int)$a['assignment_number'] ?> verwijderen"><?= icon('trash') ?></button>
-                                        </form>
+                                        <a href="?edit=<?= (int)$a['id'] ?>" class="btn btn-secondary btn-sm btn-icon" title="Bewerken" data-label="bewerken" aria-label="Opdracht <?= $number ?> bewerken"><?= icon('pencil') ?></a>
+                                        <?php if ($locked): ?>
+                                            <span title="Kan niet weg: teams zijn al met deze opdracht bezig (geweest)"><button type="button" class="btn btn-danger btn-sm btn-icon" disabled aria-label="Opdracht <?= $number ?> verwijderen (kan niet: ligt vast)"><?= icon('trash') ?></button></span>
+                                        <?php else: ?>
+                                            <form method="POST" class="inline" onsubmit="return confirm('Verwijder deze opdracht? De opdrachten erna schuiven één plek op.');">
+                                                <?= csrfField() ?>
+                                                <input type="hidden" name="action" value="delete_assignment">
+                                                <input type="hidden" name="assignment_id" value="<?= (int)$a['id'] ?>">
+                                                <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Verwijderen" data-label="verwijderen" aria-label="Opdracht <?= $number ?> verwijderen"><?= icon('trash') ?></button>
+                                            </form>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
+                <div class="sr-only" role="status" id="order-status"></div>
                 <?php endif; ?>
             </div>
 
@@ -552,9 +599,11 @@ $rubricVersionJs = json_encode($edit_assignment ? rubricVersion($edit_assignment
 $designStatusJs = json_encode($designStatus);
 $extraJS = "
 <script>
-    function openViewModal(assignment) {
+    function openViewModal(btn, assignment) {
         const dialog = document.getElementById('view-dialog');
-        document.getElementById('v-title').textContent = 'Opdracht ' + assignment.number + ': ' + assignment.title;
+        // Het nummer uit de rij: dat verandert na slepen
+        const number = btn.closest('tr').querySelector('.js-number').textContent;
+        document.getElementById('v-title').textContent = 'Opdracht ' + number + ': ' + assignment.title;
         const fields = { 'v-desc': assignment.description || 'Geen beschrijving.', 'v-instr': assignment.instruction || 'Geen instructie.', 'v-crit': assignment.criteria || 'Geen criteria opgegeven.' };
         Object.keys(fields).forEach(id => {
             const el = document.getElementById(id);
@@ -609,4 +658,103 @@ $extraJS = "
     }
     if (editId) setInterval(() => { if (designStatus === 'pending' || designStatus === 'questions') updateAiPanel(); }, 5000);
 </script>";
+$extraJS .= <<<'JS'
+<script>
+    // Volgorde van de opdrachten: slepen aan het handvat of de pijltjes (toetsenbord, touch).
+    // Elke wijziging wordt meteen opgeslagen; vergrendelde rijen staan bovenaan en bewegen niet.
+    (function () {
+        const body = document.getElementById('assignment-rows');
+        if (!body) return;
+        const status = document.getElementById('order-status');
+        const rows = () => Array.from(body.querySelectorAll('tr[data-id]'));
+        const order = () => rows().map(r => r.dataset.id).join(',');
+        let dragRow = null;
+        let orderBefore = '';
+
+        function updateButtons() {
+            const movable = rows().filter(r => !r.dataset.locked);
+            movable.forEach((row, i) => {
+                const up = row.querySelector('.js-up'), down = row.querySelector('.js-down');
+                if (up) up.disabled = i === 0;
+                if (down) down.disabled = i === movable.length - 1;
+            });
+        }
+
+        function renumber() {
+            rows().forEach((row, i) => {
+                const n = i + 1;
+                row.querySelector('.js-number').textContent = n;
+                row.querySelectorAll('[data-label]').forEach(el => el.setAttribute('aria-label', 'Opdracht ' + n + ' ' + el.dataset.label));
+                document.querySelectorAll('[data-number-of="' + row.dataset.id + '"]').forEach(el => { el.textContent = n; });
+            });
+            updateButtons();
+        }
+
+        // Bij een fout zet de server een melding klaar; herladen toont die en de echte volgorde
+        function save(row) {
+            renumber();
+            const data = new FormData();
+            data.append('csrf_token', body.dataset.csrf);
+            rows().forEach(r => data.append('order[]', r.dataset.id));
+            fetch('assignments.php?ajax=reorder', { method: 'POST', body: data })
+                .then(r => r.ok ? r.json() : null)
+                .then(res => {
+                    if (!res || !res.ok) { location.reload(); return; }
+                    status.textContent = '“' + row.dataset.title + '” is nu opdracht ' + (rows().indexOf(row) + 1) + '.';
+                })
+                .catch(() => location.reload());
+        }
+
+        body.addEventListener('click', e => {
+            const btn = e.target.closest('.js-up, .js-down');
+            if (!btn) return;
+            const row = btn.closest('tr');
+            const up = btn.classList.contains('js-up');
+            const other = up ? row.previousElementSibling : row.nextElementSibling;
+            if (!other || other.dataset.locked) return;
+            body.insertBefore(row, up ? other : other.nextElementSibling);
+            save(row);
+            // Focus blijft op de knop; is die nu uitgeschakeld (bovenaan/onderaan), dan op de andere
+            (btn.disabled ? row.querySelector(up ? '.js-down' : '.js-up') : btn).focus();
+        });
+
+        // Alleen het handvat maakt een rij versleepbaar, zodat tekst en knoppen gewoon werken
+        body.addEventListener('pointerdown', e => {
+            const handle = e.target.closest('.drag-handle');
+            if (handle) handle.closest('tr').draggable = true;
+        });
+        body.addEventListener('pointerup', () => rows().forEach(r => { r.draggable = false; }));
+
+        body.addEventListener('dragstart', e => {
+            const row = e.target.closest('tr[data-id]');
+            if (!row || row.dataset.locked) { e.preventDefault(); return; }
+            dragRow = row;
+            orderBefore = order();
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', row.dataset.id);
+        });
+        body.addEventListener('dragover', e => {
+            if (!dragRow) return;
+            const target = e.target.closest('tr[data-id]');
+            if (!target || target.dataset.locked) return;
+            e.preventDefault();
+            if (target === dragRow) return;
+            const box = target.getBoundingClientRect();
+            body.insertBefore(dragRow, e.clientY > box.top + box.height / 2 ? target.nextElementSibling : target);
+        });
+        body.addEventListener('drop', e => { if (dragRow) e.preventDefault(); });
+        body.addEventListener('dragend', () => {
+            if (!dragRow) return;
+            const row = dragRow;
+            dragRow = null;
+            row.classList.remove('dragging');
+            row.draggable = false;
+            if (order() !== orderBefore) save(row);
+        });
+
+        updateButtons();
+    })();
+</script>
+JS;
 include 'admin_footer.php'; ?>

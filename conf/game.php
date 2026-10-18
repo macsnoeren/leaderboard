@@ -631,6 +631,101 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
 }
 
 /**
+ * Hoogste opdrachtnummer waar teamdata aan hangt (level, berichten, downloads, archief, AI).
+ * Opdrachten 1..K liggen vast: verplaatsen of verwijderen zou een team aan een andere opdracht
+ * koppelen. 0 = alles mag; kan N+1 zijn als een team op Finish staat.
+ */
+function assignmentLockLevel(PDO $db, int $gameId): int {
+    $stmt = $db->prepare("SELECT MAX(n) FROM (
+        SELECT MAX(current_level) AS n FROM teams WHERE game_id = :g
+        UNION ALL SELECT MAX(tm.assignment_number) FROM team_messages tm JOIN teams t ON t.id = tm.team_id WHERE t.game_id = :g
+        UNION ALL SELECT MAX(td.assignment_number) FROM team_downloads td JOIN teams t ON t.id = td.team_id WHERE t.game_id = :g
+        UNION ALL SELECT MAX(assignment_number) FROM completed_assignments WHERE game_id = :g
+        UNION ALL SELECT MAX(assignment_number) FROM ai_evaluations WHERE game_id = :g
+        UNION ALL SELECT MAX(assignment_number) FROM ai_team_progress WHERE game_id = :g)");
+    $stmt->execute([':g' => $gameId]);
+    return max(0, (int)$stmt->fetchColumn());
+}
+
+/**
+ * Nieuwe volgorde van de opdrachten van een spel ($orderedIds = alle opdracht-id's, van eerste naar
+ * laatste). Nummert 1..N zonder gaten; vergrendelde opdrachten (assignmentLockLevel()) moeten op
+ * hun plek blijven. Geeft een foutmelding terug, of null.
+ */
+function reorderAssignments(PDO $db, int $gameId, array $orderedIds, ?int $userId): ?string {
+    $orderedIds = array_map('intval', array_values($orderedIds));
+    $stmt = $db->prepare("SELECT id, assignment_number FROM assignments WHERE game_id = ? ORDER BY assignment_number ASC, id ASC");
+    $stmt->execute([$gameId]);
+    $current = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    $sorted = $orderedIds;
+    sort($sorted);
+    $known = array_keys($current);
+    sort($known);
+    if ($sorted !== $known) {
+        return 'De lijst met opdrachten is intussen gewijzigd. Laad de pagina opnieuw en probeer het nog eens.';
+    }
+
+    $lock = assignmentLockLevel($db, $gameId);
+    foreach ($orderedIds as $i => $id) {
+        $number = (int)$current[$id];
+        if ($number <= $lock && $number !== $i + 1) {
+            return "Opdracht $number ligt vast: teams zijn al met deze opdracht bezig (geweest).";
+        }
+    }
+    if (!$current || array_keys($current) === $orderedIds && array_map('intval', array_values($current)) === range(1, count($current))) {
+        return null;
+    }
+
+    $db->beginTransaction();
+    try {
+        // Eerst negatief, zodat de unieke index (game_id, assignment_number) tussendoor niet botst
+        $db->prepare("UPDATE assignments SET assignment_number = -assignment_number WHERE game_id = ?")->execute([$gameId]);
+        $update = $db->prepare("UPDATE assignments SET assignment_number = ? WHERE id = ? AND game_id = ?");
+        foreach ($orderedIds as $i => $id) {
+            $update->execute([$i + 1, $id, $gameId]);
+        }
+        logAudit($db, $userId, 'ASSIGNMENT_REORDER', "Volgorde van de opdrachten gewijzigd (spel #$gameId), id's: " . implode(', ', $orderedIds));
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    return null;
+}
+
+/**
+ * Verwijdert een opdracht (met de dialoog van de opdracht-assistent) en schuift de opdrachten erna
+ * één op, zodat de nummering 1..N blijft. Een vergrendelde opdracht (assignmentLockLevel()) kan
+ * niet weg. Het bestand ruimt de aanroeper op. Geeft een foutmelding terug, of null.
+ */
+function deleteAssignment(PDO $db, int $assignmentId, int $gameId, ?int $userId): ?string {
+    $assignment = findAssignmentInGame($db, $assignmentId, $gameId);
+    if (!$assignment) {
+        return 'Deze opdracht hoort niet bij het actieve spel.';
+    }
+    $number = (int)$assignment['assignment_number'];
+    if ($number <= assignmentLockLevel($db, $gameId)) {
+        return "Opdracht $number kan niet weg: teams zijn al met deze opdracht bezig (geweest).";
+    }
+
+    $db->beginTransaction();
+    try {
+        $db->prepare("DELETE FROM assignments WHERE id = ?")->execute([$assignmentId]);
+        $db->prepare("DELETE FROM assignment_ai_dialog WHERE assignment_id = ?")->execute([$assignmentId]);
+        // Via negatieve nummers, zodat de unieke index tussendoor niet botst
+        $db->prepare("UPDATE assignments SET assignment_number = -(assignment_number - 1) WHERE game_id = ? AND assignment_number > ?")->execute([$gameId, $number]);
+        $db->prepare("UPDATE assignments SET assignment_number = -assignment_number WHERE game_id = ? AND assignment_number < 0")->execute([$gameId]);
+        logAudit($db, $userId, 'ASSIGNMENT_DELETE', "Deleted assignment #$number: {$assignment['title']} (ID $assignmentId, spel #$gameId)");
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    return null;
+}
+
+/**
  * Link naar het dashboard van een team.
  */
 function teamDashboardUrl(string $token): string {

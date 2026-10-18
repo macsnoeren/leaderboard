@@ -216,6 +216,24 @@ try {
     $db->exec("CREATE INDEX IF NOT EXISTS idx_worker_jobs_game ON worker_jobs(game_id, id)");
     $db->exec("CREATE TABLE IF NOT EXISTS worker_status (worker_id TEXT PRIMARY KEY, version TEXT, last_heartbeat DATETIME, current_job_id INTEGER)");
 
+    // 21. Opdrachten zijn 1..N zonder gaten (levels rekenen daarmee; de volgorde wijzig je door te slepen).
+    //     Oude spellen met gaten worden doorlopend genummerd, behalve als er al teamdata aan de nummers hangt.
+    foreach ($db->query("SELECT DISTINCT game_id FROM assignments WHERE game_id IS NOT NULL")->fetchAll(PDO::FETCH_COLUMN) as $gameId) {
+        $stmt = $db->prepare("SELECT id FROM assignments WHERE game_id = ? ORDER BY assignment_number ASC, id ASC");
+        $stmt->execute([$gameId]);
+        $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = $db->prepare("SELECT MAX(assignment_number) FROM assignments WHERE game_id = ?");
+        $stmt->execute([$gameId]);
+        if ((int)$stmt->fetchColumn() === count($ids)) {
+            continue;
+        }
+        if (assignmentLockLevel($db, (int)$gameId) > 0) {
+            echo "Let op: spel #$gameId heeft gaten in de opdrachtnummers, maar er hangt al teamdata aan; niet hernummerd.\n";
+            continue;
+        }
+        reorderAssignments($db, (int)$gameId, $ids, null);
+    }
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

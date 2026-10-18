@@ -330,6 +330,95 @@ array_map('unlink', glob("$dir/artifacts/*"));
 rmdir("$dir/artifacts");
 rmdir($dir);
 
+function assignmentOrder(PDO $db, int $gameId): array {
+    return array_map('intval', $db->query("SELECT id FROM assignments WHERE game_id = $gameId ORDER BY assignment_number")->fetchAll(PDO::FETCH_COLUMN));
+}
+function assignmentNumbers(PDO $db, int $gameId): array {
+    return array_map('intval', $db->query("SELECT assignment_number FROM assignments WHERE game_id = $gameId ORDER BY assignment_number")->fetchAll(PDO::FETCH_COLUMN));
+}
+
+echo "assignmentLockLevel\n";
+$db = freshDb();
+$game = addGame($db);
+addAssignments($db, $game, 4);
+check('geen teams → 0', assignmentLockLevel($db, $game) === 0);
+$team = addTeam($db, $game, 'Wachtend', 0);
+check('team op level 0 → 0', assignmentLockLevel($db, $game) === 0);
+$db->exec("UPDATE teams SET current_level = 2 WHERE id = $team");
+check('team op level 2 → 2', assignmentLockLevel($db, $game) === 2);
+addMessage($db, $team, 3, 'team', 'bericht van level 3 (na level terug)');
+check('bericht op level 3 telt mee', assignmentLockLevel($db, $game) === 3);
+$other = addGame($db);
+addAssignments($db, $other, 2);
+addTeam($db, $other, 'Ander', 2);
+foreach (["INSERT INTO completed_assignments (game_id, team_id, assignment_number) VALUES ($game, $team, 4)",
+          "INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id) VALUES ($other, 99, 2, 1)"] as $sql) {
+    $db->exec($sql);
+}
+check('archief telt mee', assignmentLockLevel($db, $game) === 4);
+check('ander spel los: alleen eigen data', assignmentLockLevel($db, $other) === 2);
+$db = freshDb();
+$game = addGame($db);
+addAssignments($db, $game, 3);
+$team = addTeam($db, $game, 'Download', 0);
+$db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES ($team, 2, 1)");
+check('downloads tellen mee', assignmentLockLevel($db, $game) === 2);
+$db->exec("INSERT INTO ai_team_progress (game_id, team_id, assignment_number) VALUES ($game, $team, 3)");
+check('AI-voortgang telt mee', assignmentLockLevel($db, $game) === 3);
+
+echo "reorderAssignments\n";
+$db = freshDb();
+$game = addGame($db);
+addAssignments($db, $game, 4);
+[$a1, $a2, $a3, $a4] = assignmentOrder($db, $game);
+check('concept: volgorde wijzigen mag', reorderAssignments($db, $game, [$a3, $a1, $a4, $a2], 1) === null);
+check('nieuwe volgorde opgeslagen', assignmentOrder($db, $game) === [$a3, $a1, $a4, $a2]);
+check('nummers 1..4', assignmentNumbers($db, $game) === [1, 2, 3, 4]);
+check('audit ASSIGNMENT_REORDER', auditCount($db, 'ASSIGNMENT_REORDER') === 1);
+check('zelfde volgorde: geen audit', reorderAssignments($db, $game, [$a3, $a1, $a4, $a2], 1) === null && auditCount($db, 'ASSIGNMENT_REORDER') === 1);
+check('id-strings worden geaccepteerd', reorderAssignments($db, $game, ["$a1", "$a2", "$a3", "$a4"], 1) === null && assignmentOrder($db, $game) === [$a1, $a2, $a3, $a4]);
+check('ontbrekende opdracht → fout', reorderAssignments($db, $game, [$a1, $a2, $a3], 1) !== null);
+check('dubbele id → fout', reorderAssignments($db, $game, [$a1, $a1, $a2, $a3, $a4], 1) !== null);
+$other = addGame($db);
+addAssignments($db, $other, 1);
+$foreign = assignmentOrder($db, $other)[0];
+check('opdracht van ander spel → fout', reorderAssignments($db, $game, [$a1, $a2, $a3, $foreign], 1) !== null);
+check('ander spel ongemoeid', assignmentNumbers($db, $other) === [1]);
+check('na fouten volgorde ongewijzigd', assignmentOrder($db, $game) === [$a1, $a2, $a3, $a4]);
+
+$team = addTeam($db, $game, 'Bezig', 2);
+check('lopend: opdracht 1 en 2 liggen vast', reorderAssignments($db, $game, [$a2, $a1, $a3, $a4], 1) !== null);
+check('lopend: vergrendelde opdracht naar achteren → fout', reorderAssignments($db, $game, [$a1, $a3, $a4, $a2], 1) !== null);
+check('lopend: opdracht voor een vergrendelde zetten → fout', reorderAssignments($db, $game, [$a1, $a4, $a2, $a3], 1) !== null);
+check('lopend: 3 en 4 wisselen mag', reorderAssignments($db, $game, [$a1, $a2, $a4, $a3], 1) === null && assignmentOrder($db, $game) === [$a1, $a2, $a4, $a3]);
+check('level van het team ongewijzigd', teamLevel($db, $team) === 2);
+$db->exec("UPDATE teams SET current_level = 5 WHERE id = $team");
+check('team op Finish: alles ligt vast', reorderAssignments($db, $game, [$a1, $a2, $a3, $a4], 1) !== null);
+
+$db = freshDb();
+$game = addGame($db);
+$db->exec("INSERT INTO assignments (game_id, assignment_number, title) VALUES ($game, 2, 'B'), ($game, 5, 'C'), ($game, 9, 'D')");
+$ids = assignmentOrder($db, $game);
+check('gaten: zelfde volgorde nummert 1..N', reorderAssignments($db, $game, $ids, 1) === null && assignmentNumbers($db, $game) === [1, 2, 3] && assignmentOrder($db, $game) === $ids);
+check('leeg spel: niets te doen', reorderAssignments($db, addGame($db), [], 1) === null);
+
+echo "deleteAssignment\n";
+$db = freshDb();
+$game = addGame($db);
+addAssignments($db, $game, 4);
+[$a1, $a2, $a3, $a4] = assignmentOrder($db, $game);
+$db->exec("INSERT INTO assignment_ai_dialog (assignment_id, role, message) VALUES ($a2, 'ai', 'vraag')");
+check('opdracht 2 verwijderen', deleteAssignment($db, $a2, $game, 1) === null);
+check('gat dicht: nummers 1..3', assignmentNumbers($db, $game) === [1, 2, 3] && assignmentOrder($db, $game) === [$a1, $a3, $a4]);
+check('dialoog mee weg', (int)$db->query("SELECT COUNT(*) FROM assignment_ai_dialog WHERE assignment_id = $a2")->fetchColumn() === 0);
+check('audit ASSIGNMENT_DELETE', auditCount($db, 'ASSIGNMENT_DELETE') === 1);
+check('onbekende opdracht → fout', deleteAssignment($db, 999, $game, 1) !== null);
+$other = addGame($db);
+check('opdracht van ander spel → fout', deleteAssignment($db, $a1, $other, 1) !== null && count(assignmentOrder($db, $game)) === 3);
+addTeam($db, $game, 'Bezig', 1);
+check('vergrendelde opdracht → fout', deleteAssignment($db, $a1, $game, 1) !== null && count(assignmentOrder($db, $game)) === 3);
+check('laatste opdracht mag wel', deleteAssignment($db, $a4, $game, 1) === null && assignmentNumbers($db, $game) === [1, 2]);
+
 echo "countUnread\n";
 $db = freshDb();
 $game = addGame($db, 'running');
