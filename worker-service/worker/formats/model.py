@@ -23,6 +23,7 @@ class Assignment:
     criteria: str = ""
     time_limit: int = 0
     artifact: Optional[FileRef] = None
+    artifact_name: Optional[str] = None  # oorspronkelijke naam (alleen voor de operator)
     ai_rubric: Optional[str] = None  # JSON-tekst zoals in de database
     ai_rubric_status: str = "none"
     ai_auto_allowed: int = 1

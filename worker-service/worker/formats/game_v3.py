@@ -23,6 +23,15 @@ def _int(value, default):
         return default
 
 
+def _file_name(value):
+    """Oorspronkelijke naam van een bijlage: alleen de naam, zonder stuurtekens, max. 200 tekens."""
+    if not isinstance(value, str):
+        return None
+    name = os.path.basename(value.replace("\\", "/"))
+    name = "".join(ch for ch in name if ch >= " " and ch != "\x7f").strip()[:200]
+    return name or None
+
+
 def _file_ref(member, files, reader):
     info = files.get(member) if isinstance(files, dict) else None
     info = info if isinstance(info, dict) else {}
@@ -70,6 +79,7 @@ def read_v3(manifest, reader):
             criteria=str(a.get("criteria") or ""),
             time_limit=_int(a.get("time_limit"), 0),
             artifact=artifact,
+            artifact_name=_file_name(a.get("artifact_name")) if artifact is not None else None,
             ai_rubric=rubric,
             ai_rubric_status=status,
             ai_auto_allowed=auto_allowed(a.get("ai_auto_allowed", 1)),

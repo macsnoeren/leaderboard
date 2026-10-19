@@ -39,6 +39,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual([a["assignment_number"] for a in manifest["assignments"]], [1, 2])
         self.assertEqual(manifest["assignments"][0]["ai_rubric"], {"kern": "De conciërge", "aspecten": []})
         self.assertEqual(manifest["assignments"][1]["ai_auto_allowed"], 0)
+        self.assertEqual([a["artifact_name"] for a in manifest["assignments"]], ["Bewijsstuk sleutel.pdf", None])
         for key in ("join_code", "status", "ends_at", "started_at"):
             self.assertNotIn(key, manifest["game"])
         raw = files["manifest.json"].decode()

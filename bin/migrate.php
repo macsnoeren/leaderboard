@@ -234,6 +234,12 @@ try {
         reorderAssignments($db, (int)$gameId, $ids, null);
     }
 
+    // 22. Oorspronkelijke bestandsnaam van een bijlage (voor de operator; teams krijgen de eigen naam).
+    //     Bestaande bijlagen houden NULL: de pagina toont dan de naam op de server.
+    try {
+        $db->exec("ALTER TABLE assignments ADD COLUMN artifact_name TEXT");
+    } catch (PDOException $e) {}
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

@@ -23,7 +23,7 @@ function freshDb(): PDO {
     $db->exec("CREATE TABLE game_teachers (game_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL, PRIMARY KEY (game_id, teacher_id))");
     $db->exec("CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE, ai_processing_by TEXT, ai_processing_at DATETIME, ai_mode TEXT DEFAULT 'suggest')");
     $db->exec("CREATE UNIQUE INDEX idx_teams_game_name ON teams(game_id, team_name)");
-    $db->exec("CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT, ai_rubric TEXT, ai_rubric_status TEXT DEFAULT 'none', ai_design_status TEXT DEFAULT 'idle', ai_design_round INTEGER DEFAULT 0, ai_auto_allowed INTEGER DEFAULT 1, ai_processing_by TEXT, ai_processing_at DATETIME)");
+    $db->exec("CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT, artifact_name TEXT, ai_rubric TEXT, ai_rubric_status TEXT DEFAULT 'none', ai_design_status TEXT DEFAULT 'idle', ai_design_round INTEGER DEFAULT 0, ai_auto_allowed INTEGER DEFAULT 1, ai_processing_by TEXT, ai_processing_at DATETIME)");
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
     $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
     $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
@@ -311,7 +311,8 @@ $from = addGame($db);
 $empty = addGame($db);
 $filled = addGame($db);
 addAssignments($db, $from, 3);
-$db->exec("UPDATE assignments SET artifact_file = 'artifacts/bron.pdf' WHERE game_id = $from AND assignment_number = 1");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/bron.pdf', artifact_name = 'Plattegrond.pdf' WHERE game_id = $from AND assignment_number = 1");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/weg.pdf', artifact_name = 'Ontbreekt.pdf' WHERE game_id = $from AND assignment_number = 3");
 addAssignments($db, $filled, 2);
 check('kopie naar leeg spel: 3 opdrachten', copyAssignments($db, $from, $empty, 1, $dir) === 3);
 check('nummers 1..3', $db->query("SELECT assignment_number FROM assignments WHERE game_id = $empty ORDER BY assignment_number")->fetchAll(PDO::FETCH_COLUMN) == [1, 2, 3]);
@@ -320,6 +321,8 @@ check('kopie naar spel met 2 opdrachten: nummers 3..5', $db->query("SELECT assig
 $copyFile = $db->query("SELECT artifact_file FROM assignments WHERE game_id = $empty AND assignment_number = 1")->fetchColumn();
 check('bestand gekopieerd onder een nieuwe naam', $copyFile !== 'artifacts/bron.pdf' && strpos($copyFile, "artifacts/game_{$empty}_") === 0 && file_get_contents("$dir/$copyFile") === 'inhoud');
 unlink("$dir/$copyFile");
+check('kopie houdt de oorspronkelijke naam', $db->query("SELECT artifact_name FROM assignments WHERE game_id = $empty AND assignment_number = 1")->fetchColumn() === 'Plattegrond.pdf');
+check('ontbrekend bestand: geen bijlage en geen naam', $db->query("SELECT COALESCE(artifact_file, '') || COALESCE(artifact_name, '') FROM assignments WHERE game_id = $empty AND assignment_number = 3")->fetchColumn() === '');
 check('origineel blijft na verwijderen van de kopie', is_file("$dir/artifacts/bron.pdf"));
 check('kopie naar zichzelf doet niets', copyAssignments($db, $from, $from, 1, $dir) === 0);
 $rubric = json_encode(['kern' => 'Dader', 'aspecten' => [['naam' => 'Dader', 'verplicht' => true, 'onvoldoende' => 'a', 'voldoende' => 'b', 'goed' => 'c']]]);
@@ -437,6 +440,17 @@ check('opdracht van ander spel → fout', deleteAssignment($db, $a1, $other, 1) 
 addTeam($db, $game, 'Bezig', 1);
 check('vergrendelde opdracht → fout', deleteAssignment($db, $a1, $game, 1) !== null && count(assignmentOrder($db, $game)) === 3);
 check('laatste opdracht mag wel', deleteAssignment($db, $a4, $game, 1) === null && assignmentNumbers($db, $game) === [1, 2]);
+
+echo "cleanFileName / artifactDisplayName\n";
+check('gewone naam blijft', cleanFileName('Plattegrond kelder.pdf') === 'Plattegrond kelder.pdf');
+check('pad (ook Windows) gaat eraf', cleanFileName('../../etc/passwd.txt') === 'passwd.txt' && cleanFileName('C:\\Users\\jan\\Bewijs.pdf') === 'Bewijs.pdf');
+check('stuurtekens gaan eraf', cleanFileName("a\nb\x00.pdf") === 'ab.pdf');
+check('accenten blijven', cleanFileName('Conciërge café.pdf') === 'Conciërge café.pdf');
+check('max. 200 tekens', mb_strlen(cleanFileName(str_repeat('é', 300) . '.pdf')) === 200);
+check('niets over → leeg', cleanFileName("\n") === '' && cleanFileName('') === '');
+check('naam van de bijlage', artifactDisplayName(['artifact_file' => 'artifacts/game_1_x.pdf', 'artifact_name' => 'Kaart.pdf']) === 'Kaart.pdf');
+check('oude bijlage zonder naam → naam op de server', artifactDisplayName(['artifact_file' => 'artifacts/game_1_x.pdf', 'artifact_name' => null]) === 'game_1_x.pdf');
+check('geen bijlage → leeg', artifactDisplayName(['artifact_file' => null, 'artifact_name' => 'Kaart.pdf']) === '');
 
 echo "countUnread\n";
 $db = freshDb();

@@ -595,7 +595,7 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
     $stmt->execute([$toGame]);
     $number = (int)$stmt->fetchColumn();
 
-    $insert = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file, ai_rubric, ai_rubric_status, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $insert = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file, artifact_name, ai_rubric, ai_rubric_status, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $copied = [];
     $db->beginTransaction();
     try {
@@ -611,7 +611,7 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
                 $copied[] = $htdocsDir . '/' . $file;
             }
             $insert->execute([$toGame, $number, $a['title'], $a['description'], $a['instruction'], $a['criteria'], $a['time_limit'], $file,
-                              $a['ai_rubric'] ?? null, $a['ai_rubric_status'] ?? 'none', (int)($a['ai_auto_allowed'] ?? 1)]);
+                              $file ? ($a['artifact_name'] ?? null) : null, $a['ai_rubric'] ?? null, $a['ai_rubric_status'] ?? 'none', (int)($a['ai_auto_allowed'] ?? 1)]);
         }
         logAudit($db, $userId, 'ASSIGNMENTS_COPY', count($source) . " opdrachten gekopieerd van spel #$fromGame naar spel #$toGame");
         $db->commit();
@@ -719,6 +719,27 @@ function deleteAssignment(PDO $db, int $assignmentId, int $gameId, ?int $userId)
         throw $e;
     }
     return null;
+}
+
+/**
+ * Oorspronkelijke naam van een geüpload bestand, veilig om te bewaren en te tonen: zonder pad en
+ * stuurtekens, max. 200 tekens. Leeg als er niets overblijft.
+ */
+function cleanFileName(string $name): string {
+    $name = basename(str_replace('\\', '/', $name));
+    $name = trim(preg_replace('/[\x00-\x1F\x7F]+/u', '', $name) ?? '');
+    return function_exists('mb_substr') ? mb_substr($name, 0, 200, 'UTF-8') : substr($name, 0, 200);
+}
+
+/**
+ * Naam van de bijlage van een opdracht voor de operator: de oorspronkelijke naam, of (bij bijlagen
+ * van vóór artifact_name) de naam op de server. Leeg zonder bijlage.
+ */
+function artifactDisplayName(array $assignment): string {
+    if (empty($assignment['artifact_file'])) {
+        return '';
+    }
+    return (string)($assignment['artifact_name'] ?? '') !== '' ? (string)$assignment['artifact_name'] : basename((string)$assignment['artifact_file']);
 }
 
 /**

@@ -59,7 +59,7 @@ def seed_game(env, name="Operatie Zebra", status="running"):
     c.execute("UPDATE games SET ai_mode = 'reply', ai_max_attempts = 7 WHERE id = ?", (game,))
     c.execute("INSERT INTO game_teachers (game_id, teacher_id) VALUES (?, ?)", (game, teacher))
     art = env.write_file("artifacts/game_1_assignment_1_1.pdf", b"%PDF bijlage 1")
-    a1 = schema.add_assignment(c, game, 1, "De sleutel", art, criteria="De conciërge",
+    a1 = schema.add_assignment(c, game, 1, "De sleutel", art, criteria="De conciërge", artifact_name="Bewijsstuk sleutel.pdf",
                                ai_rubric='{"kern": "De conciërge", "aspecten": []}', ai_rubric_status="approved")
     schema.add_assignment(c, game, 2, "Het motief", None, criteria="Geldnood", ai_auto_allowed=0)
     c.execute("INSERT INTO assignment_ai_dialog (assignment_id, role, message, teacher_id) VALUES (?, 'teacher', 'geheim overleg', ?)",

@@ -125,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         // Bij bewerken: de opdracht moet bij het actieve spel horen; het bestandspad komt uit de database
         $artifact_file = null;
+        $artifact_name = null;
         $existing = null;
         if ($id) {
             $existing = findAssignmentInGame($db, $id, $gameId);
@@ -133,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 redirect('assignments.php');
             }
             $artifact_file = $existing['artifact_file'];
+            $artifact_name = $existing['artifact_name'] ?? null;
             $assignment_number = (int)$existing['assignment_number'];
         } else {
             // Een nieuwe opdracht komt achteraan; de volgorde wijzig je in de lijst
@@ -162,8 +164,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 // Verwijder oud bestand nu het nieuwe er staat
                 $old = $artifact_file;
                 $artifact_file = 'artifacts/' . $safeName;
+                // De oorspronkelijke naam is alleen voor de operator; op de server staat de eigen naam
+                $artifact_name = cleanFileName((string)$_FILES['artifact_file']['name']) ?: null;
                 if ($id && $old) {
-                    $db->prepare("UPDATE assignments SET artifact_file = ? WHERE id = ?")->execute([$artifact_file, $id]);
+                    $db->prepare("UPDATE assignments SET artifact_file = ?, artifact_name = ? WHERE id = ?")->execute([$artifact_file, $artifact_name, $id]);
                     removeArtifact($db, $old);
                 }
             } else {
@@ -175,8 +179,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($_POST['action'] === 'edit_assignment' && $id) {
             // Een goedgekeurde rubric past misschien niet meer bij een gewijzigde instructie of antwoord
             $rubricStatus = rubricStatusAfterEdit($existing, ['instruction' => $instruction, 'criteria' => $criteria]);
-            $stmt = $db->prepare("UPDATE assignments SET title = ?, description = ?, instruction = ?, criteria = ?, time_limit = ?, artifact_file = ?, ai_auto_allowed = ?, ai_rubric_status = ? WHERE id = ? AND game_id = ?");
-            $stmt->execute([$title, $description, $instruction, $criteria, $time_limit, $artifact_file, $autoAllowed, $rubricStatus, $id, $gameId]);
+            $stmt = $db->prepare("UPDATE assignments SET title = ?, description = ?, instruction = ?, criteria = ?, time_limit = ?, artifact_file = ?, artifact_name = ?, ai_auto_allowed = ?, ai_rubric_status = ? WHERE id = ? AND game_id = ?");
+            $stmt->execute([$title, $description, $instruction, $criteria, $time_limit, $artifact_file, $artifact_name, $autoAllowed, $rubricStatus, $id, $gameId]);
             logAudit($db, $userId, 'ASSIGNMENT_UPDATE', "Updated assignment #$assignment_number: $title (spel #$gameId)" . ($rubricStatus !== $existing['ai_rubric_status'] ? ', rubric terug naar concept' : ''));
             if ($rubricStatus !== $existing['ai_rubric_status']) {
                 flash('error', 'Opdracht gewijzigd, controleer de rubric. De opdracht is niet meer AI-klaar tot je de rubric opnieuw goedkeurt.');
@@ -186,8 +190,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             redirect("assignments.php?edit=$id");
         }
 
-        $stmt = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$gameId, $assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file, $autoAllowed]);
+        $stmt = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file, artifact_name, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$gameId, $assignment_number, $title, $description, $instruction, $criteria, $time_limit, $artifact_file, $artifact_name, $autoAllowed]);
         $newId = (int)$db->lastInsertId();
         logAudit($db, $userId, 'ASSIGNMENT_ADD', "Added assignment #$assignment_number: $title (spel #$gameId)");
         flash('success', 'Opdracht toegevoegd. Vul nu de rubric in, of laat de AI meekijken.');
@@ -288,6 +292,16 @@ if ($edit_assignment) {
     $designStatus = $edit_assignment['ai_design_status'] ?: 'idle';
     $canRequestAi = trim((string)$edit_assignment['instruction']) !== '' && trim((string)$edit_assignment['criteria']) !== '';
 }
+// Huidige bijlage van de opdracht die bewerkt wordt: naam, grootte (null = ontbreekt op de server) en link
+$attachment = null;
+if ($edit_assignment && $edit_assignment['artifact_file']) {
+    $path = __DIR__ . '/' . $edit_assignment['artifact_file'];
+    $attachment = [
+        'name' => artifactDisplayName($edit_assignment),
+        'href' => $edit_assignment['artifact_file'],
+        'size' => strpos($edit_assignment['artifact_file'], '..') === false && is_file($path) ? (int)filesize($path) : null,
+    ];
+}
 $listField = function (string $field) use ($rubric): string {
     return htmlspecialchars(implode("\n", $rubric[$field] ?? []));
 };
@@ -323,6 +337,11 @@ $extraCSS = '
     .drag-handle:hover .icon { color: var(--text); }
     #assignment-rows tr.dragging td { opacity: .5; background: var(--brand-soft); }
     .order-hint { margin-bottom: 12px; }
+    .attachment { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+    .attachment > .icon { color: var(--text-muted); }
+    .attachment-name { font-weight: 600; overflow-wrap: anywhere; }
+    .attachment .btn { margin-left: auto; }
+    .attachment-hint { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>';
 
 $pageTitle = 'Opdrachten';
@@ -369,9 +388,24 @@ include 'admin_header.php';
                         <div class="hint">Alleen voor operators en de AI; teams zien dit nooit.</div>
                     </div>
                     <div class="field">
-                        <label for="f-file">Bestand (PDF, ZIP, TXT, JPG of PNG)</label>
+                        <?php if ($attachment): ?>
+                            <span class="field-label">Bijlage</span>
+                            <div class="attachment">
+                                <?= icon('file') ?>
+                                <span class="attachment-name"><?= htmlspecialchars($attachment['name']) ?></span>
+                                <?php if ($attachment['size'] !== null): ?>
+                                    <span class="muted small"><?= formatBytes($attachment['size']) ?></span>
+                                    <a href="<?= htmlspecialchars($attachment['href']) ?>" download="<?= htmlspecialchars($attachment['name']) ?>" class="btn btn-secondary btn-sm"><?= icon('download') ?>Downloaden</a>
+                                <?php else: ?>
+                                    <span class="badge badge-danger"><?= icon('alert') ?>ontbreekt op de server</span>
+                                <?php endif; ?>
+                            </div>
+                            <label for="f-file">Vervangen door een ander bestand (PDF, ZIP, TXT, JPG of PNG)</label>
+                        <?php else: ?>
+                            <label for="f-file">Bestand (PDF, ZIP, TXT, JPG of PNG)</label>
+                        <?php endif; ?>
                         <input type="file" name="artifact_file" id="f-file" accept=".pdf,.zip,.txt,.jpg,.png">
-                        <?php if ($edit_assignment && $edit_assignment['artifact_file']): ?><div class="hint">Leeg laten = het huidige bestand behouden.</div><?php endif; ?>
+                        <?php if ($attachment): ?><div class="hint">Leeg laten = de huidige bijlage behouden. Teams krijgen het bestand onder een eigen naam, niet onder deze.</div><?php endif; ?>
                     </div>
                     <label class="check field">
                         <input type="checkbox" name="ai_human_only" value="1" <?= $edit_assignment && (int)$edit_assignment['ai_auto_allowed'] === 0 ? 'checked' : '' ?>>
@@ -525,8 +559,8 @@ include 'admin_header.php';
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(this, <?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file']], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
-                                        <?php if ($a['artifact_file']): ?><div class="small muted"><?= icon('paperclip') ?> bijlage</div><?php endif; ?>
+                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(this, <?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file'], 'file_name' => artifactDisplayName($a)], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
+                                        <?php if ($a['artifact_file']): ?><div class="small muted attachment-hint" title="<?= htmlspecialchars(artifactDisplayName($a)) ?>"><?= icon('paperclip') ?> <?= htmlspecialchars(artifactDisplayName($a)) ?></div><?php endif; ?>
                                     </td>
                                     <td>
                                         <?= rubricStatusBadge($a['ai_rubric_status'] ?: 'none') ?>
@@ -587,7 +621,7 @@ include 'admin_header.php';
             <div id="v-crit" class="panel panel-danger markdown" data-md></div>
             <div id="v-file-wrap" hidden>
                 <div class="section-label">Bijlage</div>
-                <a id="v-file" href="#" target="_blank" class="btn btn-secondary btn-sm"><?= icon('download') ?>Bestand openen</a>
+                <a id="v-file" href="#" class="btn btn-secondary btn-sm"><?= icon('download') ?><span id="v-file-name">Bestand downloaden</span></a>
             </div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-primary" data-close>Sluiten</button></div>
@@ -611,7 +645,12 @@ $extraJS = "
             el.removeAttribute('data-rendered');
         });
         document.getElementById('v-file-wrap').hidden = !assignment.file;
-        if (assignment.file) document.getElementById('v-file').href = assignment.file;
+        if (assignment.file) {
+            const link = document.getElementById('v-file');
+            link.href = assignment.file;
+            link.download = assignment.file_name;
+            document.getElementById('v-file-name').textContent = assignment.file_name;
+        }
         window.renderMarkdown(dialog);
         dialog.showModal();
     }

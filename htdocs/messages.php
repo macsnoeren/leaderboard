@@ -557,8 +557,8 @@ include 'admin_header.php';
                 <?php if (!empty($assignment['artifact_file'])): ?>
                     <div class="section-label">Bijlage</div>
                     <div class="panel btn-row" style="justify-content: space-between;">
-                        <span class="text-sm">Er is een bestand gekoppeld aan deze opdracht.</span>
-                        <a href="<?= htmlspecialchars($assignment['artifact_file']) ?>" target="_blank" class="btn btn-secondary btn-sm"><?= icon('download') ?>Bestand downloaden</a>
+                        <span class="text-sm"><?= icon('file') ?> <?= htmlspecialchars(artifactDisplayName($assignment)) ?></span>
+                        <a href="<?= htmlspecialchars($assignment['artifact_file']) ?>" download="<?= htmlspecialchars(artifactDisplayName($assignment)) ?>" class="btn btn-secondary btn-sm"><?= icon('download') ?>Bestand downloaden</a>
                     </div>
                 <?php endif; ?>
             </div>

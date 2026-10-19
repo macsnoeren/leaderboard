@@ -100,9 +100,9 @@ def import_archive(conn, htdocs_dir, archive_path, reporter, name=None, created_
                             reader.extract_to(a.artifact.name, target, sha256=a.artifact.sha256)
                     conn.execute(
                         "INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, "
-                        "artifact_file, ai_rubric, ai_rubric_status, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "artifact_file, artifact_name, ai_rubric, ai_rubric_status, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (game_id, a.assignment_number, a.title, a.description, a.instruction, a.criteria, a.time_limit, rel,
-                         a.ai_rubric, a.ai_rubric_status, a.ai_auto_allowed))
+                         a.artifact_name if rel else None, a.ai_rubric, a.ai_rubric_status, a.ai_auto_allowed))
                 if model.game.logo is not None:
                     ext = _ext(model.game.logo.name)
                     if ext not in LOGO_EXTENSIONS:

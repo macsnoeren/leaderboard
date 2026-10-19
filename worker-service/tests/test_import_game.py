@@ -68,6 +68,22 @@ class ImportTest(unittest.TestCase):
         self.assertIsNone(self.conn.execute("SELECT artifact_file FROM assignments WHERE game_id = ?", (game_id,)).fetchone()[0])
         self.assertIn("niet toegestaan", reporter.warnings[0])
 
+    def test_attachment_name(self):
+        path = os.path.join(self.tmp, "a.tar.gz")
+        make_archive(path, {"format": "operationroom-game", "format_version": 3, "game": {"name": "X"}, "files": {},
+                            "assignments": [{"assignment_number": 1, "title": "T", "artifact_file": "a.pdf", "artifact_name": "../../etc/Kaart\n.pdf"},
+                                            {"assignment_number": 2, "title": "U", "artifact_name": "zonder bijlage.pdf"}]},
+                     {"files/a.pdf": b"%PDF"})
+        game_id, _ = self.do_import(path)
+        names = [r[0] for r in self.conn.execute("SELECT artifact_name FROM assignments WHERE game_id = ? ORDER BY assignment_number", (game_id,))]
+        self.assertEqual(names, ["Kaart.pdf", None])
+
+    def test_attachment_name_survives_export_import(self):
+        self.ids = seed_game(self.env)
+        game_id, _ = self.do_import(self.export(include_progress=False))
+        names = [r[0] for r in self.conn.execute("SELECT artifact_name FROM assignments WHERE game_id = ? ORDER BY assignment_number", (game_id,))]
+        self.assertEqual(names, ["Bewijsstuk sleutel.pdf", None])
+
     def test_failure_leaves_nothing(self):
         before = self.conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
         with mock.patch.object(imp, "import_progress", side_effect=RuntimeError("halverwege")):
