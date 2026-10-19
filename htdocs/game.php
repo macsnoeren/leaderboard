@@ -88,6 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             flash('success', 'De instellingen zijn opgeslagen.');
             break;
 
+        case 'update_finish_message':
+            $error = updateFinishMessage($db, $gameId, (string)($_POST['finish_message'] ?? ''), $userId);
+            flash($error ? 'error' : 'success', $error ?? 'De eindtekst is opgeslagen.');
+            break;
+
         case 'update_ai':
             $error = updateGameAiSettings($db, $gameId, (string)($_POST['ai_mode'] ?? ''),
                 (int)($_POST['ai_max_attempts'] ?? 0), (int)($_POST['ai_max_questions'] ?? 0), $userId);
@@ -282,6 +287,24 @@ include 'admin_header.php';
                     <button type="submit" class="btn btn-primary"><?= icon('save') ?>Opslaan</button>
                 </form>
             </div>
+
+            <div class="card" id="finish-message">
+                <div class="card-title"><?= icon('trophy') ?>Eindtekst</div>
+                <p class="muted text-sm" style="margin-bottom: 12px;">Teams zien deze tekst zodra ze alle opdrachten hebben opgelost, en op het eindscherm als het spel afgelopen is. Leeg = de standaardtekst ("Alle dossiers gesloten").</p>
+                <form method="POST">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="update_finish_message">
+                    <div class="field">
+                        <label for="g-finish">Tekst voor de winnaars</label>
+                        <textarea name="finish_message" id="g-finish" rows="8" maxlength="<?= FINISH_MESSAGE_MAX_LENGTH ?>" placeholder="***GEFELICITEERD!***&#10;&#10;Jullie hebben de zaak opgelost…"><?= htmlspecialchars((string)($game['finish_message'] ?? '')) ?></textarea>
+                        <div class="hint">Markdown: <code>**vet**</code>, <code>*cursief*</code>, <code>***vet en cursief***</code>, een lege regel voor een nieuwe alinea.</div>
+                    </div>
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary"><?= icon('save') ?>Opslaan</button>
+                        <button type="button" class="btn btn-secondary" id="g-finish-preview"><?= icon('eye') ?>Voorbeeld</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <div>
@@ -409,6 +432,15 @@ include 'admin_header.php';
         <?php endif; ?>
     </div>
 
+    <dialog class="modal" id="finish-preview-dialog" aria-labelledby="finish-preview-title">
+        <div class="modal-header">
+            <h2 id="finish-preview-title">Voorbeeld eindtekst</h2>
+            <button type="button" class="btn btn-ghost btn-icon" data-close aria-label="Sluiten"><?= icon('x') ?></button>
+        </div>
+        <div class="modal-body"><div class="markdown finish-preview" id="finish-preview-body" data-md></div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-primary" data-close>Sluiten</button></div>
+    </dialog>
+
     <script src="<?= QRCODE_SRC ?>"></script>
     <script>
         new QRCode(document.getElementById('qrcode'), {
@@ -416,6 +448,16 @@ include 'admin_header.php';
             width: 150,
             height: 150,
             correctLevel: QRCode.CorrectLevel.M
+        });
+
+        // Voorbeeld van de eindtekst, zoals teams hem zien (Markdown)
+        document.getElementById('g-finish-preview').addEventListener('click', () => {
+            const dialog = document.getElementById('finish-preview-dialog');
+            const body = document.getElementById('finish-preview-body');
+            body.textContent = document.getElementById('g-finish').value.trim() || 'Alle dossiers gesloten';
+            body.removeAttribute('data-rendered');
+            window.renderMarkdown(dialog);
+            dialog.showModal();
         });
 
         // Eindtijd: datum als dd/mm/jjjj en tijd als uu:mm. De kalenderknop opent de datumkiezer van

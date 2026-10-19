@@ -83,6 +83,17 @@ class ImportTest(unittest.TestCase):
         game_id, _ = self.do_import(self.export(include_progress=False))
         names = [r[0] for r in self.conn.execute("SELECT artifact_name FROM assignments WHERE game_id = ? ORDER BY assignment_number", (game_id,))]
         self.assertEqual(names, ["Bewijsstuk sleutel.pdf", None])
+        finish = self.conn.execute("SELECT finish_message FROM games WHERE id = ?", (game_id,)).fetchone()[0]
+        self.assertEqual(finish, "***GEFELICITEERD!***\n\nDe zaak is opgelost.")
+
+    def test_finish_message_optional_and_capped(self):
+        for value, expected in ((None, None), ("   ", None), (["geen tekst"], None), ("x" * 6000, "x" * 5000)):
+            path = os.path.join(self.tmp, "a.tar.gz")
+            game = {"name": "X"} if value is None else {"name": "X", "finish_message": value}
+            make_archive(path, {"format": "operationroom-game", "format_version": 3, "game": game, "files": {},
+                                "assignments": [{"assignment_number": 1, "title": "T"}]}, {})
+            game_id, _ = self.do_import(path)
+            self.assertEqual(self.conn.execute("SELECT finish_message FROM games WHERE id = ?", (game_id,)).fetchone()[0], expected)
 
     def test_failure_leaves_nothing(self):
         before = self.conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]

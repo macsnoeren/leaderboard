@@ -32,6 +32,13 @@ def _file_name(value):
     return name or None
 
 
+def _finish_message(value):
+    """Eindtekst van het spel: tekst, max. 5000 tekens (zoals FINISH_MESSAGE_MAX_LENGTH in conf/game.php)."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()[:5000]
+
+
 def _file_ref(member, files, reader):
     info = files.get(member) if isinstance(files, dict) else None
     info = info if isinstance(info, dict) else {}
@@ -58,6 +65,7 @@ def read_v3(manifest, reader):
         ai_max_attempts=min(50, max(1, _int(g.get("ai_max_attempts"), 5))),
         ai_max_questions=min(50, max(1, _int(g.get("ai_max_questions"), 5))),
         logo=logo,
+        finish_message=_finish_message(g.get("finish_message")),
     )
     raw = manifest.get("assignments")
     if not isinstance(raw, list) or not all(isinstance(a, dict) for a in raw):

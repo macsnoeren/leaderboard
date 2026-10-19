@@ -78,6 +78,8 @@ $hasEnd = $game['ends_at'] !== null;
 
 $levelText = $level >= 1 && $level <= $total_assignments ? "$level/$total_assignments" : levelLabel($level, $total_assignments);
 $allDone = $level > $total_assignments && $status !== 'draft';
+// Eindtekst van het spel (Markdown) voor teams die alles hebben opgelost; leeg = de standaardtekst
+$finishMessage = trim((string)($game['finish_message'] ?? ''));
 
 /**
  * De chat als bubbels. Tijden in lokale tijd via formatDateTime() (de database is UTC).
@@ -165,7 +167,10 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
         .download { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 24px; padding: 16px 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
         .download .muted { font-size: 13px; }
         .all-done { text-align: center; padding: 40px 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-        .all-done .icon { width: 64px; height: 64px; color: var(--gold); stroke-width: 1.5; }
+        .all-done > .icon { width: 64px; height: 64px; color: var(--gold); stroke-width: 1.5; }
+        .finish-text { max-width: 640px; font-size: 18px; line-height: 1.6; white-space: normal; text-align: center; }
+        .finish-text > :first-child { margin-top: 0; }
+        .finish-text > :last-child { margin-bottom: 0; }
         .chat-panel { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
         .chat-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); font-weight: 700; }
         .chat-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
@@ -280,7 +285,11 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
                     <div class="all-done">
                         <?= icon('trophy') ?>
                         <div class="eyebrow">Missie voltooid</div>
-                        <h1>Alle dossiers gesloten</h1>
+                        <?php if ($finishMessage !== ''): ?>
+                            <div class="markdown finish-text" data-md><?= htmlspecialchars($finishMessage) ?></div>
+                        <?php else: ?>
+                            <h1>Alle dossiers gesloten</h1>
+                        <?php endif; ?>
                         <p class="muted">Jullie staan op positie <strong>#<?= $rank ?></strong>. Bekijk het leaderboard voor de stand van de andere teams.</p>
                         <a href="<?= htmlspecialchars($leaderboardUrl) ?>" target="_leaderboard" class="btn btn-primary"><?= icon('trophy') ?>Naar het leaderboard</a>
                     </div>
@@ -344,6 +353,9 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
             <h1 class="screen-title">Team <?= htmlspecialchars($team['team_name']) ?></h1>
             <div class="rank-big">#<?= $rank ?></div>
             <p class="screen-sub"><?= $level > $total_assignments ? 'Alle opdrachten voltooid' : 'Level ' . max(1, $level) . ' van ' . $total_assignments ?></p>
+            <?php if ($level > $total_assignments && $finishMessage !== ''): ?>
+                <div class="screen-box markdown finish-text" data-md><?= htmlspecialchars($finishMessage) ?></div>
+            <?php endif; ?>
             <?php if ($game['status_message']): ?>
                 <div class="screen-box"><?= htmlspecialchars($game['status_message']) ?></div>
             <?php endif; ?>
@@ -359,6 +371,9 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
         <h1 class="screen-title" id="overlay-title">Dossier gesloten</h1>
         <p class="screen-sub" id="overlay-message"></p>
         <p class="screen-sub" id="overlay-rank"></p>
+        <?php if ($finishMessage !== ''): ?>
+            <div class="screen-box markdown finish-text" id="overlay-finish" data-md hidden><?= htmlspecialchars($finishMessage) ?></div>
+        <?php endif; ?>
         <div class="btn-row" id="overlay-actions" hidden>
             <a href="<?= htmlspecialchars($leaderboardUrl) ?>" target="_leaderboard" class="btn btn-primary"><?= icon('trophy') ?>Leaderboard</a>
             <button type="button" class="btn btn-secondary" onclick="closeOverlay()">Sluiten</button>
@@ -407,13 +422,18 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
             document.getElementById('overlay-message').textContent = message;
             document.getElementById('overlay-rank').textContent = rankText;
             document.getElementById('overlay-actions').hidden = !isFinal;
+            // De eindtekst alleen bij de laatste overlay; met een eindtekst blijft de overlay staan tot Sluiten
+            const finish = document.getElementById('overlay-finish');
+            if (finish) finish.hidden = !isFinal;
             document.getElementById('level-up-overlay').classList.add('is-open');
             if (!reduceMotion && window.confetti) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
             if (isFinal) { try { sessionStorage.setItem('final_seen_' + teamId, '1'); } catch (e) {} }
             else setTimeout(() => location.reload(), 3000);
         }
+        let reloadOnClose = false;
         function closeOverlay() {
             document.getElementById('level-up-overlay').classList.remove('is-open');
+            if (reloadOnClose) location.reload();
         }
 
         // --- Tabs op mobiel ---
@@ -518,8 +538,10 @@ $leaderboardUrl = 'index.php?game=' . urlencode((string)$game['join_code']);
                             showOverlay('Level up', `Dossier ${closed} gesloten`, `Op naar dossier ${data.level}.`, `Jullie staan nu op positie #${data.rank}.`, false);
                         }
                         currentLevel = data.level;
-                        // Na de kampioens-overlay toch herladen als het spel intussen afgelopen is
-                        if (isFinal) setTimeout(() => location.reload(), data.status === 'finished' ? 5000 : 6000);
+                        // Na de kampioens-overlay herladen voor het eindpaneel. Met een eindtekst pas bij Sluiten,
+                        // zodat er tijd is om hem te lezen (behalve als het spel afgelopen is: dat scherm toont hem ook).
+                        if (isFinal && document.getElementById('overlay-finish') && data.status !== 'finished') reloadOnClose = true;
+                        else if (isFinal) setTimeout(() => location.reload(), data.status === 'finished' ? 5000 : 6000);
                     } else if (data.level < currentLevel) {
                         // Level terug door de docent: opdracht en gesprek van het vorige level laden
                         location.reload();

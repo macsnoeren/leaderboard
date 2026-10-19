@@ -36,6 +36,7 @@ class GameInfo:
     ai_max_attempts: int = 5
     ai_max_questions: int = 5
     logo: Optional[FileRef] = None
+    finish_message: Optional[str] = None  # eindtekst (Markdown) voor teams die alles hebben opgelost
 
 
 @dataclass

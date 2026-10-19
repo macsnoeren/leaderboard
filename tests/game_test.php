@@ -19,7 +19,7 @@ function freshDb(): PDO {
     $db = new PDO('sqlite::memory:');
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db->exec("CREATE TABLE teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, role TEXT DEFAULT 'user')");
-    $db->exec("CREATE TABLE games (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', join_code TEXT UNIQUE, registration_open INTEGER DEFAULT 0, logo_file TEXT, status_message TEXT, started_at DATETIME, ends_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_by INTEGER, ai_mode TEXT DEFAULT 'suggest', ai_max_attempts INTEGER DEFAULT 5, ai_max_questions INTEGER DEFAULT 5)");
+    $db->exec("CREATE TABLE games (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', join_code TEXT UNIQUE, registration_open INTEGER DEFAULT 0, logo_file TEXT, status_message TEXT, started_at DATETIME, ends_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_by INTEGER, ai_mode TEXT DEFAULT 'suggest', ai_max_attempts INTEGER DEFAULT 5, ai_max_questions INTEGER DEFAULT 5, finish_message TEXT)");
     $db->exec("CREATE TABLE game_teachers (game_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL, PRIMARY KEY (game_id, teacher_id))");
     $db->exec("CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE, ai_processing_by TEXT, ai_processing_at DATETIME, ai_mode TEXT DEFAULT 'suggest')");
     $db->exec("CREATE UNIQUE INDEX idx_teams_game_name ON teams(game_id, team_name)");
@@ -440,6 +440,17 @@ check('opdracht van ander spel → fout', deleteAssignment($db, $a1, $other, 1) 
 addTeam($db, $game, 'Bezig', 1);
 check('vergrendelde opdracht → fout', deleteAssignment($db, $a1, $game, 1) !== null && count(assignmentOrder($db, $game)) === 3);
 check('laatste opdracht mag wel', deleteAssignment($db, $a4, $game, 1) === null && assignmentNumbers($db, $game) === [1, 2]);
+
+echo "updateFinishMessage\n";
+$db = freshDb();
+$game = addGame($db);
+check('eindtekst opslaan', updateFinishMessage($db, $game, "  ***GEFELICITEERD!***\r\n\r\nZaak opgelost.  ", 1) === null);
+check('getrimd en met \\n', getGame($db, $game)['finish_message'] === "***GEFELICITEERD!***\n\nZaak opgelost.");
+check('te lang → fout, oude tekst blijft', updateFinishMessage($db, $game, str_repeat('é', FINISH_MESSAGE_MAX_LENGTH + 1), 1) !== null && getGame($db, $game)['finish_message'] === "***GEFELICITEERD!***\n\nZaak opgelost.");
+check('precies het maximum mag', updateFinishMessage($db, $game, str_repeat('é', FINISH_MESSAGE_MAX_LENGTH), 1) === null);
+check('leeg → NULL (standaardtekst)', updateFinishMessage($db, $game, "  \n ", 1) === null && getGame($db, $game)['finish_message'] === null);
+check('onbekend spel → fout', updateFinishMessage($db, 999, 'x', 1) !== null);
+check('audit GAME_UPDATE per wijziging', auditCount($db, 'GAME_UPDATE') === 3);
 
 echo "cleanFileName / artifactDisplayName\n";
 check('gewone naam blijft', cleanFileName('Plattegrond kelder.pdf') === 'Plattegrond kelder.pdf');

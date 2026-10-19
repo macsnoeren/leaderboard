@@ -21,6 +21,7 @@ const GAME_STATUS_LABELS = [
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const JOIN_CODE_LENGTH = 6;
 const TEAM_NAME_MAX_LENGTH = 50;
+const FINISH_MESSAGE_MAX_LENGTH = 5000;
 const LOGO_DIR = 'uploads';
 // Privacytekst op join.php en team.php (AVG, zie agentic-service/README.md)
 const PRIVACY_NOTICE = 'Deel geen persoonsgegevens of andere gevoelige informatie in de chat (zoals adressen, telefoonnummers, wachtwoorden of gegevens over gezondheid). Berichten kunnen met hulp van AI worden verwerkt.';
@@ -479,6 +480,25 @@ function localDateTimeToUtc(string $date, string $time): ?string {
 function utcToLocalParts(?string $utc): array {
     $time = $utc ? strtotime($utc . ' UTC') : false;
     return $time === false ? ['date' => '', 'time' => ''] : ['date' => date('d/m/Y', $time), 'time' => date('H:i', $time)];
+}
+
+/**
+ * Eindtekst (Markdown) die teams zien als ze alle opdrachten hebben opgelost. Leeg = de standaardtekst.
+ * Geeft een foutmelding terug, of null.
+ */
+function updateFinishMessage(PDO $db, int $gameId, string $text, ?int $userId): ?string {
+    $text = trim(str_replace("\r\n", "\n", $text));
+    $length = function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
+    if ($length > FINISH_MESSAGE_MAX_LENGTH) {
+        return 'De eindtekst mag maximaal ' . FINISH_MESSAGE_MAX_LENGTH . ' tekens lang zijn.';
+    }
+    $game = getGame($db, $gameId);
+    if (!$game) {
+        return 'Dit spel bestaat niet.';
+    }
+    $db->prepare("UPDATE games SET finish_message = ? WHERE id = ?")->execute([$text === '' ? null : $text, $gameId]);
+    logAudit($db, $userId, 'GAME_UPDATE', "Eindtekst van spel '{$game['name']}' (#$gameId) " . ($text === '' ? 'verwijderd' : 'gewijzigd'));
+    return null;
 }
 
 /**

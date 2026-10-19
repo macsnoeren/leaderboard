@@ -240,6 +240,11 @@ try {
         $db->exec("ALTER TABLE assignments ADD COLUMN artifact_name TEXT");
     } catch (PDOException $e) {}
 
+    // 23. Eindtekst van een spel (Markdown) voor teams die alle opdrachten hebben opgelost
+    try {
+        $db->exec("ALTER TABLE games ADD COLUMN finish_message TEXT");
+    } catch (PDOException $e) {}
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

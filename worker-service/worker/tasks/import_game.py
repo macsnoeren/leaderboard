@@ -142,9 +142,10 @@ def _insert_game(conn, model, game_name, created_by):
         started_at = source.get("started_at") if status != "draft" else None
     cur = conn.execute(
         "INSERT INTO games (name, status, join_code, registration_open, started_at, created_at, created_by, ai_mode, "
-        "ai_max_attempts, ai_max_questions) VALUES (?, ?, ?, 0, ?, datetime('now'), ?, ?, ?, ?)",
+        "ai_max_attempts, ai_max_questions, finish_message) VALUES (?, ?, ?, 0, ?, datetime('now'), ?, ?, ?, ?, ?)",
         (unique_game_name(conn, game_name), status, generate_join_code(conn), started_at, created_by,
-         model.game.ai_mode if model.game.ai_mode in AI_MODES else "suggest", model.game.ai_max_attempts, model.game.ai_max_questions))
+         model.game.ai_mode if model.game.ai_mode in AI_MODES else "suggest", model.game.ai_max_attempts, model.game.ai_max_questions,
+         model.game.finish_message))
     return cur.lastrowid
 
 

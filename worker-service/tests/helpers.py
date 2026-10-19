@@ -56,7 +56,8 @@ def seed_game(env, name="Operatie Zebra", status="running"):
     teacher = schema.add_teacher(c, "jjansen", display_name="J. Jansen")
     logo = env.write_file("uploads/game_1_logo_1.png", b"\x89PNG logo")
     game = schema.add_game(c, name, status=status, logo_file=logo, started_at="2026-10-18 08:00:00")
-    c.execute("UPDATE games SET ai_mode = 'reply', ai_max_attempts = 7 WHERE id = ?", (game,))
+    c.execute("UPDATE games SET ai_mode = 'reply', ai_max_attempts = 7, finish_message = ? WHERE id = ?",
+              ("***GEFELICITEERD!***\n\nDe zaak is opgelost.", game))
     c.execute("INSERT INTO game_teachers (game_id, teacher_id) VALUES (?, ?)", (game, teacher))
     art = env.write_file("artifacts/game_1_assignment_1_1.pdf", b"%PDF bijlage 1")
     a1 = schema.add_assignment(c, game, 1, "De sleutel", art, criteria="De conciërge", artifact_name="Bewijsstuk sleutel.pdf",

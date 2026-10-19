@@ -36,6 +36,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(manifest["game"]["name"], "Operatie Zebra")
         self.assertEqual(manifest["game"]["ai_mode"], "reply")
         self.assertEqual(manifest["game"]["ai_max_attempts"], 7)
+        self.assertEqual(manifest["game"]["finish_message"], "***GEFELICITEERD!***\n\nDe zaak is opgelost.")
         self.assertEqual([a["assignment_number"] for a in manifest["assignments"]], [1, 2])
         self.assertEqual(manifest["assignments"][0]["ai_rubric"], {"kern": "De conciërge", "aspecten": []})
         self.assertEqual(manifest["assignments"][1]["ai_auto_allowed"], 0)
