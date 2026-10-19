@@ -53,14 +53,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         case 'update_settings':
             $name = trim($_POST['name'] ?? '');
             $length = function_exists('mb_strlen') ? mb_strlen($name, 'UTF-8') : strlen($name);
-            $endsInput = trim($_POST['ends_at'] ?? '');
-            $endsAt = localInputToUtc($endsInput);
+            // Eindtijd: datum (dd/mm/jjjj) en tijd (uu:mm) apart; allebei leeg = geen eindtijd
+            $endsDate = trim($_POST['ends_date'] ?? '');
+            $endsTime = trim($_POST['ends_time'] ?? '');
+            $endsAt = localDateTimeToUtc($endsDate, $endsTime);
             if ($length === 0 || $length > 100) {
                 flash('error', 'Een spelnaam heeft 1 tot 100 tekens.');
                 break;
             }
-            if ($endsInput !== '' && $endsAt === null) {
-                flash('error', 'De eindtijd is ongeldig.');
+            if (($endsDate === '') !== ($endsTime === '')) {
+                flash('error', 'Vul voor de eindtijd zowel een datum als een tijd in, of laat beide leeg.');
+                break;
+            }
+            if ($endsDate !== '' && $endsAt === null) {
+                flash('error', 'De eindtijd is ongeldig. Gebruik dd/mm/jjjj voor de datum en uu:mm voor de tijd.');
                 break;
             }
             $logo = $game['logo_file'];
@@ -174,6 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 $logo = gameLogoUrl($game);
 $joinUrl = BASE_URL . '/join.php?code=' . urlencode((string)$game['join_code']);
+$ends = utcToLocalParts($game['ends_at']);
 $status = $game['effective_status'];
 $actions = allowedGameActions($game);
 $teamCount = count(rankedTeams($db, $gameId));
@@ -195,6 +202,12 @@ $extraCSS = '<style>
     .join-url { overflow-wrap: anywhere; font-size: 13px; }
     .logo-preview { max-width: 200px; max-height: 120px; object-fit: contain; display: block; margin-bottom: 10px; border-radius: var(--radius-sm); background: #FFFFFF; padding: 6px; border: 1px solid var(--line); }
     .state-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ends-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; }
+    .ends-row .field { margin-bottom: 0; }
+    .date-input { position: relative; display: flex; gap: 6px; }
+    .date-input input[type="text"] { flex: 1; min-width: 0; }
+    .picker-proxy { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+    .link-button { background: none; border: none; padding: 0; font: inherit; color: var(--brand); text-decoration: underline; cursor: pointer; }
     @media (max-width: 600px) { .status-form { flex-direction: column; } .join-grid { grid-template-columns: 1fr; } }
 </style>';
 include 'admin_header.php';
@@ -238,9 +251,27 @@ include 'admin_header.php';
                         <input type="text" name="name" id="g-name" value="<?= htmlspecialchars($game['name']) ?>" maxlength="100" required>
                     </div>
                     <div class="field">
-                        <label for="g-ends">Eindtijd</label>
-                        <input type="datetime-local" name="ends_at" id="g-ends" value="<?= htmlspecialchars(utcToLocalInput($game['ends_at'])) ?>">
-                        <div class="hint">Leeg = geen eindtijd.<?= $game['ends_at'] ? ' Nu: ' . formatDateTime($game['ends_at']) . '.' : '' ?></div>
+                        <div class="ends-row">
+                            <div class="field">
+                                <label for="g-ends-date">Einddatum</label>
+                                <div class="date-input">
+                                    <input type="text" name="ends_date" id="g-ends-date" value="<?= htmlspecialchars($ends['date']) ?>" placeholder="dd/mm/jjjj" inputmode="numeric" autocomplete="off"
+                                           pattern="\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}" title="Datum als dd/mm/jjjj, bijv. 24/10/2026" aria-describedby="g-ends-hint">
+                                    <button type="button" class="btn btn-secondary btn-icon" id="g-ends-pick" title="Kies in de kalender" aria-label="Einddatum kiezen in de kalender" hidden><?= icon('calendar') ?></button>
+                                    <input type="date" id="g-ends-picker" class="picker-proxy" tabindex="-1" aria-hidden="true">
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="g-ends-time">Eindtijd</label>
+                                <input type="text" name="ends_time" id="g-ends-time" value="<?= htmlspecialchars($ends['time']) ?>" placeholder="uu:mm" inputmode="numeric" autocomplete="off" list="g-ends-times"
+                                       pattern="([01]?\d|2[0-3])[:.][0-5]\d" title="Tijd als uu:mm (24 uur), bijv. 16:30" aria-describedby="g-ends-hint">
+                                <datalist id="g-ends-times">
+                                    <?php for ($m = 0; $m < 24 * 60; $m += 15): ?><option value="<?= sprintf('%02d:%02d', intdiv($m, 60), $m % 60) ?>"><?php endfor; ?>
+                                </datalist>
+                            </div>
+                        </div>
+                        <div class="hint" id="g-ends-hint">Beide leeg = geen eindtijd.<?= $game['ends_at'] ? ' Nu: ' . formatDateTime($game['ends_at']) . '.' : '' ?>
+                            <?php if ($game['ends_at']): ?><button type="button" class="link-button" id="g-ends-clear">Eindtijd wissen</button><?php endif; ?></div>
                     </div>
                     <div class="field">
                         <label for="g-logo">Logo</label>
@@ -386,5 +417,44 @@ include 'admin_header.php';
             height: 150,
             correctLevel: QRCode.CorrectLevel.M
         });
+
+        // Eindtijd: datum als dd/mm/jjjj en tijd als uu:mm. De kalenderknop opent de datumkiezer van
+        // de browser via een verborgen datumveld (dat zelf de notatie van de browser zou tonen).
+        (function () {
+            const date = document.getElementById('g-ends-date');
+            const time = document.getElementById('g-ends-time');
+            const picker = document.getElementById('g-ends-picker');
+            const pick = document.getElementById('g-ends-pick');
+            const pad = n => String(n).padStart(2, '0');
+            const parseDate = v => {
+                const m = v.trim().match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+                return m ? { d: +m[1], m: +m[2], y: +m[3] } : null;
+            };
+            // Netjes maken bij verlaten: 1-7-2026 → 01/07/2026, 9.5 blijft fout, 9:05 → 09:05
+            date.addEventListener('blur', () => {
+                const p = parseDate(date.value);
+                if (p) date.value = pad(p.d) + '/' + pad(p.m) + '/' + p.y;
+            });
+            time.addEventListener('blur', () => {
+                const m = time.value.trim().match(/^(\d{1,2})[:.](\d{2})$/);
+                if (m && +m[1] < 24 && +m[2] < 60) time.value = pad(m[1]) + ':' + m[2];
+            });
+            if (typeof picker.showPicker === 'function') {
+                pick.hidden = false;
+                pick.addEventListener('click', () => {
+                    const p = parseDate(date.value);
+                    picker.value = p ? p.y + '-' + pad(p.m) + '-' + pad(p.d) : '';
+                    try { picker.showPicker(); } catch (e) { date.focus(); }
+                });
+                picker.addEventListener('change', () => {
+                    if (!picker.value) return;
+                    const [y, m, d] = picker.value.split('-');
+                    date.value = d + '/' + m + '/' + y;
+                    (time.value ? date : time).focus();
+                });
+            }
+            const clear = document.getElementById('g-ends-clear');
+            if (clear) clear.addEventListener('click', () => { date.value = ''; time.value = ''; date.focus(); });
+        })();
     </script>
 <?php include 'admin_footer.php'; ?>

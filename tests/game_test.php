@@ -258,14 +258,22 @@ $candidates = ['ABCDEF', 'ABCDEF', 'GHJKMN'];
 $code = generateJoinCode($db, function () use (&$candidates) { return array_shift($candidates); });
 check('bestaande code wordt niet opnieuw uitgegeven', $code === 'GHJKMN');
 
-echo "localInputToUtc / utcToLocalInput\n";
+echo "localDateTimeToUtc / utcToLocalParts\n";
 $tz = date_default_timezone_get();
 date_default_timezone_set('Europe/Amsterdam');
-check('14:00 lokaal (zomertijd) → 12:00 UTC', localInputToUtc('2026-07-01T14:00') === '2026-07-01 12:00:00');
-check('14:00 lokaal (wintertijd) → 13:00 UTC', localInputToUtc('2026-12-01T14:00') === '2026-12-01 13:00:00');
-check('terug naar 14:00 lokaal', utcToLocalInput('2026-07-01 12:00:00') === '2026-07-01T14:00');
-check('leeg → null', localInputToUtc('') === null);
-check('onzin → null', localInputToUtc('morgen') === null);
+check('01/07/2026 14:00 lokaal (zomertijd) → 12:00 UTC', localDateTimeToUtc('01/07/2026', '14:00') === '2026-07-01 12:00:00');
+check('01/12/2026 14:00 lokaal (wintertijd) → 13:00 UTC', localDateTimeToUtc('01/12/2026', '14:00') === '2026-12-01 13:00:00');
+check('dag eerst: 02/03 is 2 maart', localDateTimeToUtc('02/03/2026', '12:00') === '2026-03-02 11:00:00');
+check('ook d-m-jjjj, d.m.jjjj en u.mm', localDateTimeToUtc('1-7-2026', '9.05') === '2026-07-01 07:05:00' && localDateTimeToUtc('1.7.2026', '09:05') === '2026-07-01 07:05:00');
+check('spaties eromheen mogen', localDateTimeToUtc(' 01/07/2026 ', ' 14:00 ') === '2026-07-01 12:00:00');
+check('31/02 → null', localDateTimeToUtc('31/02/2026', '12:00') === null);
+check('maand 13 → null', localDateTimeToUtc('01/13/2026', '12:00') === null);
+check('24:00 en 12:60 → null', localDateTimeToUtc('01/07/2026', '24:00') === null && localDateTimeToUtc('01/07/2026', '12:60') === null);
+check('jjjj-mm-dd → null', localDateTimeToUtc('2026-07-01', '12:00') === null);
+check('alleen datum of alleen tijd → null', localDateTimeToUtc('01/07/2026', '') === null && localDateTimeToUtc('', '12:00') === null);
+check('onzin → null', localDateTimeToUtc('morgen', 'straks') === null);
+check('terug naar 01/07/2026 14:00 lokaal', utcToLocalParts('2026-07-01 12:00:00') === ['date' => '01/07/2026', 'time' => '14:00']);
+check('geen eindtijd → leeg', utcToLocalParts(null) === ['date' => '', 'time' => '']);
 date_default_timezone_set($tz);
 
 echo "resetGame\n";

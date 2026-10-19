@@ -460,30 +460,25 @@ function generateJoinCode(PDO $db, ?callable $nextCandidate = null): string {
 }
 
 /**
- * Waarde van een datetime-local veld (lokale tijd) naar UTC voor de database, of null.
+ * Datum (dd/mm/jjjj; ook - of . als scheiding) en tijd (uu:mm of uu.mm, 24 uur) in lokale tijd naar
+ * UTC voor de database. Null als een van beide ontbreekt of ongeldig is (bijv. 31/02).
  */
-function localInputToUtc(string $value): ?string {
-    $value = trim($value);
-    if ($value === '') {
+function localDateTimeToUtc(string $date, string $time): ?string {
+    if (!preg_match('~^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$~', trim($date), $d)
+        || !preg_match('~^(\d{1,2})[:.](\d{2})$~', trim($time), $t)
+        || !checkdate((int)$d[2], (int)$d[1], (int)$d[3]) || (int)$t[1] > 23 || (int)$t[2] > 59) {
         return null;
     }
-    $local = new DateTimeZone(date_default_timezone_get());
-    $dt = DateTime::createFromFormat('Y-m-d\TH:i', $value, $local) ?: DateTime::createFromFormat('Y-m-d\TH:i:s', $value, $local);
-    if (!$dt) {
-        return null;
-    }
-    return $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    $local = new DateTime(sprintf('%04d-%02d-%02d %02d:%02d:00', $d[3], $d[2], $d[1], $t[1], $t[2]), new DateTimeZone(date_default_timezone_get()));
+    return $local->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
 }
 
 /**
- * UTC-tijd uit de database naar de waarde voor een datetime-local veld (lokale tijd).
+ * UTC-tijd uit de database naar ['date' => 'dd/mm/jjjj', 'time' => 'uu:mm'] in lokale tijd; leeg zonder tijd.
  */
-function utcToLocalInput(?string $utc): string {
-    if (!$utc) {
-        return '';
-    }
-    $time = strtotime($utc . ' UTC');
-    return $time === false ? '' : date('Y-m-d\TH:i', $time);
+function utcToLocalParts(?string $utc): array {
+    $time = $utc ? strtotime($utc . ' UTC') : false;
+    return $time === false ? ['date' => '', 'time' => ''] : ['date' => date('d/m/Y', $time), 'time' => date('H:i', $time)];
 }
 
 /**
