@@ -6,6 +6,9 @@ kleine agents, en de opdracht-assistent helpt bij het maken van een rubric. Wat 
 De webapplicatie blijft de baas: `api.php` controleert elke beslissing opnieuw, dus een kapotte of
 gestolen agent kan nooit meer dan het spel toestaat.
 
+Voor operators staat dezelfde uitleg, zonder techniek, op de pagina *Zo werkt de AI* (`htdocs/ai_uitleg.php`,
+onder "Tools" in de zijbalk). Pas die mee aan als modi, prompts of beslisregels veranderen.
+
 Uitgangspunten:
 
 - **Beslisregels zijn code, geen prompt** (`agentic/policy.py`, op de server `allowedDecision()` in

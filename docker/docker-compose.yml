@@ -23,8 +23,8 @@ services:
       FROM_EMAIL: ${FROM_EMAIL:-}
       FROM_NAME: ${FROM_NAME:-Assignment System}
       REQUIRE_2FA_ADMIN: ${REQUIRE_2FA_ADMIN:-false}
-      # Link onder "Tools" in de admin-zijbalk; leeg = niet tonen
-      DARKNET_CHAT_URL: ${DARKNET_CHAT_URL:-}
+      # Link onder "Tools" in de admin-zijbalk; leeg (DARKNET_CHAT_URL=) = niet tonen
+      DARKNET_CHAT_URL: ${DARKNET_CHAT_URL-https://zebrawavesecurity.info/_dark_web_chat/}
       # Maakt de API key 'docker-agent' aan voor de agent-container
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-1}
       # Worker: grootste upload voor import/restore (MB) en hoe lang exports en rapporten te downloaden zijn

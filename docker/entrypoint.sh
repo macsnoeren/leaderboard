@@ -25,7 +25,7 @@ define('FROM_EMAIL', '${FROM_EMAIL:-}');
 define('FROM_NAME', '${FROM_NAME:-Assignment System}');
 define('BASE_URL', '$BASE_URL');
 define('REQUIRE_2FA_ADMIN', ${REQUIRE_2FA_ADMIN:-false});
-define('DARKNET_CHAT_URL', '${DARKNET_CHAT_URL:-}');
+define('DARKNET_CHAT_URL', '${DARKNET_CHAT_URL-https://zebrawavesecurity.info/_dark_web_chat/}');
 define('STORAGE_DIR', '$APP/storage');
 define('MAX_ARCHIVE_MB', ${MAX_ARCHIVE_MB:-500});
 define('RESULT_TTL_DAYS', ${WORKER_RESULT_TTL_DAYS:-7});

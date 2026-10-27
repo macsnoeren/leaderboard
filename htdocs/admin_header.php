@@ -25,7 +25,8 @@ $unread_total = $headerGame ? countUnread($db, (int)$headerGame['id']) : 0;
 $escalations_total = $headerGame ? countOpenEscalations($db, (int)$headerGame['id']) : 0;
 $currentPage = basename($_SERVER['PHP_SELF']);
 $isAdminUser = ($_SESSION['teacher_role'] ?? 'user') === 'admin';
-$darknetUrl = defined('DARKNET_CHAT_URL') ? trim((string)DARKNET_CHAT_URL) : '';
+// Darknet-chat onder "Tools"; leeg in config.php = niet tonen
+$darknetUrl = defined('DARKNET_CHAT_URL') ? trim((string)DARKNET_CHAT_URL) : 'https://zebrawavesecurity.info/_dark_web_chat/';
 
 // Navigatie: [pagina, label, icoon, pagina's die dit item actief maken]
 $navGroups = [
@@ -49,6 +50,9 @@ if ($isAdminUser) {
         ['backups.php', 'Backups', 'save', ['backups.php']],
     ];
 }
+$navGroups['Tools'] = [
+    ['ai_uitleg.php', 'Zo werkt de AI', 'info', ['ai_uitleg.php']],
+];
 
 function navBadges(int $unread, int $escalations): array {
     return [
@@ -168,7 +172,6 @@ function navBadges(int $unread, int $escalations): array {
                 <?php endforeach; ?>
             <?php endforeach; ?>
             <?php if ($darknetUrl !== ''): ?>
-                <div class="nav-group-label">Tools</div>
                 <a href="<?= htmlspecialchars($darknetUrl) ?>" target="_blank" rel="noopener" class="nav-item">
                     <?= icon('terminal') ?><span>Darknet-chat</span><?= icon('external', 'ext') ?><span class="sr-only">(opent in een nieuw tabblad)</span>
                 </a>
