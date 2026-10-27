@@ -47,8 +47,8 @@ dat (nodig: `AllowOverride FileInfo` of `All`); Docker zet het in de Apache-conf
 
 ## Een spel voorbereiden
 
-1. Maak onder **Spellen** een spel aan (of importeer een export) en zet de opdrachten klaar onder
-   **Opdrachten**. Wil je dat de AI teams antwoordt, laat dan per opdracht een rubric maken en keur die goed.
+1. Maak onder **Spellen** een spel aan (of importeer een export, of kopieer een bestaand spel: opdrachten,
+   instellingen en operators gaan mee, teams niet) en zet de opdrachten klaar onder **Opdrachten**. Wil je dat de AI teams antwoordt, laat dan per opdracht een rubric maken en keur die goed.
    Een nieuwe opdracht komt achteraan; de volgorde wijzig je door te slepen (of met de pijltjes) en de
    nummering past zich aan. Opdrachten waar teams al mee bezig zijn (geweest) liggen vast: verplaatsen of
    verwijderen zou een team aan een andere opdracht koppelen.

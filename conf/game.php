@@ -600,7 +600,8 @@ function deleteGame(PDO $db, int $gameId, ?int $userId, ?string $htdocsDir = nul
 /**
  * Kopieert de opdrachten van een ander spel, met een eigen kopie van elk bestand en de rubric
  * (zonder de dialoog van de opdracht-assistent). De nummering loopt door na het hoogste bestaande
- * nummer. Geeft het aantal gekopieerde opdrachten terug.
+ * nummer. Geeft het aantal gekopieerde opdrachten terug. Loopt er al een transactie (copyGame()),
+ * dan hoort de kopie daarbij; bij een fout zijn de gekopieerde bestanden dan al weg.
  */
 function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = null, ?string $htdocsDir = null): int {
     $htdocsDir = $htdocsDir ?? __DIR__ . '/../htdocs';
@@ -617,7 +618,10 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
 
     $insert = $db->prepare("INSERT INTO assignments (game_id, assignment_number, title, description, instruction, criteria, time_limit, artifact_file, artifact_name, ai_rubric, ai_rubric_status, ai_auto_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $copied = [];
-    $db->beginTransaction();
+    $ownTransaction = !$db->inTransaction();
+    if ($ownTransaction) {
+        $db->beginTransaction();
+    }
     try {
         foreach ($source as $a) {
             $number++;
@@ -634,15 +638,73 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
                               $file ? ($a['artifact_name'] ?? null) : null, $a['ai_rubric'] ?? null, $a['ai_rubric_status'] ?? 'none', (int)($a['ai_auto_allowed'] ?? 1)]);
         }
         logAudit($db, $userId, 'ASSIGNMENTS_COPY', count($source) . " opdrachten gekopieerd van spel #$fromGame naar spel #$toGame");
-        $db->commit();
+        if ($ownTransaction) {
+            $db->commit();
+        }
     } catch (Throwable $e) {
-        $db->rollBack();
+        if ($ownTransaction) {
+            $db->rollBack();
+        }
         foreach ($copied as $path) {
             @unlink($path);
         }
         throw $e;
     }
     return count($source);
+}
+
+/**
+ * Kopieert een spel naar een nieuw spel (concept): instellingen (AI, eindtekst), het logo (een eigen kopie
+ * van een upload), de gekoppelde operators en de opdrachten met bijlagen en rubric (copyAssignments()).
+ * Niet mee: teams, berichten, archief, mededelingen, eindtijd, statusbericht en de spelcode (een nieuwe;
+ * aanmelden staat dicht). Geeft het id van het nieuwe spel, of een foutmelding.
+ */
+function copyGame(PDO $db, int $fromGame, string $name, ?int $userId, ?string $htdocsDir = null) {
+    $htdocsDir = $htdocsDir ?? __DIR__ . '/../htdocs';
+    $source = getGame($db, $fromGame);
+    if (!$source) {
+        return 'Spel niet gevonden.';
+    }
+    $name = trim($name);
+    $length = function_exists('mb_strlen') ? mb_strlen($name, 'UTF-8') : strlen($name);
+    if ($length === 0 || $length > 100) {
+        return 'Een spelnaam heeft 1 tot 100 tekens.';
+    }
+
+    $db->beginTransaction();
+    $files = [];
+    try {
+        $db->prepare("INSERT INTO games (name, status, join_code, registration_open, logo_file, created_at, created_by, ai_mode, ai_max_attempts, ai_max_questions, finish_message)
+                      VALUES (?, 'draft', ?, 0, NULL, datetime('now'), ?, ?, ?, ?, ?)")
+           ->execute([$name, generateJoinCode($db), $userId, $source['ai_mode'] ?? 'suggest', (int)($source['ai_max_attempts'] ?? 5),
+                      (int)($source['ai_max_questions'] ?? 5), $source['finish_message'] ?? null]);
+        $newId = (int)$db->lastInsertId();
+
+        // Een geüpload logo krijgt een eigen kopie (deleteGame() gooit het weg); een meegeleverd logo (images/…) blijft gedeeld
+        $logo = (string)$source['logo_file'];
+        if (strpos($logo, LOGO_DIR . '/') === 0 && strpos($logo, '..') === false && is_file($htdocsDir . '/' . $logo)) {
+            $copy = LOGO_DIR . '/game_' . $newId . '_logo_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . strtolower(pathinfo($logo, PATHINFO_EXTENSION));
+            if (!copy($htdocsDir . '/' . $logo, $htdocsDir . '/' . $copy)) {
+                throw new RuntimeException('Kopiëren van het logo mislukt');
+            }
+            $files[] = $htdocsDir . '/' . $copy;
+            $logo = $copy;
+        } elseif (strpos($logo, LOGO_DIR . '/') === 0) {
+            $logo = '';
+        }
+        $db->prepare("UPDATE games SET logo_file = ? WHERE id = ?")->execute([$logo !== '' ? $logo : null, $newId]);
+        $db->prepare("INSERT INTO game_teachers (game_id, teacher_id) SELECT ?, teacher_id FROM game_teachers WHERE game_id = ?")->execute([$newId, $fromGame]);
+        copyAssignments($db, $fromGame, $newId, $userId, $htdocsDir);
+        logAudit($db, $userId, 'GAME_COPY', "Spel '{$source['name']}' (#$fromGame) gekopieerd naar '$name' (#$newId)");
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        foreach ($files as $path) {
+            @unlink($path);
+        }
+        throw $e;
+    }
+    return $newId;
 }
 
 /**

@@ -55,6 +55,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
     $targetId = (int)$target['id'];
 
+    if ($action === 'copy_game') {
+        // Opdrachten, instellingen en operators gaan mee, teams niet: meteen te starten of eerst te testen
+        try {
+            $result = copyGame($db, $targetId, (string)($_POST['name'] ?? ''), $adminId);
+        } catch (Throwable $e) {
+            $result = 'Kopiëren mislukt: ' . $e->getMessage();
+        }
+        if (is_string($result)) {
+            flash('error', $result);
+        } else {
+            $copy = getGame($db, $result);
+            flash('success', "Spel '{$copy['name']}' is aangemaakt als kopie van '{$target['name']}', met " . totalAssignments($db, $result) . " opdrachten en zonder teams. Het staat als concept klaar.");
+        }
+        redirect('games.php');
+    }
+
     if ($action === 'add_teacher' || $action === 'remove_teacher') {
         $teacher = findTeacher($db, (int)($_POST['teacher_id'] ?? 0));
         if (!$teacher) {
@@ -155,6 +171,8 @@ include 'admin_header.php';
         $rowId = (int)$row['id'];
         $logo = gameLogoUrl($row);
         $linkedIds = array_map('intval', array_column($linked[$rowId] ?? [], 'id'));
+        $copyName = 'Kopie van ' . $row['name'];
+        $copyName = function_exists('mb_substr') ? mb_substr($copyName, 0, 100, 'UTF-8') : substr($copyName, 0, 100);
         $unlinked = array_filter($teachers, function ($t) use ($linkedIds) { return !in_array((int)$t['id'], $linkedIds, true); });
     ?>
         <div class="card">
@@ -170,13 +188,38 @@ include 'admin_header.php';
                                 <span><?= icon('qr') ?>code <span class="mono"><?= htmlspecialchars((string)$row['join_code']) ?></span></span>
                             </div>
                         </div>
-                        <form method="POST" action="choose_game.php" class="inline">
-                            <?= csrfField() ?>
-                            <input type="hidden" name="game_id" value="<?= $rowId ?>">
-                            <input type="hidden" name="return" value="game.php">
-                            <button type="submit" class="btn btn-sm btn-secondary"><?= icon('sliders') ?>Openen</button>
-                        </form>
+                        <div class="btn-row">
+                            <form method="POST" action="choose_game.php" class="inline">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="game_id" value="<?= $rowId ?>">
+                                <input type="hidden" name="return" value="game.php">
+                                <button type="submit" class="btn btn-sm btn-secondary"><?= icon('sliders') ?>Openen</button>
+                            </form>
+                            <button type="button" class="btn btn-sm btn-secondary" data-open="copy-<?= $rowId ?>"><?= icon('copy') ?>Kopiëren…</button>
+                        </div>
                     </div>
+                    <dialog class="modal" id="copy-<?= $rowId ?>" aria-labelledby="copy-title-<?= $rowId ?>">
+                        <form method="POST">
+                            <div class="modal-header">
+                                <h2 id="copy-title-<?= $rowId ?>">Spel kopiëren</h2>
+                                <button type="button" class="btn btn-ghost btn-icon" data-close aria-label="Sluiten"><?= icon('x') ?></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-sm">Maakt een nieuw spel (concept) met de opdrachten (met bijlagen en rubric), de instellingen, het logo, de eindtekst en de operators van <strong><?= htmlspecialchars($row['name']) ?></strong>. Teams, chats, het archief, mededelingen en de eindtijd gaan niet mee; het nieuwe spel krijgt een eigen spelcode. Handig om het spel opnieuw te spelen, te verbeteren of eerst met een testteam uit te proberen.</p>
+                                <?= csrfField() ?>
+                                <input type="hidden" name="action" value="copy_game">
+                                <input type="hidden" name="game_id" value="<?= $rowId ?>">
+                                <div class="field" style="margin-top: 16px;">
+                                    <label for="copy-name-<?= $rowId ?>">Naam van het nieuwe spel</label>
+                                    <input type="text" name="name" id="copy-name-<?= $rowId ?>" maxlength="100" required value="<?= htmlspecialchars($copyName) ?>">
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-close>Annuleren</button>
+                                <button type="submit" class="btn btn-primary"><?= icon('copy') ?>Kopiëren</button>
+                            </div>
+                        </form>
+                    </dialog>
                     <div class="section-label" style="margin-top: 0;">Operators</div>
                     <?php foreach ($linked[$rowId] ?? [] as $t): ?>
                         <span class="chip">

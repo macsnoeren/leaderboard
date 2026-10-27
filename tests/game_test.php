@@ -341,6 +341,60 @@ array_map('unlink', glob("$dir/artifacts/*"));
 rmdir("$dir/artifacts");
 rmdir($dir);
 
+echo "copyGame\n";
+$db = freshDb();
+$htdocs = sys_get_temp_dir() . '/game_copy_' . bin2hex(random_bytes(4));
+mkdir("$htdocs/artifacts", 0777, true);
+mkdir("$htdocs/uploads", 0777, true);
+file_put_contents("$htdocs/artifacts/bron.pdf", 'bijlage');
+file_put_contents("$htdocs/uploads/logo.png", 'logo');
+$from = addGame($db, 'running', '-1 hour');
+$db->prepare("UPDATE games SET logo_file = 'uploads/logo.png', registration_open = 1, started_at = datetime('now', '-2 hours'), status_message = 'Pauze tot 14:00',
+              ai_mode = 'auto', ai_max_attempts = 7, ai_max_questions = 9, finish_message = 'Goed gedaan!' WHERE id = ?")->execute([$from]);
+$db->exec("INSERT INTO game_teachers (game_id, teacher_id) VALUES ($from, 4), ($from, 5)");
+addAssignments($db, $from, 3);
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/bron.pdf', artifact_name = 'Kaart.pdf', ai_rubric_status = 'approved' WHERE game_id = $from AND assignment_number = 2");
+$team = addTeam($db, $from, 'Alfa', 2);
+addMessage($db, $team, 1, 'team', 'antwoord');
+$db->exec("INSERT INTO announcements (game_id, message) VALUES ($from, 'Hallo')");
+$copy = copyGame($db, $from, '  Kopie  ', 1, $htdocs);
+check('geeft het id van het nieuwe spel', is_int($copy) && $copy !== $from);
+$g = getGame($db, $copy);
+$src = getGame($db, $from);
+check('naam getrimd, concept, zonder tijden en statusbericht', $g['name'] === 'Kopie' && $g['status'] === 'draft' && $g['started_at'] === null && $g['ends_at'] === null && $g['status_message'] === null);
+check('nieuwe spelcode, aanmelden dicht', $g['join_code'] !== $src['join_code'] && strlen($g['join_code']) === JOIN_CODE_LENGTH && (int)$g['registration_open'] === 0);
+check('AI-instellingen en eindtekst mee', $g['ai_mode'] === 'auto' && (int)$g['ai_max_attempts'] === 7 && (int)$g['ai_max_questions'] === 9 && $g['finish_message'] === 'Goed gedaan!');
+check('logo is een eigen kopie', $g['logo_file'] !== 'uploads/logo.png' && strpos($g['logo_file'], "uploads/game_{$copy}_logo_") === 0 && file_get_contents("$htdocs/{$g['logo_file']}") === 'logo');
+check('operators mee', $db->query("SELECT teacher_id FROM game_teachers WHERE game_id = $copy ORDER BY teacher_id")->fetchAll(PDO::FETCH_COLUMN) == [4, 5]);
+check('opdrachten 1..3 mee, met bijlage en rubricstatus', assignmentNumbers($db, $copy) === [1, 2, 3]
+      && $db->query("SELECT artifact_name || '/' || ai_rubric_status FROM assignments WHERE game_id = $copy AND assignment_number = 2")->fetchColumn() === 'Kaart.pdf/approved');
+check('geen teams, mededelingen of archief', (int)$db->query("SELECT (SELECT COUNT(*) FROM teams WHERE game_id = $copy) + (SELECT COUNT(*) FROM announcements WHERE game_id = $copy) + (SELECT COUNT(*) FROM completed_assignments WHERE game_id = $copy)")->fetchColumn() === 0);
+check('bronspel onaangeroerd', $src['status'] === 'running' && totalAssignments($db, $from) === 3 && teamLevel($db, $team) === 2);
+check('audit GAME_COPY en ASSIGNMENTS_COPY', auditCount($db, 'GAME_COPY') === 1 && auditCount($db, 'ASSIGNMENTS_COPY') === 1);
+check('kopie verwijderen laat de bestanden van het bron spel staan', deleteGame($db, $copy, 1, $htdocs) === null && is_file("$htdocs/uploads/logo.png") && is_file("$htdocs/artifacts/bron.pdf"));
+$db->exec("UPDATE games SET logo_file = 'images/standaard.png' WHERE id = $from");
+$shared = copyGame($db, $from, 'Met standaardlogo', 1, $htdocs);
+check('meegeleverd logo wordt gedeeld', getGame($db, $shared)['logo_file'] === 'images/standaard.png');
+check('lege naam → foutmelding', copyGame($db, $from, '   ', 1, $htdocs) === 'Een spelnaam heeft 1 tot 100 tekens.');
+check('onbekend spel → foutmelding', copyGame($db, 999, 'X', 1, $htdocs) === 'Spel niet gevonden.');
+$empty = addGame($db);
+check('spel zonder opdrachten kan ook', is_int(copyGame($db, $empty, 'Leeg', 1, $htdocs)));
+$before = (int)$db->query("SELECT COUNT(*) FROM games")->fetchColumn();
+$db->exec("CREATE TRIGGER faal BEFORE INSERT ON assignments WHEN NEW.assignment_number = 3 BEGIN SELECT RAISE(ABORT, 'kapot'); END");
+$filesBefore = count(glob("$htdocs/*/*"));
+try {
+    copyGame($db, $from, 'Mislukt', 1, $htdocs);
+    $threw = false;
+} catch (Throwable $e) {
+    $threw = true;
+}
+check('fout halverwege: geen nieuw spel en geen achtergebleven bestanden', $threw && (int)$db->query("SELECT COUNT(*) FROM games")->fetchColumn() === $before && count(glob("$htdocs/*/*")) === $filesBefore && !$db->inTransaction());
+$db->exec("DROP TRIGGER faal");
+array_map('unlink', glob("$htdocs/*/*"));
+rmdir("$htdocs/artifacts");
+rmdir("$htdocs/uploads");
+rmdir($htdocs);
+
 function assignmentOrder(PDO $db, int $gameId): array {
     return array_map('intval', $db->query("SELECT id FROM assignments WHERE game_id = $gameId ORDER BY assignment_number")->fetchAll(PDO::FETCH_COLUMN));
 }
