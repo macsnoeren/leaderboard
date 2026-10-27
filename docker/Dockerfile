@@ -15,6 +15,10 @@ ENV APACHE_DOCUMENT_ROOT=/var/www/leaderboard/htdocs
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
  && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
+# Bijlagen alleen via PHP (zie htdocs/.htaccess; die leest Apache hier niet, AllowOverride None)
+RUN printf '<Directory ${APACHE_DOCUMENT_ROOT}/artifacts>\n    Require all denied\n</Directory>\n' > /etc/apache2/conf-available/leaderboard-artifacts.conf \
+ && a2enconf leaderboard-artifacts
+
 WORKDIR /var/www/leaderboard
 COPY htdocs htdocs
 COPY conf conf

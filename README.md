@@ -39,6 +39,12 @@ Daarna de worker en eventueel de AI-agent starten, zie hun README. De agent heef
 maak die per agent aan onder **API-sleutels** en zet hem in `agentic-service/config.py`. Linksonder in het
 dashboard staat of de agent actief is.
 
+**Webserver**: `htdocs/artifacts/` (bijlagen van opdrachten) mag niet rechtstreeks bereikbaar zijn, anders
+kan een team een bijlage van een volgend level ophalen (de namen zijn te raden). Teams downloaden via
+`team_download.php`, operators via `assignments.php?download=<id>`. Onder Apache doet `htdocs/.htaccess`
+dat (nodig: `AllowOverride FileInfo` of `All`); Docker zet het in de Apache-config. Met alleen nginx:
+`location ^~ /artifacts/ { deny all; }`. Een 403 op `/artifacts/…` is dus de bedoeling.
+
 ## Een spel voorbereiden
 
 1. Maak onder **Spellen** een spel aan (of importeer een export) en zet de opdrachten klaar onder

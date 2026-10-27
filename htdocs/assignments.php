@@ -24,6 +24,24 @@ $userId = (int)$user['id'];
 $game = requireGame($db, $user);
 $gameId = (int)$game['id'];
 
+// Download van de bijlage voor operators (de map artifacts/ is van buitenaf dicht)
+if (isset($_GET['download'])) {
+    $assignment = findAssignmentInGame($db, (int)$_GET['download'], $gameId);
+    $path = $assignment ? artifactPath($assignment) : null;
+    if (!$path) {
+        http_response_code(404);
+        exit('Bijlage niet gevonden.');
+    }
+    session_write_close();
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: ' . attachmentDisposition(artifactDisplayName($assignment)));
+    header('Content-Length: ' . filesize($path));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    readfile($path);
+    exit;
+}
+
 // Verwijdert een bestand alleen als geen andere opdracht het nog gebruikt
 function removeArtifact(PDO $db, ?string $file): void {
     if (!$file) {
@@ -295,11 +313,11 @@ if ($edit_assignment) {
 // Huidige bijlage van de opdracht die bewerkt wordt: naam, grootte (null = ontbreekt op de server) en link
 $attachment = null;
 if ($edit_assignment && $edit_assignment['artifact_file']) {
-    $path = __DIR__ . '/' . $edit_assignment['artifact_file'];
+    $path = artifactPath($edit_assignment);
     $attachment = [
         'name' => artifactDisplayName($edit_assignment),
-        'href' => $edit_assignment['artifact_file'],
-        'size' => strpos($edit_assignment['artifact_file'], '..') === false && is_file($path) ? (int)filesize($path) : null,
+        'href' => artifactDownloadUrl($edit_assignment),
+        'size' => $path ? (int)filesize($path) : null,
     ];
 }
 $listField = function (string $field) use ($rubric): string {
@@ -395,7 +413,7 @@ include 'admin_header.php';
                                 <span class="attachment-name"><?= htmlspecialchars($attachment['name']) ?></span>
                                 <?php if ($attachment['size'] !== null): ?>
                                     <span class="muted small"><?= formatBytes($attachment['size']) ?></span>
-                                    <a href="<?= htmlspecialchars($attachment['href']) ?>" download="<?= htmlspecialchars($attachment['name']) ?>" class="btn btn-secondary btn-sm"><?= icon('download') ?>Downloaden</a>
+                                    <a href="<?= htmlspecialchars($attachment['href']) ?>" class="btn btn-secondary btn-sm"><?= icon('download') ?>Downloaden</a>
                                 <?php else: ?>
                                     <span class="badge badge-danger"><?= icon('alert') ?>ontbreekt op de server</span>
                                 <?php endif; ?>
@@ -559,7 +577,7 @@ include 'admin_header.php';
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(this, <?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file'], 'file_name' => artifactDisplayName($a)], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
+                                        <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(this, <?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file'] ? artifactDownloadUrl($a) : null, 'file_name' => artifactDisplayName($a)], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
                                         <?php if ($a['artifact_file']): ?><div class="small muted attachment-hint" title="<?= htmlspecialchars(artifactDisplayName($a)) ?>"><?= icon('paperclip') ?> <?= htmlspecialchars(artifactDisplayName($a)) ?></div><?php endif; ?>
                                     </td>
                                     <td>
@@ -648,7 +666,6 @@ $extraJS = "
         if (assignment.file) {
             const link = document.getElementById('v-file');
             link.href = assignment.file;
-            link.download = assignment.file_name;
             document.getElementById('v-file-name').textContent = assignment.file_name;
         }
         window.renderMarkdown(dialog);

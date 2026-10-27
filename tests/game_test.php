@@ -463,6 +463,24 @@ check('naam van de bijlage', artifactDisplayName(['artifact_file' => 'artifacts/
 check('oude bijlage zonder naam → naam op de server', artifactDisplayName(['artifact_file' => 'artifacts/game_1_x.pdf', 'artifact_name' => null]) === 'game_1_x.pdf');
 check('geen bijlage → leeg', artifactDisplayName(['artifact_file' => null, 'artifact_name' => 'Kaart.pdf']) === '');
 
+echo "artifactPath / attachmentDisposition\n";
+$htdocs = sys_get_temp_dir() . '/game_test_' . bin2hex(random_bytes(4));
+mkdir("$htdocs/artifacts", 0777, true);
+file_put_contents("$htdocs/artifacts/kaart.pdf", 'x');
+file_put_contents("$htdocs/geheim.txt", 'x');
+check('bijlage in artifacts/', artifactPath(['artifact_file' => 'artifacts/kaart.pdf'], $htdocs) === realpath("$htdocs/artifacts/kaart.pdf"));
+check('ontbrekend bestand → null', artifactPath(['artifact_file' => 'artifacts/weg.pdf'], $htdocs) === null);
+check('geen bijlage → null', artifactPath(['artifact_file' => null], $htdocs) === null);
+check('buiten artifacts/ → null', artifactPath(['artifact_file' => 'artifacts/../geheim.txt'], $htdocs) === null && artifactPath(['artifact_file' => 'geheim.txt'], $htdocs) === null);
+check('de map zelf → null', artifactPath(['artifact_file' => 'artifacts'], $htdocs) === null);
+check('downloadlink via PHP', artifactDownloadUrl(['id' => 7, 'artifact_file' => 'artifacts/kaart.pdf']) === 'assignments.php?download=7');
+check('gewone naam', attachmentDisposition('Kaart.pdf') === 'attachment; filename="Kaart.pdf"; filename*=UTF-8\'\'Kaart.pdf');
+check('accenten en aanhalingstekens', attachmentDisposition('Café "x".pdf') === 'attachment; filename="Caf_ _x_.pdf"; filename*=UTF-8\'\'Caf%C3%A9%20%22x%22.pdf');
+unlink("$htdocs/artifacts/kaart.pdf");
+unlink("$htdocs/geheim.txt");
+rmdir("$htdocs/artifacts");
+rmdir($htdocs);
+
 echo "countUnread\n";
 $db = freshDb();
 $game = addGame($db, 'running');

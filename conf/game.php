@@ -763,6 +763,36 @@ function artifactDisplayName(array $assignment): string {
 }
 
 /**
+ * Volledig pad van de bijlage van een opdracht, of null als die er niet is of buiten
+ * htdocs/artifacts/ wijst.
+ */
+function artifactPath(array $assignment, ?string $htdocsDir = null): ?string {
+    if (empty($assignment['artifact_file'])) {
+        return null;
+    }
+    $dir = realpath(($htdocsDir ?? __DIR__ . '/../htdocs') . '/artifacts');
+    $path = realpath(($htdocsDir ?? __DIR__ . '/../htdocs') . '/' . $assignment['artifact_file']);
+    return $dir && $path && strpos($path, $dir . DIRECTORY_SEPARATOR) === 0 && is_file($path) ? $path : null;
+}
+
+/**
+ * Downloadlink van de bijlage voor operators. De map artifacts/ is van buitenaf dicht
+ * (htdocs/.htaccess), dus het bestand gaat altijd via PHP.
+ */
+function artifactDownloadUrl(array $assignment): string {
+    return 'assignments.php?download=' . (int)$assignment['id'];
+}
+
+/**
+ * Content-Disposition voor een download onder een eigen naam: een ASCII-naam voor oude
+ * browsers en de echte naam in UTF-8 (RFC 6266).
+ */
+function attachmentDisposition(string $name): string {
+    $ascii = preg_replace('/[^A-Za-z0-9._ -]/u', '_', $name) ?? preg_replace('/[^A-Za-z0-9._ -]/', '_', $name);
+    return 'attachment; filename="' . $ascii . '"; filename*=UTF-8\'\'' . rawurlencode($name);
+}
+
+/**
  * Link naar het dashboard van een team.
  */
 function teamDashboardUrl(string $token): string {

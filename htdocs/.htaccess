@@ -1,0 +1,7 @@
+# Bijlagen van opdrachten nooit rechtstreeks serveren: de bestandsnamen zijn te raden en
+# teams zouden zo om level en downloadlimiet heen kunnen. Teams downloaden via
+# team_download.php, operators via assignments.php?download=<id>.
+# (Hier en niet in artifacts/ zelf: die map is runtime-data en een restore maakt hem leeg.)
+<IfModule mod_alias.c>
+    RedirectMatch 403 /artifacts(/|$)
+</IfModule>
