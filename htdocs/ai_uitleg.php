@@ -166,6 +166,7 @@ include 'admin_header.php';
     <section class="card" id="stappen">
         <div class="card-title"><?= icon('message') ?>Een teambericht, stap voor stap</div>
         <p>Stuurt een team een bericht waar nog niemand op heeft gereageerd, dan pakt de AI-agent het op. Elke agent krijgt de opdracht en de hele chat van dit level te zien, want teams geven hun antwoord vaak in stukjes. Wat een agent verder te zien krijgt, verschilt bewust per agent.</p>
+        <p>Een agent behandelt één team tegelijk, het oudste bericht eerst. Sturen veel teams tegelijk iets, dan ontstaat een wachtrij; op het <a href="teacher.php">dashboard</a> zie je in de tegel “Wacht op AI” hoeveel teams wachten en hoe snel de AI gemiddeld reageert. Stuurt een team intussen nog een bericht, dan bekijkt de AI alleen het nieuwste (met de hele chat erbij).</p>
         <ol class="flow">
             <li>
                 <div class="step-title">Voorfilter <span class="badge">code, geen AI</span></div>

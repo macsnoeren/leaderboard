@@ -386,18 +386,12 @@ function assignmentDialog(PDO $db, int $assignmentId): array {
 }
 
 /**
- * Teams waarvan het laatste teambericht nog geen reactie (docent, AI of suggestie) en nog geen
- * (niet-verouderde) beoordeling heeft, in lopende of gepauzeerde spellen, met AI-modus ≠ off en zonder actieve claim.
- * Per team alles wat de agent nodig heeft.
+ * FROM/WHERE voor de wachtrij van de AI: teams waarvan het laatste teambericht nog geen reactie (docent, AI
+ * of suggestie) en nog geen (niet-verouderde) beoordeling heeft, in lopende of gepauzeerde spellen, met
+ * AI-modus ≠ off. Gedeeld door aiPendingTasks() en aiQueueStats(); `tm` is dat laatste bericht.
  */
-function aiPendingTasks(PDO $db): array {
-    $stmt = $db->prepare("
-        SELECT t.id AS team_id, t.team_name, t.game_id, t.current_level, t.ai_mode,
-               " . effectiveStatusSql('g') . " AS game_status, g.ai_max_attempts, g.ai_max_questions,
-               a.id AS assignment_id, a.title AS assignment_title, a.description, a.instruction, a.criteria, a.time_limit,
-               a.ai_rubric, a.ai_rubric_status, a.ai_auto_allowed,
-               tm.id AS message_id, tm.created_at AS message_time
-        FROM teams t
+function aiWaitingSql(): string {
+    return "FROM teams t
         JOIN games g ON g.id = t.game_id
         JOIN assignments a ON a.game_id = t.game_id AND a.assignment_number = t.current_level
         JOIN team_messages tm ON tm.id = (SELECT MAX(id) FROM team_messages WHERE team_id = t.id AND assignment_number = t.current_level AND sender = 'team')
@@ -405,10 +399,25 @@ function aiPendingTasks(PDO $db): array {
         AND COALESCE(t.ai_mode, 'suggest') != 'off'
         AND NOT EXISTS (SELECT 1 FROM team_messages r WHERE r.team_id = t.id AND r.assignment_number = t.current_level
                         AND r.sender IN ('teacher', 'ai', 'suggestion') AND r.id > tm.id)
-        AND NOT EXISTS (SELECT 1 FROM ai_evaluations e WHERE e.team_id = t.id AND e.message_id = tm.id AND e.decision != 'stale')
+        AND NOT EXISTS (SELECT 1 FROM ai_evaluations e WHERE e.team_id = t.id AND e.message_id = tm.id AND e.decision != 'stale')";
+}
+
+/**
+ * De wachtrij van de AI zonder de teams die een agent nu verwerkt (actieve claim), oudste bericht eerst.
+ * Per team alles wat de agent nodig heeft. $limit: alleen de eerste zoveel (de agent haalt zo vlak voor
+ * elk team een verse lijst op, zonder elke keer alle chats).
+ */
+function aiPendingTasks(PDO $db, ?int $limit = null): array {
+    $stmt = $db->prepare("
+        SELECT t.id AS team_id, t.team_name, t.game_id, t.current_level, t.ai_mode,
+               " . effectiveStatusSql('g') . " AS game_status, g.ai_max_attempts, g.ai_max_questions,
+               a.id AS assignment_id, a.title AS assignment_title, a.description, a.instruction, a.criteria, a.time_limit,
+               a.ai_rubric, a.ai_rubric_status, a.ai_auto_allowed,
+               tm.id AS message_id, tm.created_at AS message_time
+        " . aiWaitingSql() . "
         AND (t.ai_processing_at IS NULL OR t.ai_processing_at <= datetime('now', ?))
-        ORDER BY tm.created_at ASC, tm.id ASC
-    ");
+        ORDER BY tm.created_at ASC, tm.id ASC" . ($limit !== null ? ' LIMIT ' . max(1, $limit) : '')
+    );
     $stmt->execute(['-' . AI_CLAIM_MINUTES . ' minutes']);
     $tasks = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -446,6 +455,68 @@ function aiPendingTasks(PDO $db): array {
         ];
     }
     return $tasks;
+}
+
+/**
+ * Hoe druk de AI het spel heeft: teams in de wachtrij (ook die een agent nu verwerkt), hoe lang het oudste
+ * bericht al wacht, en over het afgelopen uur het aantal beoordelingen, de gemiddelde reactietijd (bericht
+ * → beoordeling, inclusief wachten) en de gemiddelde verwerkingstijd van de agent. Tijden in seconden;
+ * null als er niets is.
+ */
+function aiQueueStats(PDO $db, int $gameId): array {
+    $stmt = $db->prepare("SELECT COUNT(*) AS waiting, MAX(strftime('%s', 'now') - strftime('%s', tm.created_at)) AS oldest
+        " . aiWaitingSql() . " AND t.game_id = ?");
+    $stmt->execute([$gameId]);
+    $queue = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt = $db->prepare("SELECT COUNT(*) AS n, AVG(strftime('%s', e.created_at) - strftime('%s', tm.created_at)) AS response,
+            AVG(e.duration_ms) AS duration
+        FROM ai_evaluations e
+        JOIN team_messages tm ON tm.id = e.message_id
+        WHERE e.game_id = ? AND e.decision != 'stale' AND e.created_at > datetime('now', '-60 minutes')");
+    $stmt->execute([$gameId]);
+    $recent = $stmt->fetch(PDO::FETCH_ASSOC);
+    return [
+        'waiting' => (int)$queue['waiting'],
+        'oldest_seconds' => $queue['oldest'] !== null ? max(0, (int)$queue['oldest']) : null,
+        'evaluated' => (int)$recent['n'],
+        'avg_response_seconds' => $recent['response'] !== null ? max(0, (int)round((float)$recent['response'])) : null,
+        'avg_processing_seconds' => $recent['duration'] !== null ? (int)round((float)$recent['duration'] / 1000) : null,
+    ];
+}
+
+// Wacht het oudste bericht langer dan dit (seconden), dan kleurt de tegel op het dashboard oranje
+const AI_QUEUE_WARNING_SECONDS = 300;
+
+/**
+ * Tekst voor de tegel "Wacht op AI" op het dashboard (ook voor de live update): aantal, oudste wachttijd,
+ * gemiddelden van het afgelopen uur en of het achterloopt.
+ */
+function aiQueueSummary(array $stats): array {
+    $average = $stats['avg_response_seconds'] === null
+        ? 'Nog geen beoordelingen in het afgelopen uur'
+        : 'Gem. reactie ' . formatWaitSeconds($stats['avg_response_seconds'])
+            . ($stats['avg_processing_seconds'] !== null ? ', waarvan verwerking ' . formatWaitSeconds($stats['avg_processing_seconds']) : '')
+            . ' (' . $stats['evaluated'] . ' in het afgelopen uur)';
+    return [
+        'count' => $stats['waiting'],
+        'oldest' => $stats['oldest_seconds'] === null ? 'Niemand wacht' : 'Oudste wacht ' . formatWaitSeconds($stats['oldest_seconds']),
+        'average' => $average,
+        'warning' => $stats['oldest_seconds'] !== null && $stats['oldest_seconds'] >= AI_QUEUE_WARNING_SECONDS,
+    ];
+}
+
+/**
+ * Korte duur voor het dashboard: "45 s", "3 min", "1 u 5 min".
+ */
+function formatWaitSeconds(int $seconds): string {
+    if ($seconds < 60) {
+        return $seconds . ' s';
+    }
+    $minutes = intdiv($seconds, 60);
+    if ($minutes < 60) {
+        return $minutes . ' min';
+    }
+    return intdiv($minutes, 60) . ' u' . ($minutes % 60 ? ' ' . ($minutes % 60) . ' min' : '');
 }
 
 /**

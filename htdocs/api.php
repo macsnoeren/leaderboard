@@ -45,8 +45,9 @@ $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Teams waarvan het laatste bericht nog door de AI bekeken moet worden, met alles wat de agent nodig heeft
+// (?limit=N: alleen de oudste N; de agent haalt zo vlak voor elk team een verse lijst op)
 if ($method === 'GET' && $action === 'get_pending') {
-    respond(200, aiPendingTasks($db));
+    respond(200, aiPendingTasks($db, isset($_GET['limit']) ? (int)$_GET['limit'] : null));
 }
 
 // Claim een team voor een agent (lock van 5 minuten)

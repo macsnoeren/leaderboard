@@ -45,6 +45,13 @@ if (isset($_GET['ajax_escalations'])) {
     exit;
 }
 
+// AJAX endpoint voor de tegel "Wacht op AI": wachtrij en reactietijd van de AI in dit spel
+if (isset($_GET['ajax_ai_queue'])) {
+    header('Content-Type: application/json');
+    echo json_encode(aiQueueSummary(aiQueueStats($db, $gameId)));
+    exit;
+}
+
 // Handle level changes
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
@@ -142,6 +149,9 @@ $total_assignments = totalAssignments($db, $gameId);
 $unread_total = countUnread($db, $gameId);
 $canAddTeam = initialLevel($game) !== null;
 $escalations = openEscalationsByTeam($db, $gameId);
+// De tegel "Wacht op AI" alleen als de AI in dit spel aan staat voor minstens één team
+$aiInUse = (bool)array_filter($teams, function ($t) { return ($t['ai_mode'] ?: 'suggest') !== 'off'; });
+$aiQueue = $aiInUse ? aiQueueSummary(aiQueueStats($db, $gameId)) : null;
 
 // Keuzelijst voor de AI-modus; $submitOnChange voor de keuze per team
 function aiModeSelect(string $current, bool $submitOnChange): string {
@@ -226,6 +236,14 @@ include 'admin_header.php';
                 <div class="stat-value" id="escalation-stat"><?= $escalationCount ?></div>
                 <div class="stat-hint">Teams die op een operator wachten</div>
             </div>
+            <?php if ($aiQueue): ?>
+            <div class="stat<?= $aiQueue['warning'] ? ' is-warning' : '' ?>" id="ai-queue" title="Teams waarvan het laatste bericht op de AI wacht. Reactietijd: van teambericht tot beoordeling, inclusief wachten; verwerking: hoe lang de agent er zelf mee bezig was.">
+                <div class="stat-label"><?= icon('bot') ?>Wacht op AI</div>
+                <div class="stat-value" id="ai-queue-count"><?= $aiQueue['count'] ?></div>
+                <div class="stat-hint" id="ai-queue-oldest"><?= htmlspecialchars($aiQueue['oldest']) ?></div>
+                <div class="stat-hint" id="ai-queue-average"><?= htmlspecialchars($aiQueue['average']) ?></div>
+            </div>
+            <?php endif; ?>
         </div>
 
         <div class="grid-main dash">
@@ -359,5 +377,23 @@ $extraJS = "
     function toggleSendLink() {
         document.getElementById('send-link-row').hidden = document.getElementById('team-email').value.trim() === '';
     }
+
+    // Tegel \"Wacht op AI\": elke 10 s bijwerken
+    (function () {
+        const tile = document.getElementById('ai-queue');
+        if (!tile) return;
+        setInterval(() => {
+            fetch('teacher.php?ajax_ai_queue=1')
+                .then(r => r.ok ? r.json() : null)
+                .then(q => {
+                    if (!q) return;
+                    document.getElementById('ai-queue-count').textContent = q.count;
+                    document.getElementById('ai-queue-oldest').textContent = q.oldest;
+                    document.getElementById('ai-queue-average').textContent = q.average;
+                    tile.classList.toggle('is-warning', q.warning);
+                })
+                .catch(() => {});
+        }, 10000);
+    })();
 </script>";
 include 'admin_footer.php'; ?>

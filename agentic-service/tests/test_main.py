@@ -1,4 +1,4 @@
-"""De agentloop met mocks; teamberichten gaan voor design-taken."""
+"""De agentloop met mocks; teamberichten gaan voor design-taken, met een verse lijst vóór elk team."""
 import threading
 import types
 import unittest
@@ -21,14 +21,35 @@ class FakePipeline:
 
 
 def make_service(tasks=None, jobs=None, model_ok=True):
+    """Met een nep-wachtrij zoals de server: een geclaimd team staat er niet meer in (ook niet voor deze agent),
+    een beoordeeld bericht ook niet."""
     calls = []
+    queue = list(tasks or [])
+    claimed = set()
     api = mock.Mock()
     api.agent_id = "agent-1"
-    api.get_pending.side_effect = lambda: calls.append(("get_pending",)) or (tasks or [])
+    api.queue = queue
+
+    def get_pending(limit=None):
+        calls.append(("get_pending", limit))
+        pending = [t for t in queue if t["team_id"] not in claimed]
+        return pending[:limit] if limit else pending
+
+    def claim_task(team_id):
+        claimed.add(team_id)
+        return True
+
+    def submit_evaluation(payload):
+        calls.append(("submit_evaluation", payload["team_id"]))
+        queue[:] = [t for t in queue if (t["team_id"], t["message_id"]) != (payload["team_id"], payload["message_id"])]
+        claimed.discard(payload["team_id"])
+        return {"decision": payload["decision"]}
+
+    api.get_pending.side_effect = get_pending
     api.get_design_jobs.side_effect = lambda: calls.append(("get_design_jobs",)) or (jobs or [])
-    api.claim_task.return_value = True
+    api.claim_task.side_effect = claim_task
     api.claim_design.return_value = True
-    api.submit_evaluation.side_effect = lambda p: calls.append(("submit_evaluation", p["team_id"])) or {"decision": p["decision"]}
+    api.submit_evaluation.side_effect = submit_evaluation
     api.submit_design.side_effect = lambda p: calls.append(("submit_design", p["assignment_id"])) or {}
     llm = mock.Mock()
     llm.last_ok = model_ok
@@ -57,9 +78,59 @@ class MainTest(unittest.TestCase):
 
     def test_claimed_elsewhere_is_skipped(self):
         service, api, calls = make_service([make_task(team_id=1)])
-        api.claim_task.return_value = False
+        api.claim_task.side_effect = lambda team_id: False
         service.run_once()
         self.assertNotIn(("process", 1), calls)
+
+    def test_fresh_list_before_each_team(self):
+        service, _, calls = make_service([make_task(team_id=1), make_task(team_id=2), make_task(team_id=3)])
+        self.assertEqual(service.process_tasks(), 3)
+        order = [c for c in calls if c[0] in ("get_pending", "process")]
+        self.assertEqual(order, [("get_pending", 5), ("process", 1), ("get_pending", 5), ("process", 2),
+                                 ("get_pending", 5), ("process", 3), ("get_pending", 5)])
+
+    def test_newer_message_while_waiting(self):
+        # Team 2 stuurt een nieuw bericht terwijl team 1 wordt beoordeeld: dan het nieuwe bericht, niet het oude
+        service, api, calls = make_service([make_task(team_id=1), make_task(team_id=2, message_id=20)])
+        processed = []
+        real = service.pipeline.process
+
+        def process(task, agent_id):
+            processed.append((task["team_id"], task["message_id"]))
+            if task["team_id"] == 1:
+                api.queue[1] = make_task(team_id=2, message_id=21)
+            return real(task, agent_id)
+
+        service.pipeline.process = process
+        service.process_tasks()
+        self.assertEqual(processed, [(1, 11), (2, 21)])
+
+    def test_answered_while_waiting_is_skipped(self):
+        # Een operator antwoordt team 2 terwijl team 1 wordt beoordeeld: team 2 valt uit de wachtrij
+        service, api, calls = make_service([make_task(team_id=1), make_task(team_id=2)])
+        real = service.pipeline.process
+
+        def process(task, agent_id):
+            del api.queue[1:]
+            return real(task, agent_id)
+
+        service.pipeline.process = process
+        service.process_tasks()
+        self.assertNotIn(("process", 2), calls)
+
+    def test_other_agent_claims_first_in_batch(self):
+        service, api, calls = make_service([make_task(team_id=1), make_task(team_id=2)])
+        api.claim_task.side_effect = lambda team_id: team_id != 1
+        service.process_tasks()
+        self.assertEqual([c for c in calls if c[0] == "process"], [("process", 2)])
+
+    def test_failed_submit_does_not_loop(self):
+        # Blijft een team in de lijst staan (bijv. omdat de claim al verlopen is), dan nog maar één keer per ronde
+        service, api, calls = make_service([make_task(team_id=1)])
+        api.claim_task.side_effect = lambda team_id: True
+        api.submit_evaluation.side_effect = ApiError("HTTP 500", 500)
+        self.assertEqual(service.process_tasks(), 0)
+        self.assertEqual([c for c in calls if c[0] == "process"], [("process", 1)])
 
     def test_design_questions_and_rubric(self):
         service, api, _ = make_service(jobs=[JOB])

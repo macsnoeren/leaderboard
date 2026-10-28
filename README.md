@@ -68,6 +68,34 @@ gaan wél in één keer: wil je een export van een vol spel (2 GB) via de websit
    van de opdracht. De link naar de Darknet-chat in de zijbalk komt uit `DARKNET_CHAT_URL` in `config.php`.
 3. Laat teams zich aanmelden via de aanmeldlink van het spel, of maak ze zelf aan, en start het spel.
 
+## Veel teams tegelijk (AI-agent)
+
+Eén AI-agent beoordeelt één teambericht tegelijk, met drie modelaanroepen achter elkaar (intentie, beoordelaar
+of hulp-agent, validator): reken op zo'n 20 à 60 seconden per bericht. Berichten die tegelijk binnenkomen
+staan in een wachtrij, oudste eerst, met per team hoogstens één plek (het laatste bericht). Bij 15 teams die
+tegelijk iets sturen wacht het laatste team dus al snel 5 à 15 minuten.
+
+- **Hoe druk is het?** Op het dashboard toont de tegel **Wacht op AI** hoeveel teams op de AI wachten, hoe lang
+  het oudste bericht al wacht (oranje vanaf 5 minuten) en de gemiddelde reactietijd van het afgelopen uur
+  (van teambericht tot beoordeling), met daarin de tijd dat de agent er zelf mee bezig was. Is de reactietijd
+  veel langer dan de verwerking, dan staan berichten vooral te wachten: zet er een agent bij. De echte duur
+  per bericht staat ook per beoordeling in het **AI-logboek**.
+- **Meer agents**: agents werken samen zonder dubbel werk (een agent claimt een team; de andere slaan het
+  over). Met Docker:
+
+  ```sh
+  docker compose -f docker/docker-compose.yml up -d --scale agent=3
+  ```
+
+  Zonder Docker start je `main.py` meerdere keren (zelfde of eigen API-key). Twee à drie agents is voor een
+  groot spel (20+ teams) een goed begin.
+- **Limieten van Ollama**: alle agents gebruiken hetzelfde Ollama-account voor de cloudmodellen. Kijk vóór
+  een groot spel of je abonnement genoeg aanroepen toestaat: bij een limiet (HTTP 429) probeert de agent het
+  één keer opnieuw en gaat het bericht daarna naar de operator ("Operator nodig"). Meer agents betekent meer
+  aanroepen per minuut.
+- De limieten per team (antwoorden en vragen per 10 minuten, in **Spelinstellingen**) voorkomen dat één team
+  de wachtrij vult.
+
 ## Testen
 
 PHP-tests in `tests/` (exitcode ≠ 0 bij een fout), in Docker als PHP niet geïnstalleerd is:

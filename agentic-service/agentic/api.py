@@ -59,11 +59,11 @@ class ApiClient:
         logger.info("Nieuwe API-key ingelezen na een 401")
         return True
 
-    def _request(self, method, action, body=None, timeout=None):
+    def _request(self, method, action, body=None, timeout=None, params=None):
         for attempt in range(2):
             # De key alleen in de header: in de URL komt hij in de logs van de webserver terecht
             resp = self.session.request(
-                method, self.base_url, params={"action": action}, json=body,
+                method, self.base_url, params=dict(params or {}, action=action), json=body,
                 headers={"X-API-Token": self.api_key, "Content-Type": "application/json"},
                 timeout=timeout or self.timeout)
             # Bij een 401 één nieuwe poging, alleen als er inmiddels een andere key is
@@ -86,8 +86,9 @@ class ApiClient:
             raise ApiError(f"{action}: HTTP {status} {message}".strip(), status, data)
         return data
 
-    def get_pending(self):
-        status, data = self._request("GET", "get_pending")
+    def get_pending(self, limit=None):
+        """De wachtrij, oudste bericht eerst; `limit` = alleen de eerste zoveel."""
+        status, data = self._request("GET", "get_pending", params={"limit": limit} if limit else None)
         if status != 200 or not isinstance(data, list):
             raise ApiError(f"get_pending: HTTP {status}", status, data)
         return data

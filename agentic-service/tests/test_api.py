@@ -33,6 +33,11 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(kwargs["params"], {"action": "get_pending"})
         self.assertEqual(kwargs["headers"]["X-API-Token"], "geheim")
 
+    def test_get_pending_limit(self):
+        self.session.request.return_value = response(data=[])
+        self.api.get_pending(limit=5)
+        self.assertEqual(self.last()[1]["params"], {"limit": 5, "action": "get_pending"})
+
     def test_claim_task(self):
         self.session.request.return_value = response()
         self.assertTrue(self.api.claim_task(5))
