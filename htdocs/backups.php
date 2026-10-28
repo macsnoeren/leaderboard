@@ -21,15 +21,7 @@ if (isset($_GET['download'])) {
         exit('Backup niet gevonden.');
     }
     logAudit($db, $adminId, 'BACKUP_DOWNLOAD', "Backup {$backup['file']} gedownload");
-    session_write_close();
-    $path = backupsDir() . '/' . $backup['file'];
-    header('Content-Type: application/gzip');
-    header('Content-Disposition: attachment; filename="' . $backup['file'] . '"');
-    header('Content-Length: ' . filesize($path));
-    header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: private, no-store');
-    readfile($path);
-    exit;
+    sendFile(backupsDir() . '/' . $backup['file'], 'attachment; filename="' . $backup['file'] . '"', 'application/gzip');
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {

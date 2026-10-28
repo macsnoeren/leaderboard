@@ -366,6 +366,29 @@ function storeArchiveUpload(array $file) {
     return $rel;
 }
 
+/**
+ * Stuurt een bestand als download en stopt het script. Haalt eerst de output buffers weg: met
+ * output_buffering aan (standaard in php.ini) zet readfile() het hele bestand in het geheugen, en
+ * PHP stopt dan bij bestanden groter dan memory_limit zonder antwoord (achter nginx: 502).
+ */
+function sendFile(string $path, string $disposition, string $type = 'application/octet-stream'): void {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    // Een trage verbinding mag er lang over doen
+    set_time_limit(0);
+    header('Content-Type: ' . $type);
+    header('Content-Disposition: ' . $disposition);
+    header('Content-Length: ' . filesize($path));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    readfile($path);
+    exit;
+}
+
 // ---------------------------------------------------------------------------
 // Backups (storage/backups/<naam>.tar.gz met <naam>.tar.gz.json ernaast)
 // ---------------------------------------------------------------------------

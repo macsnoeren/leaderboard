@@ -51,12 +51,7 @@ if ($rowId) {
 // Serve file
 $artifact_path = __DIR__ . '/' . $assignment['artifact_file'];
 if (!empty($assignment['artifact_file']) && file_exists($artifact_path)) {
-    $filename = basename($artifact_path);
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . filesize($artifact_path));
-    readfile($artifact_path);
-    exit;
+    sendFile($artifact_path, 'attachment; filename="' . basename($artifact_path) . '"');
 } else {
     $filename = "assignment_level_{$level}.txt";
     $content = "Assignment Level {$level}\nTitle: {$assignment['title']}\nDescription: {$assignment['description']}\n";

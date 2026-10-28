@@ -338,7 +338,7 @@ function createTeam(PDO $db, array $game, string $name, ?string $email, ?int $us
  * Verwijdert een team met zijn berichten, downloads en AI-gegevens. Het archief blijft (met teamnaam).
  */
 function deleteTeam(PDO $db, int $teamId): void {
-    foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
+    foreach (['team_messages', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
         $db->prepare("DELETE FROM $table WHERE team_id = ?")->execute([$teamId]);
     }
     $db->prepare("DELETE FROM announcements WHERE team_id = ?")->execute([$teamId]);
@@ -511,7 +511,7 @@ function resetGame(PDO $db, int $gameId, ?int $userId): void {
     $db->beginTransaction();
     try {
         $teamIds = "SELECT id FROM teams WHERE game_id = ?";
-        foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
+        foreach (['team_messages', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
             $db->prepare("DELETE FROM $table WHERE team_id IN ($teamIds)")->execute([$gameId]);
         }
         $db->prepare("DELETE FROM announcements WHERE game_id = ?")->execute([$gameId]);
@@ -566,7 +566,7 @@ function deleteGame(PDO $db, int $gameId, ?int $userId, ?string $htdocsDir = nul
     $db->beginTransaction();
     try {
         $teamIds = "SELECT id FROM teams WHERE game_id = ?";
-        foreach (['team_messages', 'download_tokens', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
+        foreach (['team_messages', 'team_downloads', 'team_presence', 'ai_team_progress', 'ai_evaluations'] as $table) {
             $db->prepare("DELETE FROM $table WHERE team_id IN ($teamIds)")->execute([$gameId]);
         }
         $db->prepare("DELETE FROM assignment_ai_dialog WHERE assignment_id IN (SELECT id FROM assignments WHERE game_id = ?)")->execute([$gameId]);

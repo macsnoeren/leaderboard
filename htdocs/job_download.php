@@ -28,10 +28,4 @@ $name = preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($job['result_name'] ?: b
 $type = substr($name, -4) === '.pdf' ? 'application/pdf' : 'application/gzip';
 logAudit($db, (int)$user['id'], 'JOB_DOWNLOAD', jobTypeLabel($job['type']) . " gedownload (taak #{$job['id']}, $name)");
 
-session_write_close();
-header('Content-Type: ' . $type);
-header('Content-Disposition: attachment; filename="' . $name . '"');
-header('Content-Length: ' . filesize($path));
-header('X-Content-Type-Options: nosniff');
-header('Cache-Control: private, no-store');
-readfile($path);
+sendFile($path, 'attachment; filename="' . $name . '"', $type);

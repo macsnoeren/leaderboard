@@ -30,7 +30,6 @@ function freshDb(): PDO {
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
     $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
     $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
-    $db->exec("CREATE TABLE download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
     $db->exec("CREATE TABLE team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
     $db->exec("CREATE TABLE team_presence (team_id INTEGER, username TEXT, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (team_id, username))");
     $db->exec("CREATE TABLE announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");

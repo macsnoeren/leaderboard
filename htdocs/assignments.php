@@ -32,14 +32,7 @@ if (isset($_GET['download'])) {
         http_response_code(404);
         exit('Bijlage niet gevonden.');
     }
-    session_write_close();
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: ' . attachmentDisposition(artifactDisplayName($assignment)));
-    header('Content-Length: ' . filesize($path));
-    header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: private, no-store');
-    readfile($path);
-    exit;
+    sendFile($path, attachmentDisposition(artifactDisplayName($assignment)));
 }
 
 // Verwijdert een bestand alleen als geen andere opdracht het nog gebruikt

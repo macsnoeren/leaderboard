@@ -27,7 +27,6 @@ function freshDb(): PDO {
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
     $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
     $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
-    $db->exec("CREATE TABLE download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
     $db->exec("CREATE TABLE team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
     $db->exec("CREATE TABLE team_presence (team_id INTEGER, username TEXT, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (team_id, username))");
     $db->exec("CREATE TABLE announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
@@ -288,12 +287,11 @@ addMessage($db, $t1, 1, 'team', 'hallo');
 addMessage($db, $keep, 1, 'team', 'blijf');
 levelUp($db, $t1, 1);
 $db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES ($t1, 1, 2), ($keep, 1, 1)");
-$db->exec("INSERT INTO download_tokens (team_id, level, token) VALUES ($t2, 1, 'x')");
 $db->exec("INSERT INTO announcements (game_id, team_id, message) VALUES ($game, NULL, 'Alle'), ($game, $t2, 'Twee'), ($other, NULL, 'Ander')");
 $archiveBefore = $db->query("SELECT * FROM completed_assignments ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 resetGame($db, $game, 1);
 check('geen teams meer in dit spel', (int)$db->query("SELECT COUNT(*) FROM teams WHERE game_id = $game")->fetchColumn() === 0);
-check('geen berichten, downloads of tokens van dit spel', (int)$db->query("SELECT (SELECT COUNT(*) FROM team_messages WHERE team_id IN ($t1, $t2)) + (SELECT COUNT(*) FROM team_downloads WHERE team_id IN ($t1, $t2)) + (SELECT COUNT(*) FROM download_tokens WHERE team_id IN ($t1, $t2))")->fetchColumn() === 0);
+check('geen berichten of downloads van dit spel', (int)$db->query("SELECT (SELECT COUNT(*) FROM team_messages WHERE team_id IN ($t1, $t2)) + (SELECT COUNT(*) FROM team_downloads WHERE team_id IN ($t1, $t2))")->fetchColumn() === 0);
 check('mededelingen van dit spel weg, ander spel niet', (int)$db->query("SELECT COUNT(*) FROM announcements WHERE game_id = $game")->fetchColumn() === 0 && (int)$db->query("SELECT COUNT(*) FROM announcements WHERE game_id = $other")->fetchColumn() === 1);
 check('archief ongewijzigd (met teamnaam)', $db->query("SELECT * FROM completed_assignments ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) === $archiveBefore && $archiveBefore[0]['team_name'] === 'Een');
 check('opdrachten blijven', totalAssignments($db, $game) === 2);
@@ -573,7 +571,6 @@ foreach ([$weg, $blijft] as $g) {
     $db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id) VALUES ($g, $t, 1, 1)");
     $db->exec("INSERT INTO ai_team_progress (game_id, team_id, assignment_number) VALUES ($g, $t, 1)");
     $db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES ($t, 1, 1)");
-    $db->exec("INSERT INTO download_tokens (team_id, level, token) VALUES ($t, 1, 'tok$g')");
     $db->exec("INSERT INTO team_presence (team_id, username) VALUES ($t, 'x')");
     $db->exec("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history) VALUES ($g, $t, 'Team $g', 1, 'Team: hallo')");
     $db->exec("INSERT INTO announcements (game_id, message) VALUES ($g, 'Welkom')");
@@ -582,7 +579,7 @@ foreach ([$weg, $blijft] as $g) {
 $counts = function (PDO $db) {
     $out = [];
     foreach (['games', 'teams', 'assignments', 'assignment_ai_dialog', 'team_messages', 'ai_evaluations', 'ai_team_progress', 'team_downloads',
-              'download_tokens', 'team_presence', 'completed_assignments', 'announcements', 'game_teachers', 'worker_jobs'] as $table) {
+              'team_presence', 'completed_assignments', 'announcements', 'game_teachers', 'worker_jobs'] as $table) {
         $out[$table] = (int)$db->query("SELECT COUNT(*) FROM $table")->fetchColumn();
     }
     return $out;

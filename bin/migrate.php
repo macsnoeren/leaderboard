@@ -245,6 +245,9 @@ try {
         $db->exec("ALTER TABLE games ADD COLUMN finish_message TEXT");
     } catch (PDOException $e) {}
 
+    // 24. Downloadlinks uit de vroegere level-up-mail (download.php) bestaan niet meer
+    $db->exec("DROP TABLE IF EXISTS download_tokens");
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";
