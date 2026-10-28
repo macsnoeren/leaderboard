@@ -380,7 +380,7 @@ $listField = function (string $field) use ($rubric): string {
 
 $extraCSS = '
 <style>
-    .title-link { background: none; border: none; padding: 0; font: inherit; font-weight: 650; color: var(--text); cursor: pointer; text-align: left; }
+    .title-link { background: none; border: none; padding: 0; font: inherit; font-weight: 650; color: var(--text); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
     .title-link:hover { color: var(--brand); text-decoration: underline; }
     .ai-status { margin-bottom: 12px; }
     .ai-status:empty { display: none; }
@@ -413,7 +413,11 @@ $extraCSS = '
     .attachment > .icon { color: var(--text-muted); }
     .attachment-name { font-weight: 600; overflow-wrap: anywhere; }
     .attachment .btn { margin-left: auto; }
-    .attachment-hint { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* De lijst staat in een smalle kolom: alles onder de titel krimpt mee, zodat de knoppen in beeld blijven */
+    .assignment-table .title-cell { width: 100%; }
+    .attachment-hint { width: 0; min-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+    .assignment-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
     .upload-progress { margin-top: 10px; }
     .upload-bar { height: 8px; border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
     .upload-bar span { display: block; width: 0; height: 100%; background: var(--brand); transition: width var(--t) var(--ease); }
@@ -622,8 +626,7 @@ include 'admin_header.php';
                             <tr>
                                 <th scope="col">#</th>
                                 <th scope="col">Titel</th>
-                                <th scope="col">AI</th>
-                                <th scope="col" class="col-actions">Acties</th>
+                                <th scope="col" class="col-actions"><span class="sr-only">Acties</span></th>
                             </tr>
                         </thead>
                         <tbody id="assignment-rows" data-csrf="<?= htmlspecialchars(csrfToken()) ?>">
@@ -646,26 +649,28 @@ include 'admin_header.php';
                                             </span>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
+                                    <td class="title-cell">
                                         <button type="button" class="title-link" title="Opdracht bekijken" onclick='openViewModal(this, <?= json_encode(['title' => $a['title'], 'description' => $a['description'], 'instruction' => $a['instruction'], 'criteria' => $a['criteria'], 'file' => $a['artifact_file'] ? artifactDownloadUrl($a) : null, 'file_name' => artifactDisplayName($a)], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) ?>)'><?= htmlspecialchars($a['title']) ?></button>
                                         <?php if ($a['artifact_file']): ?><div class="small muted attachment-hint" title="<?= htmlspecialchars(artifactDisplayName($a)) ?>"><?= icon('paperclip') ?> <?= htmlspecialchars(artifactDisplayName($a)) ?></div><?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?= rubricStatusBadge($a['ai_rubric_status'] ?: 'none') ?>
-                                        <?php if ((int)$a['ai_auto_allowed'] === 0): ?><span class="badge" title="Altijd door een mens"><?= icon('user') ?>mens</span><?php endif; ?>
+                                        <div class="assignment-badges" title="Rubric voor de AI">
+                                            <?= rubricStatusBadge($a['ai_rubric_status'] ?: 'none') ?>
+                                            <?php if ((int)$a['ai_auto_allowed'] === 0): ?><span class="badge" title="Altijd door een mens"><?= icon('user') ?>mens</span><?php endif; ?>
+                                        </div>
                                     </td>
                                     <td class="col-actions">
-                                        <a href="?edit=<?= (int)$a['id'] ?>" class="btn btn-secondary btn-sm btn-icon" title="Bewerken" data-label="bewerken" aria-label="Opdracht <?= $number ?> bewerken"><?= icon('pencil') ?></a>
-                                        <?php if ($locked): ?>
-                                            <span title="Kan niet weg: teams zijn al met deze opdracht bezig (geweest)"><button type="button" class="btn btn-danger btn-sm btn-icon" disabled aria-label="Opdracht <?= $number ?> verwijderen (kan niet: ligt vast)"><?= icon('trash') ?></button></span>
-                                        <?php else: ?>
-                                            <form method="POST" class="inline" onsubmit="return confirm('Verwijder deze opdracht? De opdrachten erna schuiven één plek op.');">
-                                                <?= csrfField() ?>
-                                                <input type="hidden" name="action" value="delete_assignment">
-                                                <input type="hidden" name="assignment_id" value="<?= (int)$a['id'] ?>">
-                                                <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Verwijderen" data-label="verwijderen" aria-label="Opdracht <?= $number ?> verwijderen"><?= icon('trash') ?></button>
-                                            </form>
-                                        <?php endif; ?>
+                                        <div class="row-actions">
+                                            <a href="?edit=<?= (int)$a['id'] ?>" class="btn btn-secondary btn-sm btn-icon" title="Bewerken" data-label="bewerken" aria-label="Opdracht <?= $number ?> bewerken"><?= icon('pencil') ?></a>
+                                            <?php if ($locked): ?>
+                                                <span title="Kan niet weg: teams zijn al met deze opdracht bezig (geweest)"><button type="button" class="btn btn-danger btn-sm btn-icon" disabled aria-label="Opdracht <?= $number ?> verwijderen (kan niet: ligt vast)"><?= icon('trash') ?></button></span>
+                                            <?php else: ?>
+                                                <form method="POST" class="inline" onsubmit="return confirm('Verwijder deze opdracht? De opdrachten erna schuiven één plek op.');">
+                                                    <?= csrfField() ?>
+                                                    <input type="hidden" name="action" value="delete_assignment">
+                                                    <input type="hidden" name="assignment_id" value="<?= (int)$a['id'] ?>">
+                                                    <button type="submit" class="btn btn-danger btn-sm btn-icon" title="Verwijderen" data-label="verwijderen" aria-label="Opdracht <?= $number ?> verwijderen"><?= icon('trash') ?></button>
+                                                </form>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
