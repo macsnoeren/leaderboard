@@ -10,6 +10,8 @@
  */
 
 require_once __DIR__ . '/auth.php';
+// formatBytes(), storageDir() en iniBytes() voor de bijlagen
+require_once __DIR__ . '/worker.php';
 
 const GAME_STATUS_LABELS = [
     'draft' => 'concept',
@@ -612,6 +614,13 @@ function copyAssignments(PDO $db, int $fromGame, int $toGame, ?int $userId = nul
         return 0;
     }
 
+    // Ook na het kopiëren blijven de bijlagen van het doelspel onder de grens
+    $adding = gameAttachmentBytes($db, $fromGame, null, $htdocsDir);
+    if ($adding > 0 && ($total = gameAttachmentBytes($db, $toGame, null, $htdocsDir) + $adding) > maxGameAttachmentsBytes()) {
+        throw new RuntimeException('de bijlagen komen dan samen op ' . formatBytes($total) . ', en een spel mag maximaal '
+            . formatBytes(maxGameAttachmentsBytes()) . ' aan bijlagen hebben');
+    }
+
     $stmt = $db->prepare("SELECT COALESCE(MAX(assignment_number), 0) FROM assignments WHERE game_id = ?");
     $stmt->execute([$toGame]);
     $number = (int)$stmt->fetchColumn();
@@ -843,6 +852,179 @@ function artifactPath(array $assignment, ?string $htdocsDir = null): ?string {
  */
 function artifactDownloadUrl(array $assignment): string {
     return 'assignments.php?download=' . (int)$assignment['id'];
+}
+
+// ---------------------------------------------------------------------------
+// Grootte van bijlagen en uploaden in stukken
+// ---------------------------------------------------------------------------
+
+// Toegestane bijlagen (geen scripts tegen RCE). Zelfde als ARTIFACT_EXTENSIONS in worker/tasks/import_game.py.
+const ARTIFACT_EXTENSIONS = ['pdf', 'zip', 'txt', 'jpg', 'png'];
+// Eén stuk van een upload; kleiner als post_max_size dat vraagt (uploadChunkBytes())
+const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+// Een upload waar zo lang niets bij kwam, is afgebroken en wordt opgeruimd
+const UPLOAD_STALE_SECONDS = 2 * 3600;
+
+/**
+ * Grootste bijlage in bytes: MAX_ATTACHMENT_MB in config.php (standaard 500), gelijk aan de worker.
+ */
+function maxAttachmentBytes(): int {
+    return (defined('MAX_ATTACHMENT_MB') ? (int)MAX_ATTACHMENT_MB : 500) * 1024 * 1024;
+}
+
+/**
+ * Alle bijlagen van één spel samen, in bytes: MAX_GAME_ATTACHMENTS_MB in config.php (standaard 2048),
+ * gelijk aan de worker.
+ */
+function maxGameAttachmentsBytes(): int {
+    return (defined('MAX_GAME_ATTACHMENTS_MB') ? (int)MAX_GAME_ATTACHMENTS_MB : 2048) * 1024 * 1024;
+}
+
+/**
+ * Grootte van de bijlagen van een spel in bytes: alleen bestanden die er echt staan, elk één keer.
+ * De bijlage van $exceptAssignmentId telt niet mee (die wordt vervangen).
+ */
+function gameAttachmentBytes(PDO $db, int $gameId, ?int $exceptAssignmentId = null, ?string $htdocsDir = null): int {
+    $stmt = $db->prepare("SELECT id, artifact_file FROM assignments WHERE game_id = ? AND artifact_file IS NOT NULL AND id != ?");
+    $stmt->execute([$gameId, $exceptAssignmentId ?? 0]);
+    $sizes = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        if ($path = artifactPath($a, $htdocsDir)) {
+            $sizes[$path] = (int)filesize($path);
+        }
+    }
+    return array_sum($sizes);
+}
+
+/**
+ * Foutmelding als een bijlage van $size bytes niet mag (te groot, of het spel komt boven de grens),
+ * anders null. $replacesAssignmentId: de opdracht waarvan de bijlage wordt vervangen.
+ */
+function attachmentSizeError(PDO $db, int $gameId, int $size, ?int $replacesAssignmentId = null, ?string $htdocsDir = null): ?string {
+    if ($size > maxAttachmentBytes()) {
+        return 'Een bijlage mag maximaal ' . formatBytes(maxAttachmentBytes()) . ' zijn; dit bestand is ' . formatBytes($size) . '.';
+    }
+    $used = gameAttachmentBytes($db, $gameId, $replacesAssignmentId, $htdocsDir);
+    if ($used + $size > maxGameAttachmentsBytes()) {
+        return 'De bijlagen van een spel mogen samen maximaal ' . formatBytes(maxGameAttachmentsBytes()) . ' zijn. Dit spel heeft al '
+            . formatBytes($used) . ', er kan nog ' . formatBytes(max(0, maxGameAttachmentsBytes() - $used)) . ' bij.';
+    }
+    return null;
+}
+
+/**
+ * Grootte van één stuk bij uploaden: UPLOAD_CHUNK_BYTES, of minder als post_max_size kleiner is
+ * (een stuk is de hele body van het request).
+ */
+function uploadChunkBytes(): int {
+    $post = iniBytes('post_max_size');
+    return $post > 0 ? max(64 * 1024, min(UPLOAD_CHUNK_BYTES, $post - 64 * 1024)) : UPLOAD_CHUNK_BYTES;
+}
+
+function attachmentUploadDir(): string {
+    return storageDir() . '/incoming';
+}
+
+function attachmentUploadPath(string $id, ?string $dir = null): string {
+    return ($dir ?? attachmentUploadDir()) . '/attachment-' . $id . '.part';
+}
+
+/**
+ * Begint een upload in stukken: het bestand groeit in storage/incoming/ (buiten de webroot) en komt pas
+ * bij het opslaan van de opdracht in artifacts/ (takeAttachmentUpload()). $uploads is de lijst lopende
+ * uploads in de sessie. Controleert type en grootte al vooraf, zodat niemand 500 MB voor niets uploadt.
+ * Geeft ['id' => …, 'chunk' => bytes per stuk] of ['error' => …].
+ */
+function startAttachmentUpload(PDO $db, array &$uploads, int $gameId, string $name, int $size, ?int $assignmentId, ?string $dir = null, ?string $htdocsDir = null): array {
+    $name = cleanFileName($name);
+    if (!in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), ARTIFACT_EXTENSIONS, true)) {
+        return ['error' => 'Bestandstype niet toegestaan.'];
+    }
+    if ($size <= 0) {
+        return ['error' => 'Het bestand is leeg.'];
+    }
+    if ($error = attachmentSizeError($db, $gameId, $size, $assignmentId, $htdocsDir)) {
+        return ['error' => $error];
+    }
+    $dir = $dir ?? attachmentUploadDir();
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        return ['error' => 'De opslagmap bestaat niet; draai bin/setup.sh.'];
+    }
+    cleanupAttachmentUploads($uploads, $dir);
+    $id = bin2hex(random_bytes(16));
+    if (file_put_contents(attachmentUploadPath($id, $dir), '') === false) {
+        return ['error' => 'Het bestand kon niet worden opgeslagen.'];
+    }
+    $uploads[$id] = ['game_id' => $gameId, 'name' => $name, 'size' => $size];
+    return ['id' => $id, 'chunk' => uploadChunkBytes()];
+}
+
+/**
+ * Voegt één stuk toe op positie $offset. Komt een stuk dubbel of te vroeg (een herhaalde poging), dan
+ * wordt het genegeerd; de client gaat verder vanaf 'received'. Geeft ['received' => bytes] of ['error' => …].
+ */
+function appendAttachmentChunk(array $uploads, string $id, int $gameId, int $offset, $input, ?string $dir = null): array {
+    $upload = preg_match('/^[0-9a-f]{32}$/', $id) ? ($uploads[$id] ?? null) : null;
+    $path = attachmentUploadPath($id, $dir);
+    if (!$upload || (int)$upload['game_id'] !== $gameId || !is_file($path)) {
+        return ['error' => 'Deze upload bestaat niet (meer). Kies het bestand opnieuw.'];
+    }
+    clearstatcache(true, $path);
+    $received = (int)filesize($path);
+    if ($offset !== $received || $received >= $upload['size']) {
+        return ['received' => $received];
+    }
+    $out = fopen($path, 'ab');
+    if (!$out) {
+        return ['error' => 'Het bestand kon niet worden opgeslagen.'];
+    }
+    $written = stream_copy_to_stream($input, $out, (int)$upload['size'] - $received);
+    fclose($out);
+    if ($written === false) {
+        return ['error' => 'Het bestand kon niet worden opgeslagen.'];
+    }
+    return ['received' => $received + $written];
+}
+
+/**
+ * Haalt een complete upload op voor het opslaan van de opdracht en controleert de grootte van het spel
+ * opnieuw (er kan intussen iets bij gekomen zijn). De upload verdwijnt uit $uploads; bij een fout wordt het
+ * bestand verwijderd. Geeft ['path' => …, 'name' => oorspronkelijke naam, 'ext' => …] of ['error' => …].
+ */
+function takeAttachmentUpload(PDO $db, array &$uploads, string $id, int $gameId, ?int $assignmentId, ?string $dir = null, ?string $htdocsDir = null): array {
+    $upload = preg_match('/^[0-9a-f]{32}$/', $id) ? ($uploads[$id] ?? null) : null;
+    $path = attachmentUploadPath($id, $dir);
+    unset($uploads[$id]);
+    if (!$upload || (int)$upload['game_id'] !== $gameId || !is_file($path)) {
+        return ['error' => 'De upload van de bijlage is niet (meer) aanwezig. Kies het bestand opnieuw.'];
+    }
+    clearstatcache(true, $path);
+    $error = (int)filesize($path) !== (int)$upload['size']
+        ? 'De bijlage is niet helemaal aangekomen. Kies het bestand opnieuw.'
+        : attachmentSizeError($db, $gameId, (int)$upload['size'], $assignmentId, $htdocsDir);
+    if ($error) {
+        @unlink($path);
+        return ['error' => $error];
+    }
+    return ['path' => $path, 'name' => $upload['name'], 'ext' => strtolower(pathinfo($upload['name'], PATHINFO_EXTENSION))];
+}
+
+/**
+ * Ruimt afgebroken uploads op: bestanden waar UPLOAD_STALE_SECONDS niets bij kwam (van iedereen), en
+ * uploads in $uploads waarvan het bestand weg is.
+ */
+function cleanupAttachmentUploads(array &$uploads, ?string $dir = null): void {
+    $dir = $dir ?? attachmentUploadDir();
+    foreach (glob($dir . '/attachment-*.part') ?: [] as $file) {
+        if (filemtime($file) < time() - UPLOAD_STALE_SECONDS) {
+            @unlink($file);
+        }
+    }
+    foreach (array_keys($uploads) as $id) {
+        if (!is_file(attachmentUploadPath((string)$id, $dir))) {
+            unset($uploads[$id]);
+        }
+    }
 }
 
 /**

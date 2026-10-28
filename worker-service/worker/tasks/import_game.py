@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 # Zelfde als generateJoinCode() in conf/game.php
 JOIN_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 JOIN_CODE_LENGTH = 6
-# Zelfde als assignments.php en game.php
+# Zelfde als ARTIFACT_EXTENSIONS in conf/game.php en de logo-upload in game.php
 ARTIFACT_EXTENSIONS = ("pdf", "zip", "txt", "jpg", "png")
+MB = 1024 * 1024
 LOGO_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 NAME_MAX_LENGTH = 100
 SENDERS = ("team", "teacher", "ai", "suggestion")
@@ -69,8 +70,12 @@ def renumber(model, reporter):
 
 
 def import_archive(conn, htdocs_dir, archive_path, reporter, name=None, created_by=None, fallback_name="Import",
-                   max_bytes=500 * 1024 * 1024, max_files=10000):
-    """Importeert het archief als nieuw spel. conn: verbinding met de echte database. Geeft het nieuwe game_id."""
+                   max_bytes=10240 * MB, max_files=10000, max_attachment=500 * MB, max_game_attachments=2048 * MB):
+    """Importeert het archief als nieuw spel. conn: verbinding met de echte database. Geeft het nieuwe game_id.
+
+    Bijlagen boven max_attachment, of waarmee het spel boven max_game_attachments komt, worden overgeslagen
+    (met waarschuwing), net als op de website (attachmentSizeError() in conf/game.php).
+    """
     with ArchiveReader(archive_path, GAME_ALLOWED, max_bytes, max_files) as reader:
         model = read_archive(reader)
         for w in model.warnings:
@@ -84,15 +89,22 @@ def import_archive(conn, htdocs_dir, archive_path, reporter, name=None, created_
             with db.transaction(conn):
                 game_id = _insert_game(conn, model, game_name, created_by)
                 total = len(model.assignments)
+                attachment_bytes = 0
                 for i, a in enumerate(model.assignments, start=1):
                     reporter.progress(10 + int(70 * i / max(1, total)), f"Opdracht {i} van {total}")
                     rel = None
                     if a.artifact is not None:
                         ext = _ext(a.artifact.name)
+                        size = a.artifact.size or 0
+                        skipped = f"Bijlage {os.path.basename(a.artifact.name)} van opdracht {a.assignment_number} overgeslagen"
                         if ext not in ARTIFACT_EXTENSIONS:
-                            reporter.warn(f"Bijlage {os.path.basename(a.artifact.name)} van opdracht {a.assignment_number} "
-                                          "overgeslagen: dit soort bestand is niet toegestaan")
+                            reporter.warn(f"{skipped}: dit soort bestand is niet toegestaan")
+                        elif size > max_attachment:
+                            reporter.warn(f"{skipped}: groter dan {max_attachment // MB} MB")
+                        elif attachment_bytes + size > max_game_attachments:
+                            reporter.warn(f"{skipped}: de bijlagen van het spel komen dan samen boven {max_game_attachments // MB} MB")
                         else:
+                            attachment_bytes += size
                             rel = f"artifacts/game_{game_id}_assignment_{a.assignment_number}_{int(time.time())}_{secrets.token_hex(3)}.{ext}"
                             target = os.path.join(htdocs_dir, rel)
                             os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -249,8 +261,9 @@ def handle(job):
         if not os.path.isfile(path):
             raise UserError("Het geüploade archief is niet (meer) aanwezig")
         game_id = import_archive(job.conn, job.cfg.HTDOCS_DIR, path, job, name=job.params.get("name"), created_by=job.created_by,
-                                 fallback_name=fallback, max_bytes=job.cfg.MAX_ARCHIVE_MB * 1024 * 1024,
-                                 max_files=job.cfg.MAX_ARCHIVE_FILES)
+                                 fallback_name=fallback, max_bytes=job.cfg.MAX_ARCHIVE_MB * MB,
+                                 max_files=job.cfg.MAX_ARCHIVE_FILES, max_attachment=job.cfg.MAX_ATTACHMENT_MB * MB,
+                                 max_game_attachments=job.cfg.MAX_GAME_ATTACHMENTS_MB * MB)
     finally:
         try:
             os.remove(path)

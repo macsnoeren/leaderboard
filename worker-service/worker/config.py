@@ -26,8 +26,10 @@ DEFAULTS = {
     "BACKUP_MANUAL_DAYS": 90,
     "BACKUP_PRE_RESTORE_DAYS": 30,
     "BACKUP_MIN_FREE_MB": 500,
-    "MAX_ARCHIVE_MB": 500,
+    "MAX_ARCHIVE_MB": 10240,
     "MAX_ARCHIVE_FILES": 10000,
+    "MAX_ATTACHMENT_MB": 500,
+    "MAX_GAME_ATTACHMENTS_MB": 2048,
     "RESTORE_GRACE_SECONDS": 5,
     "REPORT_FONT": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "REPORT_FONT_BOLD": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -36,7 +38,8 @@ DEFAULTS = {
 # Paden die ten opzichte van base_dir worden opgelost (PHP_BIN niet: "php" staat in het PATH)
 PATH_KEYS = {"DB_FILE", "HTDOCS_DIR", "STORAGE_DIR", "APP_DIR", "REPORT_FONT", "REPORT_FONT_BOLD"}
 INT_KEYS = {"POLL_INTERVAL", "RESULT_TTL_DAYS", "BACKUP_KEEP", "BACKUP_MANUAL_DAYS", "BACKUP_PRE_RESTORE_DAYS",
-            "BACKUP_MIN_FREE_MB", "MAX_ARCHIVE_MB", "MAX_ARCHIVE_FILES", "RESTORE_GRACE_SECONDS"}
+            "BACKUP_MIN_FREE_MB", "MAX_ARCHIVE_MB", "MAX_ARCHIVE_FILES", "MAX_ATTACHMENT_MB", "MAX_GAME_ATTACHMENTS_MB",
+            "RESTORE_GRACE_SECONDS"}
 
 _FROM_FILE = object()
 

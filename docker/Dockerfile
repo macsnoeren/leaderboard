@@ -6,9 +6,10 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends sqlite3 \
  && rm -rf /var/lib/apt/lists/*
 
-# Ontwikkel-instellingen (foutmeldingen zichtbaar) en ruimte voor uploads (bijlagen, en archieven voor import/restore)
+# Ontwikkel-instellingen (foutmeldingen zichtbaar) en ruimte voor archieven (import/restore): een export van een
+# spel met de maximale 2 GB aan bijlagen moet erin passen. Bijlagen gaan in stukken van 8 MB en hebben dit niet nodig.
 RUN cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini" \
- && printf 'upload_max_filesize=512M\npost_max_size=512M\nmax_execution_time=300\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
+ && printf 'upload_max_filesize=3G\npost_max_size=3G\nmax_execution_time=300\nmax_input_time=900\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
 
 # conf/ blijft buiten de webroot, net als in productie
 ENV APACHE_DOCUMENT_ROOT=/var/www/leaderboard/htdocs
@@ -18,6 +19,10 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-av
 # Bijlagen alleen via PHP (zie htdocs/.htaccess; die leest Apache hier niet, AllowOverride None)
 RUN printf '<Directory ${APACHE_DOCUMENT_ROOT}/artifacts>\n    Require all denied\n</Directory>\n' > /etc/apache2/conf-available/leaderboard-artifacts.conf \
  && a2enconf leaderboard-artifacts
+
+# Apache laat standaard maximaal 1 GB per request toe; gelijk aan post_max_size hierboven (3 GB)
+RUN printf 'LimitRequestBody 3221225472\n' > /etc/apache2/conf-available/leaderboard-uploads.conf \
+ && a2enconf leaderboard-uploads
 
 WORKDIR /var/www/leaderboard
 COPY htdocs htdocs

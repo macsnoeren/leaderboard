@@ -217,6 +217,6 @@ include 'admin_header.php';
             <input type="file" name="archive" accept=".gz,.tgz,application/gzip" required aria-label="Backup (.tar.gz)" style="flex: 1; width: auto; min-width: 220px;">
             <button type="submit" class="btn btn-secondary"><?= icon('plus') ?>Uploaden</button>
         </form>
-        <p class="muted small" style="margin-top: 10px;">Bijvoorbeeld een backup van een andere installatie (max. <?= maxArchiveMb() ?> MB). De worker controleert hem eerst; daarna kun je hem terugzetten.</p>
+        <p class="muted small" style="margin-top: 10px;">Bijvoorbeeld een backup van een andere installatie (max. <?= formatBytes(maxArchiveUploadBytes()) ?>). De worker controleert hem eerst; daarna kun je hem terugzetten.</p>
     </div>
 <?php include 'admin_footer.php'; ?>

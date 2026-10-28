@@ -26,8 +26,11 @@ BACKUP_PRE_RESTORE_DAYS = 30
 BACKUP_MIN_FREE_MB = 500
 
 # Grootste archief (uitgepakt, MB) en maximaal aantal bestanden in een archief
-MAX_ARCHIVE_MB = 500
+MAX_ARCHIVE_MB = 10240
 MAX_ARCHIVE_FILES = 10000
+# Bijlagen bij een import (MB): grootste bestand en alle bijlagen van één spel samen; gelijk aan conf/config.php
+MAX_ATTACHMENT_MB = 500
+MAX_GAME_ATTACHMENTS_MB = 2048
 # Wachttijd na het aanzetten van de onderhoudsmodus, zodat lopende requests klaar zijn
 RESTORE_GRACE_SECONDS = 5
 

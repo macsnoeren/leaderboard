@@ -99,6 +99,31 @@ if (($_GET['ajax'] ?? '') === 'reorder' && $_SERVER['REQUEST_METHOD'] === 'POST'
     exit;
 }
 
+// Bijlage uploaden in stukken, met voortgang (zo maakt upload_max_filesize niet uit):
+// POST ?ajax=upload_start (name, size, assignment_id) → id en stukgrootte; daarna POST ?ajax=upload_chunk&id=…&offset=…
+// met het stuk als body en de CSRF-token in X-CSRF-Token. Het formulier stuurt daarna upload_id mee.
+if (in_array($_GET['ajax'] ?? '', ['upload_start', 'upload_chunk'], true) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $uploads = $_SESSION['attachment_uploads'] ?? [];
+    if (!verifyCsrf()) {
+        $result = ['error' => CSRF_ERROR];
+    } elseif ($_GET['ajax'] === 'upload_start') {
+        $assignmentId = (int)($_POST['assignment_id'] ?? 0);
+        if ($assignmentId && !findAssignmentInGame($db, $assignmentId, $gameId)) {
+            $result = ['error' => 'Deze opdracht hoort niet bij het actieve spel.'];
+        } else {
+            $result = startAttachmentUpload($db, $uploads, $gameId, (string)($_POST['name'] ?? ''), (int)($_POST['size'] ?? 0), $assignmentId ?: null);
+        }
+    } else {
+        // Een stuk verandert de sessie niet: niet op slot houden tijdens het ontvangen
+        session_write_close();
+        $result = appendAttachmentChunk($uploads, (string)($_GET['id'] ?? ''), $gameId, (int)($_GET['offset'] ?? -1), fopen('php://input', 'rb'));
+    }
+    $_SESSION['attachment_uploads'] = $uploads;
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => !isset($result['error'])] + $result);
+    exit;
+}
+
 // Live update van het AI-paneel: assignments.php?edit=ID&ajax=ai
 if (isset($_GET['ajax'])) {
     if ($_GET['ajax'] !== 'ai' || !$edit_assignment) {
@@ -121,6 +146,12 @@ if (isset($_GET['ajax'])) {
 $uploadDir = __DIR__ . '/artifacts';
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0775, true);
+}
+
+// Groter dan post_max_size (formulier zonder JavaScript): PHP gooit dan het hele formulier weg, ook de CSRF-token
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$_POST && !$_FILES && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    flash('error', 'Het bestand is te groot om in één keer te uploaden (maximaal ' . formatBytes(phpUploadLimitBytes()) . '). Met JavaScript aan uploadt de pagina grote bestanden in stukken.');
+    redirect('assignments.php' . ($edit_assignment ? '?edit=' . (int)$edit_assignment['id'] : ''));
 }
 
 // Handle toevoegen van assignment
@@ -161,35 +192,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $assignment_number = (int)$stmt->fetchColumn();
         }
 
-        // File upload
-        if (!empty($_FILES['artifact_file']['name'])) {
-            $fileTmp = $_FILES['artifact_file']['tmp_name'];
-            $fileName = basename($_FILES['artifact_file']['name']);
-            $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-
+        // Bijlage: in stukken geüpload (upload_id, met JavaScript) of als gewoon formulierveld
+        $incoming = null;
+        if (!empty($_POST['upload_id'])) {
+            $uploads = $_SESSION['attachment_uploads'] ?? [];
+            $incoming = takeAttachmentUpload($db, $uploads, (string)$_POST['upload_id'], $gameId, $id);
+            $_SESSION['attachment_uploads'] = $uploads;
+        } elseif (!empty($_FILES['artifact_file']['name'])) {
+            $file = $_FILES['artifact_file'];
+            $fileName = cleanFileName((string)$file['name']);
+            $uploadError = [
+                UPLOAD_ERR_OK => null,
+                UPLOAD_ERR_INI_SIZE => 'Het bestand is te groot om in één keer te uploaden (maximaal ' . formatBytes(phpUploadLimitBytes()) . '). Met JavaScript aan uploadt de pagina grote bestanden in stukken.',
+                UPLOAD_ERR_PARTIAL => 'Het bestand is maar half aangekomen. Probeer het opnieuw.',
+            ];
+            $error = array_key_exists($file['error'], $uploadError) ? $uploadError[$file['error']] : 'Het uploaden van het bestand is mislukt.';
+            $incoming = $error !== null ? ['error' => $error]
+                : ['path' => $file['tmp_name'], 'name' => $fileName, 'ext' => strtolower(pathinfo($fileName, PATHINFO_EXTENSION)), 'form' => true];
             // Beveiliging: Whitelist extensies tegen RCE
-            $allowed = ['pdf', 'zip', 'txt', 'jpg', 'png'];
-            if (!in_array($ext, $allowed)) {
-                flash('error', 'Bestandstype niet toegestaan.');
-                redirect($back);
+            if (!isset($incoming['error']) && !in_array($incoming['ext'], ARTIFACT_EXTENSIONS, true)) {
+                $incoming = ['error' => 'Bestandstype niet toegestaan.'];
             }
+            if (!isset($incoming['error']) && ($sizeError = attachmentSizeError($db, $gameId, (int)$file['size'], $id))) {
+                $incoming = ['error' => $sizeError];
+            }
+        }
+        if (isset($incoming['error'])) {
+            flash('error', $incoming['error']);
+            redirect($back);
+        }
 
+        if ($incoming) {
             // Veilig bestandsnaam genereren, met het spel erin
-            $safeName = 'game_' . $gameId . '_assignment_' . $assignment_number . '_' . time() . '.' . $ext;
+            $safeName = 'game_' . $gameId . '_assignment_' . $assignment_number . '_' . time() . '.' . $incoming['ext'];
             $targetPath = $uploadDir . '/' . $safeName;
 
-            if (move_uploaded_file($fileTmp, $targetPath)) {
+            // rename() kopieert zelf als storage/ op een ander volume staat dan artifacts/ (Docker)
+            if (!empty($incoming['form']) ? move_uploaded_file($incoming['path'], $targetPath) : @rename($incoming['path'], $targetPath)) {
                 // Verwijder oud bestand nu het nieuwe er staat
                 $old = $artifact_file;
                 $artifact_file = 'artifacts/' . $safeName;
                 // De oorspronkelijke naam is alleen voor de operator; op de server staat de eigen naam
-                $artifact_name = cleanFileName((string)$_FILES['artifact_file']['name']) ?: null;
+                $artifact_name = $incoming['name'] ?: null;
                 if ($id && $old) {
                     $db->prepare("UPDATE assignments SET artifact_file = ?, artifact_name = ? WHERE id = ?")->execute([$artifact_file, $artifact_name, $id]);
                     removeArtifact($db, $old);
                 }
             } else {
-                flash('error', 'Het uploaden van het bestand is mislukt.');
+                if (empty($incoming['form'])) {
+                    @unlink($incoming['path']);
+                }
+                flash('error', 'Het opslaan van de bijlage is mislukt.');
                 redirect($back);
             }
         }
@@ -320,6 +373,7 @@ if ($edit_assignment && $edit_assignment['artifact_file']) {
         'size' => $path ? (int)filesize($path) : null,
     ];
 }
+$attachmentsUsed = gameAttachmentBytes($db, $gameId);
 $listField = function (string $field) use ($rubric): string {
     return htmlspecialchars(implode("\n", $rubric[$field] ?? []));
 };
@@ -360,6 +414,12 @@ $extraCSS = '
     .attachment-name { font-weight: 600; overflow-wrap: anywhere; }
     .attachment .btn { margin-left: auto; }
     .attachment-hint { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .upload-progress { margin-top: 10px; }
+    .upload-bar { height: 8px; border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
+    .upload-bar span { display: block; width: 0; height: 100%; background: var(--brand); transition: width var(--t) var(--ease); }
+    .upload-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+    #upload-error { margin: 10px 0 0; }
+    @media (prefers-reduced-motion: reduce) { .upload-bar span { transition: none; } }
 </style>';
 
 $pageTitle = 'Opdrachten';
@@ -423,7 +483,17 @@ include 'admin_header.php';
                             <label for="f-file">Bestand (PDF, ZIP, TXT, JPG of PNG)</label>
                         <?php endif; ?>
                         <input type="file" name="artifact_file" id="f-file" accept=".pdf,.zip,.txt,.jpg,.png">
+                        <input type="hidden" name="upload_id" id="f-upload-id" value="">
                         <?php if ($attachment): ?><div class="hint">Leeg laten = de huidige bijlage behouden. Teams krijgen het bestand onder een eigen naam, niet onder deze.</div><?php endif; ?>
+                        <div class="hint">Max. <?= formatBytes(maxAttachmentBytes()) ?> per bestand. Alle bijlagen van dit spel samen max. <?= formatBytes(maxGameAttachmentsBytes()) ?> (nu <?= formatBytes($attachmentsUsed) ?>).</div>
+                        <div class="upload-progress" id="upload-progress" hidden>
+                            <div class="upload-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Voortgang van de upload"><span></span></div>
+                            <div class="upload-status">
+                                <span class="small" id="upload-text" aria-live="polite"></span>
+                                <button type="button" class="btn btn-ghost btn-sm" id="upload-cancel"><?= icon('x') ?>Afbreken</button>
+                            </div>
+                        </div>
+                        <div class="alert alert-error" id="upload-error" role="alert" hidden><?= icon('alert-circle') ?><div id="upload-error-text"></div></div>
                     </div>
                     <label class="check field">
                         <input type="checkbox" name="ai_human_only" value="1" <?= $edit_assignment && (int)$edit_assignment['ai_auto_allowed'] === 0 ? 'checked' : '' ?>>
@@ -810,6 +880,106 @@ $extraJS .= <<<'JS'
         });
 
         updateButtons();
+    })();
+
+    // Bijlage in stukken uploaden met voortgang; daarna gaat het formulier gewoon verder met upload_id.
+    // Zonder JavaScript gaat het bestand als gewoon formulierveld mee (dan geldt upload_max_filesize).
+    (function () {
+        const input = document.getElementById('f-file');
+        if (!input || !window.fetch || !window.AbortController) return;
+        const form = input.form;
+        const csrf = form.querySelector('[name="csrf_token"]').value;
+        const assignment = form.querySelector('[name="assignment_id"]');
+        const uploadId = document.getElementById('f-upload-id');
+        const box = document.getElementById('upload-progress');
+        const bar = box.querySelector('.upload-bar');
+        const text = document.getElementById('upload-text');
+        const errorBox = document.getElementById('upload-error');
+        const buttons = form.querySelectorAll('button[type="submit"]');
+        let controller = null;
+
+        const mb = bytes => (bytes / 1048576).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' MB';
+        const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        function show(done, total) {
+            const pct = total ? Math.floor(done * 100 / total) : 0;
+            bar.firstElementChild.style.width = pct + '%';
+            bar.setAttribute('aria-valuenow', pct);
+            text.textContent = mb(done) + ' van ' + mb(total) + ' (' + pct + '%)';
+        }
+
+        function setBusy(busy) {
+            buttons.forEach(b => { b.disabled = busy; });
+            input.disabled = busy;
+            box.hidden = !busy;
+        }
+
+        // POST, met nieuwe pogingen bij netwerk- en serverfouten: een stuk opnieuw sturen kan veilig
+        async function post(url, body, headers) {
+            for (let attempt = 1; ; attempt++) {
+                let response = null;
+                try {
+                    response = await fetch(url, { method: 'POST', body: body, headers: headers || {}, signal: controller.signal });
+                } catch (e) {
+                    if (e.name === 'AbortError') throw new Error('De upload is afgebroken.');
+                }
+                if (response && response.ok) return response.json().catch(() => { throw new Error('Onverwacht antwoord van de server. Probeer het opnieuw.'); });
+                if (response && (response.status === 401 || response.status === 403)) throw new Error('Je sessie is verlopen of je hebt geen toegang meer. Laad de pagina opnieuw.');
+                if (response && response.status === 413) throw new Error('De webserver weigert stukken van deze grootte (413). Vraag de beheerder de limiet te verhogen.');
+                if (attempt >= 4) throw new Error('De verbinding met de server is verbroken. Probeer het opnieuw.');
+                await wait(1000 * attempt);
+            }
+        }
+
+        async function upload(file) {
+            const start = new FormData();
+            start.append('csrf_token', csrf);
+            start.append('name', file.name);
+            start.append('size', file.size);
+            if (assignment) start.append('assignment_id', assignment.value);
+            let res = await post('assignments.php?ajax=upload_start', start);
+            if (!res.ok) throw new Error(res.error);
+            const id = res.id, chunk = res.chunk;
+            let received = 0, stuck = 0;
+            show(0, file.size);
+            while (received < file.size) {
+                res = await post('assignments.php?ajax=upload_chunk&id=' + id + '&offset=' + received, file.slice(received, received + chunk),
+                                 { 'X-CSRF-Token': csrf, 'Content-Type': 'application/octet-stream' });
+                if (!res.ok) throw new Error(res.error);
+                stuck = res.received > received ? 0 : stuck + 1;
+                if (stuck >= 3) throw new Error('De server neemt de bijlage niet aan. Probeer het opnieuw.');
+                received = res.received;
+                show(received, file.size);
+            }
+            return id;
+        }
+
+        form.addEventListener('submit', async e => {
+            const file = input.files[0];
+            if (!file || uploadId.value) return;
+            e.preventDefault();
+            if (controller) return;
+            controller = new AbortController();
+            errorBox.hidden = true;
+            setBusy(true);
+            try {
+                uploadId.value = await upload(file);
+                text.textContent = 'Geüpload; de opdracht wordt opgeslagen…';
+                document.getElementById('upload-cancel').disabled = true;
+                // input blijft disabled, dus het bestand gaat niet nog een keer mee
+                form.submit();
+            } catch (err) {
+                controller = null;
+                setBusy(false);
+                document.getElementById('upload-error-text').textContent = err.message;
+                errorBox.hidden = false;
+            }
+        });
+
+        document.getElementById('upload-cancel').addEventListener('click', () => { if (controller) controller.abort(); });
+        window.addEventListener('beforeunload', e => {
+            if (controller && !uploadId.value) e.preventDefault();
+        });
     })();
 </script>
 JS;

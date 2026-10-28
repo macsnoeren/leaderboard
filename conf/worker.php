@@ -304,10 +304,37 @@ function resultTtlDays(): int {
 }
 
 /**
- * Grootste upload voor import/restore in MB (MAX_ARCHIVE_MB in config.php, standaard 500).
+ * Grootste archief voor import/restore in MB (MAX_ARCHIVE_MB in config.php, standaard 10240).
  */
 function maxArchiveMb(): int {
-    return defined('MAX_ARCHIVE_MB') ? (int)MAX_ARCHIVE_MB : 500;
+    return defined('MAX_ARCHIVE_MB') ? (int)MAX_ARCHIVE_MB : 10240;
+}
+
+/**
+ * Waarde uit php.ini in bytes ('8M' → 8388608, '1G', '512K'); 0 = geen grens.
+ */
+function iniBytes(string $key): int {
+    $value = trim((string)ini_get($key));
+    $units = ['k' => 1024, 'm' => 1024 ** 2, 'g' => 1024 ** 3];
+    return (int)$value * ($units[strtolower(substr($value, -1))] ?? 1);
+}
+
+/**
+ * Grootste bestand dat PHP in één formulier aanneemt (upload_max_filesize en post_max_size), in bytes;
+ * 0 = geen grens.
+ */
+function phpUploadLimitBytes(): int {
+    $limits = array_filter([iniBytes('upload_max_filesize'), iniBytes('post_max_size')]);
+    return $limits ? min($limits) : 0;
+}
+
+/**
+ * Grootste archief dat je via de website kunt uploaden: MAX_ARCHIVE_MB, of minder als php.ini dat vraagt.
+ */
+function maxArchiveUploadBytes(): int {
+    $max = maxArchiveMb() * 1024 * 1024;
+    $php = phpUploadLimitBytes();
+    return $php > 0 ? min($max, $php) : $max;
 }
 
 /**
@@ -316,7 +343,7 @@ function maxArchiveMb(): int {
  */
 function storeArchiveUpload(array $file) {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_INI_SIZE || ($file['error'] ?? 0) === UPLOAD_ERR_FORM_SIZE) {
-        return ['error' => 'Het bestand is te groot (maximaal ' . maxArchiveMb() . ' MB).'];
+        return ['error' => 'Het bestand is te groot (maximaal ' . formatBytes(maxArchiveUploadBytes()) . ').'];
     }
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         return ['error' => 'Het uploaden is mislukt.'];
@@ -325,8 +352,8 @@ function storeArchiveUpload(array $file) {
     if (!preg_match('/\.(tar\.gz|tgz)$/', $name)) {
         return ['error' => 'Kies een .tar.gz-bestand.'];
     }
-    if ((int)$file['size'] > maxArchiveMb() * 1024 * 1024) {
-        return ['error' => 'Het bestand is te groot (maximaal ' . maxArchiveMb() . ' MB).'];
+    if ((int)$file['size'] > maxArchiveUploadBytes()) {
+        return ['error' => 'Het bestand is te groot (maximaal ' . formatBytes(maxArchiveUploadBytes()) . ').'];
     }
     $dir = storageDir() . '/incoming';
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {

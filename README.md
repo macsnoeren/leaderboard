@@ -45,6 +45,17 @@ kan een team een bijlage van een volgend level ophalen (de namen zijn te raden).
 dat (nodig: `AllowOverride FileInfo` of `All`); Docker zet het in de Apache-config. Met alleen nginx:
 `location ^~ /artifacts/ { deny all; }`. Een 403 op `/artifacts/…` is dus de bedoeling.
 
+**Grootte van bijlagen**: max. 500 MB per bestand en 2 GB voor alle bijlagen van één spel samen
+(`MAX_ATTACHMENT_MB`, `MAX_GAME_ATTACHMENTS_MB` in `config.php` en in de worker; ook bij opdrachten kopiëren
+en bij een import). `assignments.php` uploadt een bijlage in stukken van max. 8 MB met een voortgangsbalk
+(`?ajax=upload_start`/`upload_chunk`, tijdelijk in `storage/incoming/`), dus `upload_max_filesize` hoeft daar
+niet voor omhoog; een stuk moet wel in `post_max_size` passen (de stukken worden zo nodig kleiner) en door een
+proxy ervoor (nginx: `client_max_body_size` is standaard 1 MB, zet die op minstens 10 MB). Zonder JavaScript
+gaat de bijlage als gewoon formulierveld mee en geldt `upload_max_filesize`. Archieven voor import/restore
+gaan wél in één keer: wil je een export van een vol spel (2 GB) via de website importeren, zet dan
+`upload_max_filesize`/`post_max_size` op 3G, `max_input_time` ruim (bijv. 900) en Apache `LimitRequestBody`
+(standaard 1 GB) hoger; Docker doet dat al.
+
 ## Een spel voorbereiden
 
 1. Maak onder **Spellen** een spel aan (of importeer een export, of kopieer een bestaand spel: opdrachten,

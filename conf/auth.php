@@ -247,8 +247,9 @@ function csrfField(): string {
     return '<input type="hidden" name="csrf_token" value="' . csrfToken() . '">';
 }
 
+// Uit het formulier, of uit de header X-CSRF-Token (requests zonder formulier, zoals een stuk van een upload)
 function verifyCsrf(): bool {
-    $sent = $_POST['csrf_token'] ?? '';
+    $sent = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
     return is_string($sent) && !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $sent);
 }
 
