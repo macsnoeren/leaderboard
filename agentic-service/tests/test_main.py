@@ -1,11 +1,12 @@
 """De agentloop met mocks; teamberichten gaan voor design-taken."""
 import threading
+import types
 import unittest
 from unittest import mock
 
 from agentic.api import ApiError, MaintenanceError
 from agentic.llm import LLMError
-from main import AgentService
+from main import AgentService, key_loader
 from tests.helpers import RUBRIC, SETTINGS, make_task
 
 
@@ -106,6 +107,21 @@ class MaintenanceTest(unittest.TestCase):
         api.claim_task.side_effect = MaintenanceError("claim_task: onderhoudsmodus", 503)
         service.run_once()
         self.assertFalse([c for c in calls if c[0] in ("process", "submit_evaluation")])
+
+
+class KeyLoaderTest(unittest.TestCase):
+    def test_database_when_configured(self):
+        settings = mock.Mock(API_KEY_DB="/data/leaderboard.db", API_KEY_NAME="docker-agent")
+        with mock.patch("main.read_api_key", return_value="uit-db") as read:
+            self.assertEqual(key_loader(settings, None)(), "uit-db")
+        read.assert_called_once_with("/data/leaderboard.db", "docker-agent")
+
+    def test_otherwise_config_is_reread(self):
+        settings = mock.Mock(API_KEY_DB="")
+        config = mock.Mock()
+        with mock.patch("main.importlib.reload", side_effect=lambda m: types.SimpleNamespace(API_KEY="aangepast")) as reload:
+            self.assertEqual(key_loader(settings, config)(), "aangepast")
+        reload.assert_called_once_with(config)
 
 
 if __name__ == "__main__":

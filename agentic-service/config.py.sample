@@ -2,8 +2,13 @@
 # en vul API_KEY en BASE_URL in. Niet committen: config.py staat in .gitignore.
 # Alles wat je weglaat krijgt de standaard uit agentic/settings.py.
 
-# API-sleutel uit 🔑 API Keys in de webapplicatie
+# API-sleutel uit 🔑 API Keys in de webapplicatie. Weigert api.php hem (401), dan leest de agent dit
+# bestand opnieuw; je kunt de key dus aanpassen zonder te herstarten.
 API_KEY = "vul-hier-je-api-key-in"
+
+# Of lees de key bij een 401 uit de database van de webapp (zelfde server, alleen lezen):
+# API_KEY_DB = "/pad/naar/leaderboard/database/leaderboard.db"
+# API_KEY_NAME = "docker-agent"
 
 # URL van api.php van de webapplicatie
 BASE_URL = "https://leaderboard.example.nl/api.php"

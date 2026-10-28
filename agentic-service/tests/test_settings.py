@@ -53,6 +53,10 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(module.VALIDATOR_THINK, "medium")
         self.assertEqual(module.API_KEY, "k")
         self.assertEqual(module.HELPER_MODEL, DEFAULTS["HELPER_MODEL"])
+        self.assertEqual(module.API_KEY_DB, "")  # alleen gezet als de entrypoint de key uit de database haalt
+        self.assertEqual(module.API_KEY_NAME, "docker-agent")
+        module = load_docker_config({"AI_API_KEY_DB": "/data/leaderboard.db"})
+        self.assertEqual(module.API_KEY_DB, "/data/leaderboard.db")
 
     def test_cloud_only(self):
         self.assertTrue(is_cloud_model("gpt-oss:20b-cloud"))

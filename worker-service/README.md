@@ -169,7 +169,7 @@ De onderhoudsmodus is een bestand, geen databasevlag, omdat de database wordt ve
 dan een 503: een pagina die zichzelf ververst, leeg bij `?ajax…`, JSON bij `api.php` (de AI-agent wacht).
 De commandoregel slaat de controle over. Na een restore blijft iedereen ingelogd zolang `session_version`
 in de backup klopt; een admin die niet in de backup staat, is uitgelogd. Is de `docker-agent`-key anders,
-herstart dan de agent-container.
+dan leest de AI-agent bij de eerste 401 zelf de nieuwe key in (zie `agentic-service/README.md`).
 
 ## Rapport
 

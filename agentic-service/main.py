@@ -6,13 +6,14 @@ de agent meldt zich dan netjes af.
 Per ronde: heartbeat (met model_ok), eerst de teamberichten (een lopend spel gaat voor), daarna de
 opdrachten waar de opdracht-assistent naar moet kijken.
 """
+import importlib
 import logging
 import signal
 import threading
 import uuid
 
 from agentic.agents import designer
-from agentic.api import ApiClient, ApiError, MaintenanceError
+from agentic.api import ApiClient, ApiError, MaintenanceError, read_api_key
 from agentic.llm import LLMClient, LLMError
 from agentic.pipeline import Pipeline
 from agentic.settings import load_settings, local_models
@@ -134,6 +135,14 @@ class AgentService:
             logger.info("AI-agent %s afgemeld", self.api.agent_id)
 
 
+def key_loader(settings, config_module):
+    """Waar de agent bij een 401 de key opnieuw leest (bijvoorbeeld na een restore): de database van de
+    webapp als API_KEY_DB is ingesteld (Docker), anders config.py."""
+    if settings.API_KEY_DB:
+        return lambda: read_api_key(settings.API_KEY_DB, settings.API_KEY_NAME)
+    return lambda: load_settings(importlib.reload(config_module)).API_KEY
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     import config  # noqa: PLC0415 - config.py hoort naast main.py (zie config.py.sample)
@@ -144,7 +153,7 @@ def main():
                      "Kies een -cloud-model of zet CLOUD_ONLY = False.", ", ".join(local))
         raise SystemExit(2)
     agent_id = f"agent-{uuid.uuid4().hex[:8]}"
-    api = ApiClient(settings.BASE_URL, settings.API_KEY, agent_id)
+    api = ApiClient(settings.BASE_URL, settings.API_KEY, agent_id, key_loader=key_loader(settings, config))
     llm = LLMClient(settings.OLLAMA_URL, timeout=settings.LLM_TIMEOUT, cloud_only=settings.CLOUD_ONLY)
     service = AgentService(settings, api, llm)
 

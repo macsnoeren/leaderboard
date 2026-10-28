@@ -174,6 +174,12 @@ python3 tools/check_ollama.py     # werken de modellen?
 python3 main.py                   # Ctrl+C meldt de agent netjes af
 ```
 
+Weigert `api.php` de key (401, bijvoorbeeld na een restore of nadat de key in API-sleutels is vervangen),
+dan leest de agent hem één keer opnieuw in en probeert het verzoek nog eens; herstarten is niet nodig.
+Hij leest uit de database van de webapp als `API_KEY_DB` is ingesteld (pad naar `leaderboard.db`, alleen
+lezen, met `API_KEY_NAME`, standaard `docker-agent`; zo werkt de Docker-agent), en anders uit `config.py`
+(pas daar dus gewoon `API_KEY` aan terwijl de agent draait).
+
 ## Modellen
 
 Per agent een model en denkniveau in `config.py` (`INTENT_MODEL`, `INTENT_THINK`, …, `ASSESSOR_MODELS` als

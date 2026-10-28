@@ -4,6 +4,10 @@ from types import SimpleNamespace
 
 DEFAULTS = {
     "API_KEY": "",
+    # SQLite-database van de webapp (alleen lezen): de agent leest de key daar opnieuw bij een 401,
+    # bijvoorbeeld na een restore. Leeg = bij een 401 config.py opnieuw inlezen.
+    "API_KEY_DB": "",
+    "API_KEY_NAME": "docker-agent",
     "BASE_URL": "http://localhost:8088/api.php",
     "OLLAMA_URL": "http://localhost:11434/api/chat",
     "POLL_INTERVAL": 10,
@@ -31,6 +35,8 @@ _INT_KEYS = {"POLL_INTERVAL", "MAX_CHAT_TOKENS", "LLM_TIMEOUT"}
 # Environment-variabelen van docker/agent-config.py: AI_INTENT_MODEL, AI_INTENT_THINK, ...
 ENV_NAMES = {
     "API_KEY": "AI_API_KEY",
+    "API_KEY_DB": "AI_API_KEY_DB",
+    "API_KEY_NAME": "AI_API_KEY_NAME",
     "BASE_URL": "AI_BASE_URL",
     "OLLAMA_URL": "OLLAMA_URL",
     "POLL_INTERVAL": "AI_POLL_INTERVAL",

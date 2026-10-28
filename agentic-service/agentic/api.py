@@ -1,5 +1,6 @@
 """Client voor api.php van de webapplicatie."""
 import logging
+import sqlite3
 
 import requests
 
@@ -17,20 +18,57 @@ class MaintenanceError(ApiError):
     """503: de webapp staat in onderhoudsmodus (een restore door de worker). Geen fout: even wachten."""
 
 
+def read_api_key(db_path, key_name):
+    """De key `key_name` uit api_keys in de database van de webapp (alleen lezen), of None."""
+    try:
+        db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            row = db.execute("SELECT api_key FROM api_keys WHERE key_name = ? LIMIT 1", (key_name,)).fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error as e:
+        logger.warning("API-key niet te lezen uit %s: %s", db_path, e)
+        return None
+    return row[0] if row and row[0] else None
+
+
 class ApiClient:
-    def __init__(self, base_url, api_key, agent_id, session=None, timeout=30):
+    """`key_loader` (optioneel) geeft de huidige key: bij een 401 leest de client die opnieuw en probeert
+    het verzoek één keer met de nieuwe key, zodat de agent na een restore niet herstart hoeft te worden."""
+
+    def __init__(self, base_url, api_key, agent_id, session=None, timeout=30, key_loader=None):
         self.base_url = base_url
         self.api_key = api_key
         self.agent_id = agent_id
         self.session = session or requests.Session()
         self.timeout = timeout
+        self.key_loader = key_loader
+
+    def _reload_key(self):
+        """True als er een andere key is dan de huidige."""
+        if self.key_loader is None:
+            return False
+        try:
+            key = self.key_loader()
+        except Exception as e:  # noqa: BLE001 - dan blijft het bij de 401
+            logger.warning("API-key opnieuw inlezen mislukt: %s", e)
+            return False
+        if not key or key == self.api_key:
+            return False
+        self.api_key = key
+        logger.info("Nieuwe API-key ingelezen na een 401")
+        return True
 
     def _request(self, method, action, body=None, timeout=None):
-        # De key alleen in de header: in de URL komt hij in de logs van de webserver terecht
-        resp = self.session.request(
-            method, self.base_url, params={"action": action}, json=body,
-            headers={"X-API-Token": self.api_key, "Content-Type": "application/json"},
-            timeout=timeout or self.timeout)
+        for attempt in range(2):
+            # De key alleen in de header: in de URL komt hij in de logs van de webserver terecht
+            resp = self.session.request(
+                method, self.base_url, params={"action": action}, json=body,
+                headers={"X-API-Token": self.api_key, "Content-Type": "application/json"},
+                timeout=timeout or self.timeout)
+            # Bij een 401 één nieuwe poging, alleen als er inmiddels een andere key is
+            if resp.status_code != 401 or attempt or not self._reload_key():
+                break
         try:
             data = resp.json()
         except ValueError:
