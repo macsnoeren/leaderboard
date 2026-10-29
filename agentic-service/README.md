@@ -67,7 +67,9 @@ Per teambericht (`agentic/pipeline.py`):
    teambericht staat, en dat het oordeel past bij de tussenstand ná dit bericht (`merge_progress()`). Zet
    de beoordelaar een aspect lager dan de tussenstand zonder een nieuwer teambericht over dat aspect te
    citeren (hij vergat een eerder gegeven deel), dan draait hij één keer opnieuw met die aspecten erbij
-   (blok `AL BEREIKT`); de reden voor de operator noemt dat. Blijft het oordeel daarna onvoldoende terwijl
+   (blok `AL BEREIKT`); de reden voor de operator noemt dat. Feedback die de rubric, aspecten, criteria of
+   het aantal vereiste punten noemt (teams kennen die niet), weigert de code (`rubric_talk()`): het model
+   krijgt één nieuwe poging, anders escalatie. Blijft het oordeel daarna onvoldoende terwijl
    de tussenstand slaagt, dan is de beoordeling niet consistent en escaleert ze.
 5. **Validator** (groter model): controleert de beoordeling of de reactie. Verklapt ze iets, bevestigt of
    ontkent ze een gok, is er manipulatie, was het wel een vraag? Zegt hij "geen vraag", dan wordt het
@@ -158,6 +160,12 @@ De AI leest geen bijlagen. Verwijzen de criteria naar de bijlage en heeft de ope
 dan vraagt de assistent eerst; tijden en getallen in de rubric moeten in de tekst van de operator staan, en
 regels in `verduidelijkingen_vraag` met antwoordtermen worden weggehaald (code-controles, omdat het model
 ze in de praktijk oversloeg).
+
+Strengheid: het antwoord van de operator is een uitstekend antwoord (`goed`); `voldoende` vraagt alleen de
+kern (minder volledig, minder precies, of een deel van een opsomming). Hooguit `MAX_REQUIRED` (2) aspecten
+zijn verplicht (code-controle in `make_check()`); de operator kan er in de tabel meer verplicht maken.
+Beoordelaar en validator passen de rubric toe zoals hij is: eigen woorden en spelfouten tellen als de
+betekenis klopt.
 
 Rubric (`assignments.ai_rubric`, JSON; de operator ziet een tabel, geen JSON):
 
@@ -255,12 +263,13 @@ python3 evals/run.py              # beoordelingspijplijn: per agent goed/fout + 
 python3 evals/run.py --designer   # opdracht-assistent
 ```
 
-Laatste evals (2026-10-30, standaardmodellen, modus `auto`, 29 cases, na "antwoord in delen" en de
-tussenstand per laatste standpunt): intentie 29/29, beoordelaar 25/26, validator 25/26, mens nodig 12/13,
-beslissing 28/29, **0 onterechte level-ups**. De nieuwe cases 27 en 28 (antwoord in twee delen, met en
-zonder tussenstand) en 29 (groen aspect, daarna een fout antwoord) slagen. Opdracht-assistent
-(2026-10-17): 5/5. De fouten vallen aan de veilige kant: case 22 ("Zit het in de kelder?") krijgt
-onvoldoende in plaats van voldoende, en die case wisselt tussen runs. Noteer nieuwe scores hier.
+Laatste evals (2026-10-30, standaardmodellen, modus `auto`, 29 cases, na "antwoord in delen", de
+tussenstand per laatste standpunt en minder strenge beoordeling): intentie 29/29, beoordelaar 26/26,
+validator 26/26, mens nodig 12/13, beslissing 29/29, **0 onterechte level-ups**. Cases 27 en 28 (antwoord
+in twee delen, met en zonder tussenstand) en 29 (groen aspect, daarna een fout antwoord) slagen.
+Opdracht-assistent (2026-10-30): 6/6; case 06 (antwoord van vier punten) geeft twee verplichte aspecten met
+bij voldoende "minstens één van de twee". De fout valt aan de veilige kant (een escalatie bij twijfel over
+voldoende/goed). Noteer nieuwe scores hier.
 
 ## Privacy
 

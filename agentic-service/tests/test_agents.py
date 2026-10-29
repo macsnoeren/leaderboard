@@ -160,6 +160,19 @@ class AssessorTest(unittest.TestCase):
         self.assertEqual(llm.agents_called(), ["assessor"])
         self.assertEqual((result["verdict"], result["consistent"], result["forgotten"]), ("onvoldoende", True, []))
 
+    def test_feedback_about_rubric_is_refused(self):
+        # Teams kennen de rubric niet: "alle vier de punten" of "het aspect motief" helpt ze niet
+        task = make_task()
+        for bad in ["Alle vier de punten moeten erin staan.", "Het aspect motief ontbreekt nog.", "Volgens de criteria mist er iets.",
+                    "Jullie hebben pas 2 onderdelen."]:
+            self.assertIsNotNone(assessor.rubric_talk(bad, task), bad)
+        for ok in ["Jullie zijn er nog niet: waarom deed hij het?", "Uitstekend! Dader en motief kloppen.", "Kijk nog eens naar de vraag."]:
+            self.assertIsNone(assessor.rubric_talk(ok, task), ok)
+        # Wat de opdracht zelf zegt, mag de feedback herhalen
+        self.assertIsNone(assessor.rubric_talk("Noem alle vier de punten.", make_task(instruction="Noem vier punten waaraan je de dader herkent.")))
+        with self.assertRaises(LLMError):
+            assessor.assess(FakeLLM(assessor=assessment("onvoldoende", feedback="Alle vier de punten moeten erin staan.")), SETTINGS, task)
+
     def test_majority_and_disagreement(self):
         settings = type(SETTINGS)(**dict(vars(SETTINGS), ASSESSOR_MODELS=["a", "b", "c"]))
         voldoende = assessment("voldoende")
@@ -210,6 +223,16 @@ class DesignerTest(unittest.TestCase):
         prompt = llm.prompts()[0]
         self.assertIn("bijlage", prompt)
         self.assertIn("Antwoord 1", prompt)
+
+    def test_only_the_core_is_required(self):
+        # Het antwoord van de docent is "goed"; met alles verplicht zou "voldoende" bijna hetzelfde vragen
+        aspects = [dict(RUBRIC["aspecten"][0], naam=f"Punt {i}", verplicht=True) for i in range(1, 5)]
+        strict = dict(RUBRIC, aspecten=aspects)
+        with self.assertRaises(LLMError) as err:
+            designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": strict}), SETTINGS, self.job())
+        self.assertIn("hooguit 2", str(err.exception))
+        two = dict(RUBRIC, aspecten=[dict(a, verplicht=i < 2) for i, a in enumerate(aspects)])
+        self.assertEqual(designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": two}), SETTINGS, self.job())[0]["soort"], "rubric")
 
     def test_rubric(self):
         result, _ = designer.design(FakeLLM(designer={"soort": "rubric", "vragen": [], "rubric": RUBRIC}), SETTINGS, self.job())

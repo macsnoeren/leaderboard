@@ -145,7 +145,7 @@ include 'admin_header.php';
             <table class="table table-compact rubric-sample">
                 <thead><tr><th>Onderdeel</th><th>Betekenis</th><th>Voorbeeld</th></tr></thead>
                 <tbody>
-                    <tr><td><strong>Kern</strong></td><td>Wat het team minimaal moet geven.</td><td>Het team moet de dader én het motief noemen.</td></tr>
+                    <tr><td><strong>Kern</strong></td><td>Wat het team minimaal moet geven voor voldoende.</td><td>Het team moet de dader én het motief noemen.</td></tr>
                     <tr><td><strong>Aspecten</strong></td><td>1 tot 5 onderdelen, elk verplicht of niet, met een omschrijving van onvoldoende, voldoende en goed.</td><td>Dader: <span class="badge badge-onvoldoende">onvoldoende</span> geen of verkeerde persoon, <span class="badge badge-voldoende">voldoende</span> de conciërge zonder naam, <span class="badge badge-goed">goed</span> Jan de Vries (de conciërge).</td></tr>
                     <tr><td><strong>Ook goed</strong></td><td>Varianten en synoniemen die meetellen.</td><td>meneer De Vries</td></tr>
                     <tr><td><strong>Veelgemaakte fouten</strong></td><td>Te verwachten foute antwoorden.</td><td>De tuinman: alibi bevestigd op camera 3.</td></tr>
@@ -158,6 +158,8 @@ include 'admin_header.php';
         <ul class="plain">
             <li>Hij <strong>verzint geen feiten</strong>: elke naam, tijd, plaats of elk getal in de rubric moet in jouw tekst of in jouw antwoorden staan. Anders vraagt hij het eerst.</li>
             <li>Hij <strong>verandert jouw antwoord nooit</strong>: de criteria blijven zoals jij ze schreef.</li>
+            <li>Jouw antwoord is een <strong>uitstekend</strong> antwoord: dat is het niveau <span class="badge badge-goed">goed</span>. Voor <span class="badge badge-voldoende">voldoende</span> is duidelijk minder nodig: de kern klopt, details mogen ontbreken of minder precies zijn. Bestaat jouw antwoord uit een opsomming (bijvoorbeeld vier punten), dan is een deel daarvan voldoende.</li>
+            <li>Alleen de kern is verplicht (hooguit twee aspecten); details en extra punten maken het verschil tussen voldoende en goed. Wil je het strenger, zet dan in de tabel meer aspecten op verplicht.</li>
             <li>In de verduidelijkingen mag niets staan dat het antwoord dichterbij brengt. De code haalt regels met woorden uit het antwoord er ook nog eens uit.</li>
             <li>Jouw antwoorden op zijn vragen gaan als extra uitleg mee naar de agents die later de teams beoordelen.</li>
         </ul>
@@ -224,6 +226,7 @@ include 'admin_header.php';
             <li><span class="badge badge-onvoldoende">onvoldoende</span> Een hint die de goede kant op wijst, <strong>zonder</strong> het antwoord, namen, plaatsen of tijden.</li>
             <li>Een gok wordt <strong>nooit bevestigd of ontkend</strong>, ook niet indirect. Dus ook geen “jullie zitten warm” en geen herhaling van een persoon of tijd die het team noemde zolang dat aspect nog niet goed is.</li>
             <li>Een reactie op een vraag legt alleen uit wat de opdracht vraagt. Kan dat niet zonder iets te verklappen, dan verwijst de AI naar de opdrachttekst of laat ze het aan jou over.</li>
+            <li>Teams kennen de rubric en jouw criteria niet. De feedback noemt dus nooit de rubric, aspecten, criteria of hoeveel punten er nodig zijn (“alle vier de punten moeten erin staan”), maar verwijst naar wat de opdracht zelf vraagt. De code controleert dat ook.</li>
             <li>Merkt de validator dat de feedback iets verklapt, dan gaat die feedback nooit naar het team.</li>
             <li>Zet de AI een team een level omhoog, dan komt de feedback op het nieuwe level, zodat het team hem ziet.</li>
         </ul>

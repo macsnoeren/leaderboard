@@ -1,0 +1,16 @@
+{
+  "name": "06_vier_punten",
+  "job": {
+    "assignment_id": 0,
+    "title": "De brand in het lab",
+    "description": "In het scheikundelokaal is 's nachts brand uitgebroken. Jullie hebben het rapport van de brandweer gekregen.",
+    "instruction": "Hoe kon de brand ontstaan en zich zo snel verspreiden? Leg het uit.",
+    "criteria": "Een goede uitleg noemt vier punten: 1) een kapotte stekker van de verwarmingsplaat gaf kortsluiting; 2) er stond een fles ethanol naast de plaat; 3) het raam stond open, waardoor de brand extra zuurstof kreeg; 4) de branddeur was met een wig opengezet, waardoor het vuur de gang in kon.",
+    "has_attachment": false,
+    "rubric": null,
+    "round": 3,
+    "max_rounds": 3,
+    "dialog": []
+  },
+  "expected": "rubric"
+}

@@ -15,6 +15,11 @@ from . import run, system_prompt
 
 _RANK = {"onvoldoende": 0, "voldoende": 1, "goed": 2}
 _QUOTES = "\"'“”„‘’‚«»`´"
+# Teams kennen de rubric en de criteria niet: feedback die daarnaar verwijst helpt ze niet en verraadt de opbouw
+_RUBRIC_TALK = re.compile(r"\b(rubrics?|aspect(en)?|criteri(a|um)|beoordelingscriteria|antwoordmodel|modelantwoord"
+                          r"|antwoord van de (docent|operator))\b", re.IGNORECASE)
+_COUNT_TALK = re.compile(r"\b(twee|drie|vier|vijf|zes|zeven|acht|negen|tien|\d+)\s+(de\s+)?(punten|onderdelen|elementen|zaken)\b",
+                         re.IGNORECASE)
 
 
 def build_prompt(task, max_tokens=20000, forgotten=None):
@@ -36,6 +41,19 @@ def build_prompt(task, max_tokens=20000, forgotten=None):
             "latere bericht als bewijs. Noem in feedback_team niets als ontbrekend dat het team al gaf.",
         ]
     return "\n\n".join(parts)
+
+
+def rubric_talk(feedback, task):
+    """Een foutmelding als de feedback aan het team de rubric, de criteria of het aantal vereiste punten noemt
+    (behalve woorden die de opdracht zelf gebruikt), anders None. Gaat als check naar het model, dat het dan
+    één keer opnieuw mag proberen."""
+    question = " ".join(str(task.get(k, "")) for k in ("assignment_title", "description", "instruction")).lower()
+    found = [m.group(0) for m in _RUBRIC_TALK.finditer(feedback or "") if m.group(0).lower() not in question]
+    found += [m.group(0) for m in _COUNT_TALK.finditer(feedback or "") if m.group(1).lower() not in question]
+    if not found:
+        return None
+    return ("feedback_team noemt iets wat teams niet kennen (" + ", ".join(found) + "): noem nooit de rubric, aspecten, "
+            "criteria of hoeveel punten er nodig zijn; verwijs alleen naar wat de opdracht zelf vraagt")
 
 
 def normalize_quote(text):
@@ -126,11 +144,12 @@ def majority(verdicts):
     return min((v for v, n in counts.items() if n == best), key=lambda v: _RANK[v])
 
 
-def _run_all(llm, settings, user):
+def _run_all(llm, settings, task, user):
     system = system_prompt("assessor")
     outputs, runs = [], []
     for model in settings.ASSESSOR_MODELS:
-        output, meta = run(llm, model, settings.ASSESSOR_THINK, system, user, schemas.ASSESSOR)
+        output, meta = run(llm, model, settings.ASSESSOR_THINK, system, user, schemas.ASSESSOR,
+                           check=lambda obj: rubric_talk(obj.get("feedback_team"), task))
         outputs.append(output)
         runs.append(meta)
     verdict = majority([o["oordeel"] for o in outputs])
@@ -141,11 +160,11 @@ def assess(llm, settings, task):
     """{'verdict', 'unanimous', 'citations_ok', 'consistent', 'output', 'runs', 'forgotten'}"""
     previous = (task.get("progress") or {}).get("aspects") or []
     messages = context.chat_messages(task)
-    outputs, runs, verdict, main = _run_all(llm, settings, build_prompt(task, settings.MAX_CHAT_TOKENS))
+    outputs, runs, verdict, main = _run_all(llm, settings, task, build_prompt(task, settings.MAX_CHAT_TOKENS))
     forgotten = forgotten_aspects(previous, main["aspecten"], messages, task.get("rubric"))
     if forgotten:
         # Eén herkansing met de vergeten aspecten erbij; beide rondes staan in assessor_json
-        outputs, more, verdict, main = _run_all(llm, settings, build_prompt(task, settings.MAX_CHAT_TOKENS, forgotten))
+        outputs, more, verdict, main = _run_all(llm, settings, task, build_prompt(task, settings.MAX_CHAT_TOKENS, forgotten))
         runs += more
     merged = merge_progress(previous, main["aspecten"], messages)
     return {

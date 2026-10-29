@@ -1,9 +1,11 @@
 """Opdracht-assistent: stelt 1–5 vragen aan de docent of stelt een rubric voor. In de laatste ronde
 altijd een rubric. Het antwoord van de docent (criteria) verandert hij nooit.
 
-Twee controles in code, omdat het model ze in de praktijk overslaat: verwijzen de criteria naar de
-bijlage en heeft de docent nog niets beantwoord, dan eerst vragen; en tijden en getallen in de rubric
-moeten in de tekst van de docent voorkomen (geen verzonnen feiten).
+Controles in code, omdat het model ze in de praktijk overslaat: verwijzen de criteria naar de bijlage en
+heeft de docent nog niets beantwoord, dan eerst vragen; tijden en getallen in de rubric moeten in de tekst
+van de docent voorkomen (geen verzonnen feiten); en hooguit MAX_REQUIRED aspecten zijn verplicht (het
+antwoord van de docent is "goed", voor "voldoende" volstaat de kern). De operator kan dat in de tabel
+nog aanpassen.
 """
 import json
 import re
@@ -12,6 +14,8 @@ from .. import context, schemas
 from . import run, system_prompt
 
 MAX_QUESTIONS = 5
+# Alleen de kern is verplicht; anders moet een team voor "voldoende" al bijna het hele antwoord van de docent geven
+MAX_REQUIRED = 2
 _ATTACHMENT = re.compile(r"\b(bijlage|bijgevoegd|attachment|dossier|pdf|zie (het )?bestand|camerabeelden)\b", re.IGNORECASE)
 # Tijden (23:15, 23.15) en getallen van twee of meer cijfers
 _FACTS = re.compile(r"\b\d{1,2}[:.]\d{2}\b|\b\d{2,}\b")
@@ -108,8 +112,12 @@ def make_check(job):
         errors = schemas.validate(rubric, schemas.RUBRIC)
         if errors:
             return "rubric: " + "; ".join(errors[:5])
-        if not any(a.get("verplicht") for a in rubric["aspecten"]):
+        required = sum(1 for a in rubric["aspecten"] if a.get("verplicht"))
+        if not required:
             return "rubric: minstens één aspect moet verplicht zijn"
+        if required > MAX_REQUIRED:
+            return (f"rubric: {required} aspecten zijn verplicht; maak alleen de kern verplicht (hooguit {MAX_REQUIRED}). "
+                    "Details en extra punten maken het verschil tussen voldoende en goed")
         names = [a["naam"].strip().lower() for a in rubric["aspecten"]]
         if "" in names or len(set(names)) != len(names):
             return "rubric: elk aspect heeft een eigen, niet-lege naam"
