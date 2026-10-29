@@ -162,8 +162,8 @@ function navBadges(int $unread, int $escalations): array {
         <div class="sidebar-nav">
             <?php foreach ($navGroups as $groupLabel => $items): ?>
                 <div class="nav-group-label"><?= htmlspecialchars($groupLabel) ?></div>
-                <?php foreach ($items as [$href, $label, $iconName, $activeOn]): $active = in_array($currentPage, $activeOn, true); ?>
-                    <a href="<?= $href ?>" class="nav-item<?= $active ? ' active' : '' ?>"<?= $active ? ' aria-current="page"' : '' ?>>
+                <?php foreach ($items as [$href, $label, $iconName, $activeOn]): $navActive = in_array($currentPage, $activeOn, true); ?>
+                    <a href="<?= $href ?>" class="nav-item<?= $navActive ? ' active' : '' ?>"<?= $navActive ? ' aria-current="page"' : '' ?>>
                         <?= icon($iconName) ?><span><?= htmlspecialchars($label) ?></span>
                         <?php if ($href === 'messages.php'): ?>
                             <span class="badges"><span id="unread-badge-container"><?= $unreadBadge ?></span><span id="escalation-badge-container"><?= $escalationBadge ?></span></span>
