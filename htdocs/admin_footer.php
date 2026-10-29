@@ -35,16 +35,17 @@
         }
 
         const handIcon = <?= json_encode(icon('hand')) ?>;
-        function updateUnreadBadge() {
-            fetch('teacher.php?ajax_unread=1')
+        // Teams die op antwoord van een operator wachten: badge bij Berichten en de tegel op het dashboard
+        function updateUnansweredBadge() {
+            fetch('teacher.php?ajax_unanswered=1')
                 .then(r => r.ok ? r.text() : null)
                 .then(count => {
                     if (count === null) return;
                     const n = parseInt(count, 10) || 0;
-                    const stat = document.getElementById('unread-stat'); // alleen op het dashboard
+                    const stat = document.getElementById('unanswered-stat'); // alleen op het dashboard
                     if (stat) stat.textContent = n;
-                    const container = document.getElementById('unread-badge-container');
-                    if (container) container.innerHTML = n > 0 ? `<span class="count" title="Ongelezen berichten">${n}<span class="sr-only"> ongelezen</span></span>` : '';
+                    const container = document.getElementById('unanswered-badge-container');
+                    if (container) container.innerHTML = n > 0 ? `<span class="count" title="Teams die op antwoord wachten">${n}<span class="sr-only"> teams wachten op antwoord</span></span>` : '';
                 });
         }
 
@@ -66,9 +67,9 @@
         }
 
         updateAIStatus();
-        updateUnreadBadge();
+        updateUnansweredBadge();
         updateEscalationBadge();
-        setInterval(() => { updateAIStatus(); updateUnreadBadge(); updateEscalationBadge(); }, 10000);
+        setInterval(() => { updateAIStatus(); updateUnansweredBadge(); updateEscalationBadge(); }, 10000);
     </script>
     <?php if (isset($extraJS)) echo $extraJS; ?>
 </body>

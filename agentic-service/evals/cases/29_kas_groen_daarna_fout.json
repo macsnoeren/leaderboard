@@ -1,0 +1,37 @@
+{
+  "name": "29_kas_groen_daarna_fout",
+  "assignment": "kas",
+  "progress": {
+    "aspects": [
+      {
+        "naam": "Dader",
+        "niveau": "goed",
+        "bewijs": "het was jan de vries, de conciërge",
+        "bericht": 100
+      }
+    ],
+    "summary": "Dader goed in bericht 100; motief nog niet genoemd."
+  },
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het was Jan de Vries, de conciërge."
+    },
+    {
+      "id": 101,
+      "sender": "ai",
+      "text": "Goed genoeg, maar waarom deed hij het?"
+    },
+    {
+      "id": 102,
+      "sender": "team",
+      "text": "Nee wacht, we denken toch dat het de tuinman was, voor het geld."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "onvoldoende",
+    "human": null
+  }
+}

@@ -13,6 +13,11 @@ from .llm import LLMError
 logger = logging.getLogger(__name__)
 
 
+class TaskCancelled(Exception):
+    """De claim op het team kon niet verlengd worden: een operator annuleerde de AI voor dit bericht (of de
+    claim is verlopen en door een andere agent overgenomen). Dan niets indienen."""
+
+
 def task_context(task, flags):
     return {
         "mode": task.get("ai_mode", "suggest"),
@@ -31,7 +36,7 @@ class Pipeline:
     def __init__(self, llm, settings, keepalive=None):
         self.llm = llm
         self.settings = settings
-        # Verlengt de claim op het team tussen twee modelaanroepen (claim_task door dezelfde agent)
+        # Verlengt de claim op het team tussen twee modelaanroepen (claim_task door dezelfde agent); False = afbreken
         self.keepalive = keepalive or (lambda task: None)
 
     def process(self, task, agent_id):
@@ -74,9 +79,13 @@ class Pipeline:
             payload["progress"] = state["progress"]
         return payload
 
+    def _keep(self, task):
+        if self.keepalive(task) is False:
+            raise TaskCancelled(f"team {task.get('team_id')}: claim niet verlengd")
+
     def _call(self, state, step, fn, *args):
         state["step"] = step
-        self.keepalive(state["task"])
+        self._keep(state["task"])
         result = fn(self.llm, self.settings, *args)
         meta = result[-1]
         state["models"].append(meta["model"])
@@ -129,7 +138,7 @@ class Pipeline:
         task = state["task"]
         # De beoordelaar kan meerdere modellen draaien; daarom niet via _call()
         state["step"] = "assessor_json"
-        self.keepalive(task)
+        self._keep(task)
         assessment = assessor.assess(self.llm, self.settings, task)
         state["models"].extend(run["model"] for run in assessment["runs"])
         state["jsons"]["assessor_json"] = assessment["runs"][0] if len(assessment["runs"]) == 1 else assessment["runs"]
@@ -154,5 +163,7 @@ class Pipeline:
             "redenen": vout["redenen"],
         })
         note = main.get("toelichting_docent", "").strip()
+        if assessment["forgotten"]:
+            note = f"Opnieuw beoordeeld: eerder bereikt was al {', '.join(assessment['forgotten'])}. {note}".strip()
         return {"decision": decision, "reason": f"{reason}. {note}".strip() if note else reason,
                 "verdict": assessment["verdict"], "reply_text": main["feedback_team"]}

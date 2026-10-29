@@ -33,9 +33,9 @@ if (isset($_GET['ajax_ai_status'])) {
 $game = requireGame($db, $user);
 $gameId = (int)$game['id'];
 
-// AJAX endpoint voor live unread count updates (alleen het huidige level van elk team)
-if (isset($_GET['ajax_unread'])) {
-    echo countUnread($db, $gameId);
+// AJAX endpoint: aantal teams dat op antwoord van een operator wacht (alleen het huidige level van elk team)
+if (isset($_GET['ajax_unanswered'])) {
+    echo countUnanswered($db, $gameId);
     exit;
 }
 
@@ -146,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 $teams = rankedTeams($db, $gameId);
 $total_assignments = totalAssignments($db, $gameId);
-$unread_total = countUnread($db, $gameId);
+$unanswered_total = countUnanswered($db, $gameId);
 $canAddTeam = initialLevel($game) !== null;
 $escalations = openEscalationsByTeam($db, $gameId);
 // De tegel "Wacht op AI" alleen als de AI in dit spel aan staat voor minstens één team
@@ -227,8 +227,8 @@ include 'admin_header.php';
                 <div class="stat-value"><?= $total_assignments ?></div>
             </div>
             <div class="stat">
-                <div class="stat-label"><?= icon('message') ?>Ongelezen</div>
-                <div class="stat-value" id="unread-stat"><?= $unread_total ?></div>
+                <div class="stat-label"><?= icon('message') ?>Wacht op antwoord</div>
+                <div class="stat-value" id="unanswered-stat"><?= $unanswered_total ?></div>
                 <div class="stat-hint"><a href="messages.php">Naar berichten</a></div>
             </div>
             <div class="stat<?= $escalationCount > 0 ? ' is-warning' : '' ?>" title="Teams waarbij de AI een operator nodig heeft">

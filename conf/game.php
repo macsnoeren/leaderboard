@@ -274,13 +274,30 @@ function levelLabel(int $level, int $total): string {
 }
 
 /**
- * Ongelezen teamberichten van het huidige level van elk team in het spel.
+ * Teams die op antwoord van een operator wachten: op hun huidige level staat een teambericht zonder
+ * reactie (teacher of ai; een suggestie telt niet) erna. Oudste wachtende eerst, zodat operators
+ * eerlijk op volgorde kunnen werken. Geeft [team_id => ['position' => 1.., 'since' => UTC-tijd]].
  */
-function countUnread(PDO $db, int $gameId): int {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM team_messages tm JOIN teams t ON t.id = tm.team_id
-        WHERE t.game_id = ? AND tm.sender = 'team' AND tm.is_read = 0 AND tm.assignment_number = t.current_level");
+function unansweredTeams(PDO $db, int $gameId): array {
+    $stmt = $db->prepare("
+        SELECT t.id, MIN(tm.created_at) AS since, MIN(tm.id) AS first_id
+        FROM teams t
+        JOIN team_messages tm ON tm.team_id = t.id AND tm.assignment_number = t.current_level AND tm.sender = 'team'
+        WHERE t.game_id = ?
+        AND NOT EXISTS (SELECT 1 FROM team_messages r WHERE r.team_id = t.id AND r.assignment_number = t.current_level
+                        AND r.sender IN ('teacher', 'ai') AND r.id > tm.id)
+        GROUP BY t.id
+        ORDER BY since ASC, first_id ASC");
     $stmt->execute([$gameId]);
-    return (int)$stmt->fetchColumn();
+    $queue = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $i => $row) {
+        $queue[(int)$row['id']] = ['position' => $i + 1, 'since' => $row['since']];
+    }
+    return $queue;
+}
+
+function countUnanswered(PDO $db, int $gameId): int {
+    return count(unansweredTeams($db, $gameId));
 }
 
 function validateTeamName(string $name): ?string {

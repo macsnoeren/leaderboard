@@ -15,7 +15,7 @@ import uuid
 from agentic.agents import designer
 from agentic.api import ApiClient, ApiError, MaintenanceError, read_api_key
 from agentic.llm import LLMClient, LLMError
-from agentic.pipeline import Pipeline
+from agentic.pipeline import Pipeline, TaskCancelled
 from agentic.settings import load_settings, local_models
 
 logger = logging.getLogger("agentic")
@@ -83,6 +83,9 @@ class AgentService:
         label = self._label(task)
         try:
             payload = self.pipeline.process(task, self.api.agent_id)
+        except TaskCancelled:
+            logger.info("%s: geannuleerd door een operator (of claim kwijt); niets ingediend", label)
+            return 0
         except Exception:  # noqa: BLE001 - een fout in de agent wordt een escalatie, geen crash
             logger.exception("Interne fout bij %s", label)
             payload = {"agent_id": self.api.agent_id, "team_id": task["team_id"], "level": task["current_level"],

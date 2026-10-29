@@ -24,7 +24,7 @@ function freshDb(): PDO {
     $db->exec("CREATE TABLE teachers (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, role TEXT DEFAULT 'user')");
     $db->exec("CREATE TABLE games (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', join_code TEXT UNIQUE, registration_open INTEGER DEFAULT 0, logo_file TEXT, status_message TEXT, started_at DATETIME, ends_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_by INTEGER, ai_mode TEXT DEFAULT 'suggest', ai_max_attempts INTEGER DEFAULT 5, ai_max_questions INTEGER DEFAULT 5)");
     $db->exec("CREATE TABLE game_teachers (game_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL, PRIMARY KEY (game_id, teacher_id))");
-    $db->exec("CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE, ai_processing_by TEXT, ai_processing_at DATETIME, ai_mode TEXT DEFAULT 'suggest')");
+    $db->exec("CREATE TABLE teams (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_name TEXT, email TEXT, current_level INTEGER DEFAULT 0, level_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, access_token TEXT UNIQUE, ai_processing_by TEXT, ai_processing_at DATETIME, ai_mode TEXT DEFAULT 'suggest', ai_cancelled_message_id INTEGER)");
     $db->exec("CREATE UNIQUE INDEX idx_teams_game_name ON teams(game_id, team_name)");
     $db->exec("CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, assignment_number INTEGER, title TEXT, description TEXT, instruction TEXT, criteria TEXT, time_limit INTEGER, artifact_file TEXT, ai_rubric TEXT, ai_rubric_status TEXT DEFAULT 'none', ai_design_status TEXT DEFAULT 'idle', ai_design_round INTEGER DEFAULT 0, ai_auto_allowed INTEGER DEFAULT 1, ai_processing_by TEXT, ai_processing_at DATETIME)");
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
@@ -408,12 +408,51 @@ updateTeamProgress($db, $t, 1, [
 $progress = getTeamProgress($db, $t, 1);
 check('citaat uit een ander level of team telt niet', !in_array('Motief', array_column($progress['aspects'], 'naam'), true));
 check('zonder nieuwe samenvatting blijft de oude', $progress['summary'] === "Dader genoemd in bericht $p1");
-updateTeamProgress($db, $t, 1, [['naam' => 'dader', 'niveau' => 'onvoldoende', 'bewijs' => 'het was Piet', 'bericht' => $p2]], 'Nu Piet', $p2);
+updateTeamProgress($db, $t, 1, [
+    ['naam' => 'Motief', 'niveau' => 'voldoende', 'bewijs' => 'gokschulden', 'bericht' => $p3],
+    ['naam' => 'Dader', 'niveau' => 'onvoldoende', 'bewijs' => '', 'bericht' => 0],
+], null, $p3);
 $progress = getTeamProgress($db, $t, 1);
-check('later standpunt overschrijft een eerder (ook lager)', count($progress['aspects']) === 1 && $progress['aspects'][0]['niveau'] === 'onvoldoende' && $progress['aspects'][0]['bericht'] === $p2);
+check('antwoord in delen: het tweede deel komt erbij, het eerste blijft groen', array_column($progress['aspects'], 'niveau', 'naam') === ['Dader' => 'goed', 'Motief' => 'voldoende']);
+updateTeamProgress($db, $t, 1, [['naam' => 'Motief', 'niveau' => 'onvoldoende', 'bewijs' => 'gokschulden', 'bericht' => $p3]], null, $p3);
+check('hetzelfde bericht opnieuw beoordeeld: niet omlaag', array_column(getTeamProgress($db, $t, 1)['aspects'], 'niveau', 'naam')['Motief'] === 'voldoende');
+updateTeamProgress($db, $t, 1, [['naam' => 'Motief', 'niveau' => 'goed', 'bewijs' => 'motief: gokschulden', 'bericht' => $p3]], null, $p3);
+check('hetzelfde bericht opnieuw beoordeeld: wel omhoog', array_column(getTeamProgress($db, $t, 1)['aspects'], 'niveau', 'naam')['Motief'] === 'goed');
+updateTeamProgress($db, $t, 1, [['naam' => 'Dader', 'niveau' => 'onvoldoende', 'bewijs' => 'het was Piet', 'bericht' => $p2]], 'Nu Piet', $p2);
+$progress = array_column(getTeamProgress($db, $t, 1)['aspects'], null, 'naam');
+check('een nieuw, fout antwoord op een groen aspect zet het weer op rood', $progress['Dader']['niveau'] === 'onvoldoende' && $progress['Dader']['bericht'] === $p2 && $progress['Motief']['niveau'] === 'goed');
 updateTeamProgress($db, $t, 1, [['naam' => 'Dader', 'niveau' => 'goed', 'bewijs' => 'het was jan', 'bericht' => $p1]], null, $p3);
-check('ouder citaat overschrijft een nieuwer standpunt niet', getTeamProgress($db, $t, 1)['aspects'][0]['bericht'] === $p2);
+check('een citaat uit een ouder bericht verandert niets', array_column(getTeamProgress($db, $t, 1)['aspects'], 'niveau', 'naam')['Dader'] === 'onvoldoende');
+$p4 = addMessage($db, $t, 1, 'team', 'Toch Jan, de conciërge.');
+updateTeamProgress($db, $t, 1, [['naam' => 'Dader', 'niveau' => 'goed', 'bewijs' => 'toch jan', 'bericht' => $p4]], null, $p4);
+check('en een nieuw goed antwoord maakt het weer groen', array_column(getTeamProgress($db, $t, 1)['aspects'], 'niveau', 'naam')['Dader'] === 'goed');
 check('wissen', clearTeamProgress($db, $t, 1, 5) && getTeamProgress($db, $t, 1) === null && auditCount($db, 'AI_PROGRESS_CLEAR') === 1);
+
+echo "AI annuleren\n";
+[$db, $game, $team, $msg] = evalSetup('reply');
+check('geclaimd team: de AI is bezig', aiActivity($db, $team) === 'processing');
+releaseTeam($db, $team, 'agent-1');
+check('niet geclaimd: in de wachtrij', aiActivity($db, $team) === 'queued');
+claimTeam($db, $team, 'agent-1');
+check('annuleren lukt, met auditregel', cancelAiTask($db, $team, 7) && auditCount($db, 'AI_CANCEL') === 1);
+check('daarna niets meer: niet in de wachtrij, claim weg', aiActivity($db, $team) === null && !in_array($team, array_column(aiPendingTasks($db), 'team_id'), true)
+    && $db->query("SELECT ai_processing_by FROM teams WHERE id = $team")->fetchColumn() === null);
+check('een agent die nog bezig is kan niet opnieuw claimen', !claimTeam($db, $team, 'agent-1'));
+check('indienen zonder claim → 409, team krijgt niets', submitEvaluation($db, payload($team, $msg))['status'] === 409 && messageCount($db, $team, 'ai') === 0);
+check('nogmaals annuleren: niets te annuleren', !cancelAiTask($db, $team, 7));
+$db->exec("UPDATE teams SET ai_processing_by = 'agent-1', ai_processing_at = datetime('now') WHERE id = $team");
+$r = submitEvaluation($db, payload($team, $msg));
+check('ook met claim: een geannuleerd bericht is verouderd', $r['decision'] === 'stale' && messageCount($db, $team, 'ai') === 0 && teamLevel($db, $team) === 1);
+$next = addMessage($db, $team, 1, 'team', 'En het motief: gokschulden.');
+check('een nieuw teambericht gaat weer naar de AI', aiActivity($db, $team) === 'queued' && claimTeam($db, $team, 'agent-1')
+    && array_column(aiPendingTasks($db), 'message_id') === []);
+releaseTeam($db, $team, 'agent-1');
+check('en staat weer in de wachtrij', array_column(aiPendingTasks($db), 'message_id') === [$next]);
+addMessage($db, $team, 1, 'teacher', 'Ik kijk even mee.');
+check('na een antwoord van de operator wacht er niets', aiActivity($db, $team) === null && !cancelAiTask($db, $team, 7));
+$db->exec("UPDATE teams SET ai_mode = 'off' WHERE id = $team");
+addMessage($db, $team, 1, 'team', 'Hallo?');
+check('AI uit: geen activiteit', aiActivity($db, $team) === null);
 
 echo "submitEvaluation\n";
 [$db, $game, $team, $msg] = evalSetup('suggest');
@@ -458,6 +497,29 @@ check('escalatie: suggestie met 🙋 en open escalatie', $r['decision'] === 'esc
     && strpos($db->query("SELECT message FROM team_messages WHERE sender = 'suggestion'")->fetchColumn(), '🙋') === 0
     && $db->query("SELECT escalation_reason FROM ai_evaluations")->fetchColumn() === 'Beoordelaar: voldoende, validator: onvoldoende');
 check('escalatie: team krijgt niets', messageCount($db, $team, 'ai') === 0 && auditCount($db, 'AI_ESCALATE') === 1);
+
+echo "Oudere suggesties verdwijnen\n";
+[$db, $game, $team, $msg] = evalSetup('suggest');
+$first = submitEvaluation($db, payload($team, $msg, ['verdict' => 'onvoldoende', 'decision' => 'suggest']))['evaluation_id'];
+$msg2 = addMessage($db, $team, 1, 'team', 'Motief: gokschulden.');
+claimTeam($db, $team, 'agent-1');
+$second = submitEvaluation($db, payload($team, $msg2, ['decision' => 'suggest']))['evaluation_id'];
+check('alleen de nieuwste suggestie staat nog in de chat', $db->query("SELECT ai_evaluation_id FROM team_messages WHERE sender = 'suggestion'")->fetchAll(PDO::FETCH_COLUMN) == [$second]);
+check('de oudere beoordeling blijft bewaard (ai_log, tussenstand)', findEvaluationInGame($db, $first, $game) !== null && getTeamProgress($db, $team, 1) !== null);
+[$db, $game, $team, $msg] = evalSetup('reply');
+$esc = submitEvaluation($db, payload($team, $msg, ['decision' => 'escalate', 'reason' => 'twijfel']))['evaluation_id'];
+$msg2 = addMessage($db, $team, 1, 'team', 'Motief: gokschulden.');
+claimTeam($db, $team, 'agent-1');
+submitEvaluation($db, payload($team, $msg2, ['decision' => 'suggest']));
+check('een open escalatie blijft staan', in_array($esc, $db->query("SELECT ai_evaluation_id FROM team_messages WHERE sender = 'suggestion'")->fetchAll(PDO::FETCH_COLUMN)) && messageCount($db, $team, 'suggestion') === 2);
+resolveEscalations($db, $team, 1, 5);
+$msg3 = addMessage($db, $team, 1, 'team', 'En nu?');
+claimTeam($db, $team, 'agent-1');
+submitEvaluation($db, payload($team, $msg3, ['verdict' => 'onvoldoende', 'decision' => 'reply', 'reply_text' => 'Nog niet.']));
+$msg4 = addMessage($db, $team, 1, 'team', 'En nu dan?');
+claimTeam($db, $team, 'agent-1');
+submitEvaluation($db, payload($team, $msg4, ['verdict' => 'onvoldoende', 'decision' => 'reply', 'reply_text' => 'Nog steeds niet.']));
+check('een AI-reactie aan het team ruimt afgehandelde suggesties op; AI-berichten aan het team blijven', messageCount($db, $team, 'suggestion') === 0 && messageCount($db, $team, 'ai') === 2);
 
 [$db, $game, $team, $msg] = evalSetup('suggest');
 $r = submitEvaluation($db, payload($team, $msg, ['intent' => 'overig', 'decision' => 'ignored', 'verdict' => null]));

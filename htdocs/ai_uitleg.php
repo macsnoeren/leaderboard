@@ -167,6 +167,8 @@ include 'admin_header.php';
         <div class="card-title"><?= icon('message') ?>Een teambericht, stap voor stap</div>
         <p>Stuurt een team een bericht waar nog niemand op heeft gereageerd, dan pakt de AI-agent het op. Elke agent krijgt de opdracht en de hele chat van dit level te zien, want teams geven hun antwoord vaak in stukjes. Wat een agent verder te zien krijgt, verschilt bewust per agent.</p>
         <p>Een agent behandelt één team tegelijk, het oudste bericht eerst. Sturen veel teams tegelijk iets, dan ontstaat een wachtrij; op het <a href="teacher.php">dashboard</a> zie je in de tegel “Wacht op AI” hoeveel teams wachten en hoe snel de AI gemiddeld reageert. Stuurt een team intussen nog een bericht, dan bekijkt de AI alleen het nieuwste (met de hele chat erbij).</p>
+        <p>In <a href="messages.php">Berichten</a> zie je onder het laatste teambericht of de AI ermee bezig is of dat het nog in de wachtrij staat. Wil je zelf antwoorden, klik dan op <strong>Annuleren</strong>: de AI reageert dan niet op dat bericht (wat ze al gedaan had, wordt weggegooid). Versturen van je eigen antwoord stopt de AI ook. Op een volgend bericht van het team reageert de AI weer gewoon.</p>
+        <p>Komt er een nieuwe AI-uitkomst, dan verdwijnen de oudere AI-suggesties van dat level uit de chat, zodat je alleen de actuele ziet. Een openstaande “Operator nodig”-melding blijft staan tot je hem afhandelt, en berichten die het team van de AI kreeg blijven ook staan. De oudere beoordelingen tellen wel mee in de tussenstand en staan in het <a href="ai_log.php">AI-logboek</a>.</p>
         <ol class="flow">
             <li>
                 <div class="step-title">Voorfilter <span class="badge">code, geen AI</span></div>
@@ -185,7 +187,7 @@ include 'admin_header.php';
                     </div>
                     <div>
                         <h3><?= icon('clipboard') ?>Bij een antwoord: beoordelaar</h3>
-                        <p>Beoordeelt alles wat het team op dit level gaf met de rubric, per aspect. Bij elk aspect hoort een letterlijk citaat uit een teambericht. De code controleert dat dat citaat echt in dat bericht staat.</p>
+                        <p>Beoordeelt alles wat het team op dit level gaf met de rubric, per aspect, niet alleen het laatste bericht. Bij elk aspect hoort een letterlijk citaat uit een teambericht. De code controleert dat dat citaat echt in dat bericht staat. Zet de beoordelaar een aspect lager dan het team eerder al bereikte, zonder dat het team er iets nieuws over zei, dan krijgt hij één keer de kans om het opnieuw te doen, met die aspecten erbij.</p>
                     </div>
                 </div>
             </li>
@@ -204,11 +206,11 @@ include 'admin_header.php';
         </ol>
         <div class="section-label">Wat telt bij het beoordelen</div>
         <ul class="plain">
-            <li>Eerder gegeven goede delen tellen mee; het laatste standpunt per aspect telt (eerst Jan, later Piet: dan geldt Piet).</li>
+            <li>Alle berichten van het level tellen samen: geeft een team eerst deel A en later deel B, dan is het antwoord compleet. Het laatste standpunt per aspect telt (eerst Jan, later Piet: dan geldt Piet).</li>
             <li>Meerdere antwoorden tegelijk noemen (“Jan, Piet of Klaas”) is onvoldoende voor dat aspect: hagelschieten levert niets op.</li>
             <li>Bevestigde jij een aspect in de chat (“de dader klopt”), dan telt dat aspect als bereikt.</li>
             <li>Alleen wat echt in de chat staat telt; “dat hadden we toch al gezegd” zonder dat bericht telt niet.</li>
-            <li>Per team per level houdt de AI een <strong>tussenstand</strong> bij: per aspect het hoogste niveau tot nu toe, met citaat. Die zie je in het AI-paneel in <a href="messages.php">Berichten</a> en kun je daar wissen. Teams zien hem nooit.</li>
+            <li>Per team per level houdt de AI een <strong>tussenstand</strong> bij: per aspect het laatste standpunt van het team, met citaat. Gaat een nieuw bericht over een ander aspect, dan blijft een groen aspect groen. Zegt het team later iets fouts over een groen aspect, dan gaat dat aspect weer naar rood: het team gaat de verkeerde kant op. Staan alle verplichte aspecten op voldoende of goed, dan moet het oordeel ook voldoende of goed zijn; zegt de beoordelaar toch onvoldoende, dan gaat het naar jou. De tussenstand zie je in het AI-paneel in <a href="messages.php">Berichten</a> en kun je daar wissen. Teams zien hem nooit.</li>
         </ul>
     </section>
 

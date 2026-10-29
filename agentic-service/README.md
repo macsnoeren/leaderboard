@@ -64,7 +64,11 @@ Per teambericht (`agentic/pipeline.py`):
    niet verklappen. Een vraag leidt nooit tot een oordeel of een level-up.
 4. **Beoordelaar** (bij een antwoord): beoordeelt **alles wat het team op dit level gaf** met de rubric,
    met per aspect een letterlijk citaat plus bericht-id. De code controleert dat het citaat echt in dat
-   teambericht staat, en dat het oordeel past bij de aspecten.
+   teambericht staat, en dat het oordeel past bij de tussenstand ná dit bericht (`merge_progress()`). Zet
+   de beoordelaar een aspect lager dan de tussenstand zonder een nieuwer teambericht over dat aspect te
+   citeren (hij vergat een eerder gegeven deel), dan draait hij één keer opnieuw met die aspecten erbij
+   (blok `AL BEREIKT`); de reden voor de operator noemt dat. Blijft het oordeel daarna onvoldoende terwijl
+   de tussenstand slaagt, dan is de beoordeling niet consistent en escaleert ze.
 5. **Validator** (groter model): controleert de beoordeling of de reactie. Verklapt ze iets, bevestigt of
    ontkent ze een gok, is er manipulatie, was het wel een vraag? Zegt hij "geen vraag", dan wordt het
    bericht alsnog één keer als antwoord beoordeeld.
@@ -76,10 +80,17 @@ Per teambericht (`agentic/pipeline.py`):
 Teams geven hun antwoord vaak in stukjes, dus elke agent krijgt de hele chat van het level (berichten van
 team, operator en AI, geen suggesties), met het nieuwe bericht gemarkeerd. Boven `MAX_CHAT_TOKENS` worden de
 oudste berichten vervangen door de samenvatting uit de **tussenstand** (`ai_team_progress`: per aspect het
-hoogste bereikte niveau met citaat; de server werkt hem bij na elke geldige beoordeling).
+hoogste bereikte niveau met citaat; de server werkt hem bij na elke geldige beoordeling,
+`updateTeamProgress()`).
 
 - Eerder gegeven goede delen tellen mee; een bevestiging van de operator ("de dader klopt") telt als bereikt.
-- Het laatste standpunt per aspect telt; meerdere tegenstrijdige antwoorden tegelijk = onvoldoende.
+- De tussenstand houdt per aspect het **laatste standpunt** bij, en een aspect verandert alleen met een
+  geldig citaat uit een **nieuwer** teambericht. Een bericht over deel B laat deel A dus staan (het model
+  geeft voor A geen nieuw citaat), maar zegt het team later iets fouts over A ("nee, het was Piet"), dan
+  gaat A met dat citaat terug naar onvoldoende: het team gaat de verkeerde kant op. Hetzelfde bericht
+  opnieuw beoordeeld kan een aspect alleen hoger zetten. Gokken in losse berichten (Jan, dan Piet, dan
+  Klaas) eindigt zo op het laatste, foute standpunt.
+- Meerdere tegenstrijdige antwoorden tegelijk = onvoldoende voor dat aspect.
 - Alleen wat echt in de chat staat telt; een tussenstand zonder geldig citaat wordt genegeerd.
 - De hulp-agent krijgt de tussenstand **niet** (die verraadt de rubric-aspecten).
 
@@ -110,10 +121,28 @@ verklappends of misleidends ziet.
 - `goed` en `voldoende` geven allebei een level-up; het verschil wordt bewaard en kleurt de feedback. Bij
   een level-up door de AI komt de feedback op het nieuwe level, zodat het team hem ziet.
 
+### Oudere suggesties
+
+Zodra de AI iets nieuws zegt over een team (suggestie, escalatie, reactie of level-up), verdwijnen de oudere
+suggesties van dat level uit de chat (`clearOldSuggestions()`), behalve een open escalatie (die heeft de
+knoppen om haar af te handelen). Berichten die het team zag (`sender = 'ai'`) blijven staan. De beoordelingen
+blijven in `ai_evaluations` (`ai_log.php`) en hun aspecten in de tussenstand.
+
+### Annuleren door de operator
+
+`messages.php` toont onder het laatste teambericht of de AI ermee bezig is (`aiActivity()`: `processing` =
+geclaimd, `queued` = in de wachtrij), met een knop *Annuleren* (`cancelAiTask()`, audit `AI_CANCEL`; ook
+`teacherReply()` roept hem aan). Die zet `teams.ai_cancelled_message_id` op het laatste teambericht en geeft
+de claim vrij. Gevolg: het bericht staat niet meer in de wachtrij (`aiWaitingSql()`), `claimTeam()` weigert
+zolang dat bericht het laatste is, en `submitEvaluation()` behandelt het als `stale`. De agent merkt het bij
+zijn volgende verlenging van de claim (`keepalive` geeft `False` → `TaskCancelled`) en dient dan niets in;
+een modelaanroep die al loopt, maakt hij nog af. Een nieuw teambericht gaat weer gewoon naar de AI.
+
 ### Controles op de server (`submitEvaluation()`)
 
 De server voert een beslissing alleen uit als het spel `running` is (bij `paused`: alleen suggesties), de
-agent het team geclaimd heeft, `level` en `message_id` nog actueel zijn (anders `stale`: alleen opslaan),
+agent het team geclaimd heeft, `level` en `message_id` nog actueel zijn en het bericht niet geannuleerd is
+(anders `stale`: alleen opslaan),
 en de actie binnen `ai_mode`, `ai_auto_allowed`, de rubricstatus en een eventuele open escalatie valt.
 Valt een controle af, dan wordt de actie omlaag bijgesteld, nooit omhoog. Elke actie komt in `audit_logs`
 met `user_id` NULL (`AI_SUGGEST`, `AI_REPLY`, `AI_LEVEL_UP`, `AI_ESCALATE`).
@@ -226,9 +255,12 @@ python3 evals/run.py              # beoordelingspijplijn: per agent goed/fout + 
 python3 evals/run.py --designer   # opdracht-assistent
 ```
 
-Laatste evals (2026-10-17, standaardmodellen, modus `auto`, 26 cases): intentie 26/26, beoordelaar 19/21,
-validator 18/21, mens nodig 10/11, **0 onterechte level-ups**; opdracht-assistent 5/5. De fouten vallen aan
-de veilige kant (onvoldoende of een escalatie bij twijfel over voldoende/goed). Noteer nieuwe scores hier.
+Laatste evals (2026-10-30, standaardmodellen, modus `auto`, 29 cases, na "antwoord in delen" en de
+tussenstand per laatste standpunt): intentie 29/29, beoordelaar 25/26, validator 25/26, mens nodig 12/13,
+beslissing 28/29, **0 onterechte level-ups**. De nieuwe cases 27 en 28 (antwoord in twee delen, met en
+zonder tussenstand) en 29 (groen aspect, daarna een fout antwoord) slagen. Opdracht-assistent
+(2026-10-17): 5/5. De fouten vallen aan de veilige kant: case 22 ("Zit het in de kelder?") krijgt
+onvoldoende in plaats van voldoende, en die case wisselt tussen runs. Noteer nieuwe scores hier.
 
 ## Privacy
 

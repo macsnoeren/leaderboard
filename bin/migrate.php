@@ -251,6 +251,11 @@ try {
     // 24. Downloadlinks uit de vroegere level-up-mail (download.php) bestaan niet meer
     $db->exec("DROP TABLE IF EXISTS download_tokens");
 
+    // 25. Teambericht waarvoor een operator de AI heeft geannuleerd (messages.php): de AI slaat het over
+    try {
+        $db->exec("ALTER TABLE teams ADD COLUMN ai_cancelled_message_id INTEGER");
+    } catch (PDOException $e) {}
+
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {
     echo "Migratie mislukt: " . $e->getMessage() . "\n";

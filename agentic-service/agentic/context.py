@@ -100,13 +100,16 @@ def question_clarifications_block(rubric):
     return block("VERDUIDELIJKINGEN VAN DE VRAAG", "\n".join(f"- {neutralize(i)}" for i in items) if items else "(geen)")
 
 
+def format_aspect(a):
+    return f"- {neutralize(a.get('naam'))}: {a.get('niveau')} (bericht {a.get('bericht')}: \"{neutralize(a.get('bewijs', ''))}\")"
+
+
 def progress_block(task):
+    """Per aspect het hoogste niveau dat het team op dit level al bereikte (met citaat), plus de samenvatting."""
     progress = task.get("progress")
     if not progress:
         return block("TUSSENSTAND", "(nog niets beoordeeld op dit level)")
-    lines = []
-    for a in progress.get("aspects") or []:
-        lines.append(f"- {a.get('naam')}: {a.get('niveau')} (bericht {a.get('bericht')}: \"{neutralize(a.get('bewijs', ''))}\")")
+    lines = [format_aspect(a) for a in progress.get("aspects") or []]
     if progress.get("summary"):
         lines.append(f"Samenvatting: {neutralize(progress['summary'])}")
     return block("TUSSENSTAND", "\n".join(lines) if lines else "(leeg)")

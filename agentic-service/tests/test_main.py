@@ -151,6 +151,14 @@ class MainTest(unittest.TestCase):
         service.process_tasks()
         self.assertEqual(api.submit_evaluation.call_args.args[0]["decision"], "escalate")
 
+    def test_cancelled_task_is_not_submitted(self):
+        from agentic.pipeline import TaskCancelled
+        service, api, _ = make_service([make_task(team_id=1)])
+        service.pipeline = mock.Mock()
+        service.pipeline.process.side_effect = TaskCancelled("geannuleerd")
+        self.assertEqual(service.process_tasks(), 0)
+        api.submit_evaluation.assert_not_called()
+
     def test_submit_error_does_not_crash(self):
         service, api, _ = make_service([make_task(team_id=1)])
         api.submit_evaluation.side_effect = ApiError("409", 409)

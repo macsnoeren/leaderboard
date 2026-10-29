@@ -94,6 +94,72 @@ class AssessorTest(unittest.TestCase):
                                   {"naam": "Motief", "niveau": "goed", "bewijs": "het was Jan", "bericht": 11}], oordeel="voldoende")
         self.assertFalse(assessor.assess(FakeLLM(assessor=out), SETTINGS, make_task())["consistent"])
 
+    def test_answer_in_parts_forgotten_aspect_gets_second_chance(self):
+        # Dader stond al in de tussenstand; de beoordelaar kijkt alleen naar het motief en vergeet de dader
+        messages = [{"id": 11, "sender": "team", "time": "t1", "text": "Het was Jan, de conciërge."},
+                    {"id": 12, "sender": "ai", "time": "t2", "text": "Jullie zijn er nog niet: waarom?"},
+                    {"id": 13, "sender": "team", "time": "t3", "text": "Hij had gokschulden en pakte de kas."}]
+        dader = {"naam": "Dader", "niveau": "goed", "bewijs": "het was Jan, de conciërge", "bericht": 11}
+        motief = {"naam": "Motief", "niveau": "goed", "bewijs": "hij had gokschulden en pakte de kas", "bericht": 13}
+        task = make_task(messages, progress={"aspects": [dader], "summary": "Dader goed in bericht 11."})
+        vergeten = assessment("onvoldoende", aspects=[dict(dader, niveau="onvoldoende", bewijs="", bericht=0), motief], feedback="Wie was het?")
+        llm = FakeLLM(assessor=[vergeten, assessment("goed", aspects=[dader, motief])])
+        result = assessor.assess(llm, SETTINGS, task)
+        self.assertEqual(llm.agents_called(), ["assessor", "assessor"])
+        self.assertNotIn("AL BEREIKT", llm.calls[0]["user"])
+        self.assertIn("===BEGIN AL BEREIKT===\n- Dader: goed (bericht 11", llm.calls[1]["user"])
+        self.assertEqual((result["verdict"], result["consistent"], result["forgotten"]), ("goed", True, ["Dader"]))
+        self.assertEqual(len(result["runs"]), 2)
+
+    def test_still_forgotten_after_second_chance_is_inconsistent(self):
+        # Blijft de beoordelaar bij onvoldoende terwijl de tussenstand alles heeft: een operator beslist
+        messages = [{"id": 11, "sender": "team", "time": "t1", "text": "Het was Jan, de conciërge."},
+                    {"id": 13, "sender": "team", "time": "t3", "text": "Hij had gokschulden en pakte de kas."}]
+        dader = {"naam": "Dader", "niveau": "goed", "bewijs": "het was Jan, de conciërge", "bericht": 11}
+        motief = {"naam": "Motief", "niveau": "goed", "bewijs": "hij had gokschulden en pakte de kas", "bericht": 13}
+        task = make_task(messages, progress={"aspects": [dader], "summary": ""})
+        vergeten = assessment("onvoldoende", aspects=[dict(dader, niveau="onvoldoende", bewijs="", bericht=0), motief])
+        result = assessor.assess(FakeLLM(assessor=vergeten), SETTINGS, task)
+        self.assertFalse(result["consistent"])
+
+    def test_no_second_chance_without_forgotten_aspects(self):
+        task = make_task(progress={"aspects": [{"naam": "Dader", "niveau": "voldoende", "bewijs": "de conciërge", "bericht": 11}], "summary": ""})
+        llm = FakeLLM(assessor=assessment())
+        self.assertEqual(assessor.assess(llm, SETTINGS, task)["forgotten"], [])
+        self.assertEqual(llm.agents_called(), ["assessor"])
+
+    def test_merge_progress(self):
+        messages = [{"id": 11, "sender": "team", "text": "Het was Jan, de conciërge."},
+                    {"id": 13, "sender": "team", "text": "Motief: geld."},
+                    {"id": 14, "sender": "team", "text": "Nee, het was Piet."}]
+        previous = [{"naam": "Dader", "niveau": "goed", "bewijs": "het was jan", "bericht": 11}]
+        # Bericht 13 gaat over het motief: de dader blijft groen; een verzonnen citaat telt niet
+        merged = assessor.merge_progress(previous, [
+            {"naam": "Dader", "niveau": "onvoldoende", "bewijs": "", "bericht": 0},
+            {"naam": "Motief", "niveau": "voldoende", "bewijs": "motief: geld", "bericht": 13},
+            {"naam": "Extra", "niveau": "goed", "bewijs": "verzonnen", "bericht": 13}], messages)
+        self.assertEqual({a["naam"]: a["niveau"] for a in merged}, {"Dader": "goed", "Motief": "voldoende"})
+        # Bericht 14 zegt iets fouts over de dader: die gaat weer op rood
+        merged = assessor.merge_progress(merged, [{"naam": "dader", "niveau": "onvoldoende", "bewijs": "het was Piet", "bericht": 14}], messages)
+        self.assertEqual({assessor.normalize_quote(a["naam"]): a["niveau"] for a in merged}, {"dader": "onvoldoende", "motief": "voldoende"})
+        self.assertFalse(assessor.expected_pass(RUBRIC, merged))
+        # Een citaat uit een ouder bericht verandert niets
+        again = assessor.merge_progress(merged, [{"naam": "Dader", "niveau": "goed", "bewijs": "het was jan", "bericht": 11}], messages)
+        self.assertEqual(again, merged)
+
+    def test_wrong_new_answer_is_not_forgotten(self):
+        # Het team zet een groen aspect zelf op een fout spoor: geen herkansing, wel consistent onvoldoende
+        messages = [{"id": 11, "sender": "team", "time": "t1", "text": "Het was Jan, de conciërge."},
+                    {"id": 13, "sender": "team", "time": "t3", "text": "Nee, het was de tuinman."}]
+        dader = {"naam": "Dader", "niveau": "goed", "bewijs": "het was Jan, de conciërge", "bericht": 11}
+        task = make_task(messages, progress={"aspects": [dader], "summary": ""})
+        out = assessment("onvoldoende", aspects=[{"naam": "Dader", "niveau": "onvoldoende", "bewijs": "het was de tuinman", "bericht": 13},
+                                                 {"naam": "Motief", "niveau": "onvoldoende", "bewijs": "", "bericht": 0}])
+        llm = FakeLLM(assessor=out)
+        result = assessor.assess(llm, SETTINGS, task)
+        self.assertEqual(llm.agents_called(), ["assessor"])
+        self.assertEqual((result["verdict"], result["consistent"], result["forgotten"]), ("onvoldoende", True, []))
+
     def test_majority_and_disagreement(self):
         settings = type(SETTINGS)(**dict(vars(SETTINGS), ASSESSOR_MODELS=["a", "b", "c"]))
         voldoende = assessment("voldoende")

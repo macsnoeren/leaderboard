@@ -21,7 +21,7 @@ if (!$headerGame) {
         }
     }
 }
-$unread_total = $headerGame ? countUnread($db, (int)$headerGame['id']) : 0;
+$unanswered_total = $headerGame ? countUnanswered($db, (int)$headerGame['id']) : 0;
 $escalations_total = $headerGame ? countOpenEscalations($db, (int)$headerGame['id']) : 0;
 $currentPage = basename($_SERVER['PHP_SELF']);
 $isAdminUser = ($_SESSION['teacher_role'] ?? 'user') === 'admin';
@@ -54,13 +54,13 @@ $navGroups['Tools'] = [
     ['ai_uitleg.php', 'Zo werkt de AI', 'info', ['ai_uitleg.php']],
 ];
 
-function navBadges(int $unread, int $escalations): array {
+function navBadges(int $unanswered, int $escalations): array {
     return [
-        $unread > 0 ? '<span class="count" title="Ongelezen berichten">' . $unread . '<span class="sr-only"> ongelezen</span></span>' : '',
+        $unanswered > 0 ? '<span class="count" title="Teams die op antwoord wachten">' . $unanswered . '<span class="sr-only"> teams wachten op antwoord</span></span>' : '',
         $escalations > 0 ? '<span class="count count-warning" title="Operator nodig">' . icon('hand') . $escalations . '<span class="sr-only"> keer operator nodig</span></span>' : '',
     ];
 }
-[$unreadBadge, $escalationBadge] = navBadges($unread_total, $escalations_total);
+[$unansweredBadge, $escalationBadge] = navBadges($unanswered_total, $escalations_total);
 ?>
 <!DOCTYPE html>
 <html lang="nl">
@@ -166,7 +166,7 @@ function navBadges(int $unread, int $escalations): array {
                     <a href="<?= $href ?>" class="nav-item<?= $navActive ? ' active' : '' ?>"<?= $navActive ? ' aria-current="page"' : '' ?>>
                         <?= icon($iconName) ?><span><?= htmlspecialchars($label) ?></span>
                         <?php if ($href === 'messages.php'): ?>
-                            <span class="badges"><span id="unread-badge-container"><?= $unreadBadge ?></span><span id="escalation-badge-container"><?= $escalationBadge ?></span></span>
+                            <span class="badges"><span id="unanswered-badge-container"><?= $unansweredBadge ?></span><span id="escalation-badge-container"><?= $escalationBadge ?></span></span>
                         <?php endif; ?>
                     </a>
                 <?php endforeach; ?>

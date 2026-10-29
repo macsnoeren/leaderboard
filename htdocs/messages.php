@@ -14,12 +14,13 @@ $gameId = (int)$game['id'];
 $selected_team_id = isset($_GET['team_id']) ? (int)$_GET['team_id'] : null;
 
 /**
- * Antwoord van de docent op het huidige level: suggesties van dat level verdwijnen en open
- * AI-escalaties zijn daarmee afgehandeld.
+ * Antwoord van de docent op het huidige level: suggesties van dat level verdwijnen, open AI-escalaties
+ * zijn daarmee afgehandeld en een AI die nog met het bericht bezig is, stopt.
  */
 function teacherReply(PDO $db, array $team, string $msg, int $userId): void {
     $teamId = (int)$team['id'];
     $lvl = (int)$team['current_level'];
+    cancelAiTask($db, $teamId, $userId);
     $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message) VALUES (?, ?, 'teacher', ?)")->execute([$teamId, $lvl, $msg]);
     // Verwijder AI suggesties zodra de docent zelf antwoordt
     $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'")->execute([$teamId, $lvl]);
@@ -69,6 +70,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             flash('error', 'Deze AI-beoordeling hoort niet bij dit team.');
             redirect("messages.php?team_id=$team_id");
         }
+    }
+
+    // AI annuleren voor het laatste teambericht; via fetch (?ajax), zodat een half getypt antwoord blijft staan
+    if ($action === 'cancel_ai') {
+        $cancelled = cancelAiTask($db, $team_id, $userId);
+        if (isset($_GET['ajax'])) {
+            http_response_code($cancelled ? 204 : 409);
+            exit;
+        }
+        flash($cancelled ? 'success' : 'error', $cancelled ? 'De AI reageert niet op dit bericht; antwoord het team zelf.' : 'De AI had dit bericht al afgehandeld.');
+        redirect("messages.php?team_id=$team_id");
     }
 
     // Handle antwoord van docent: altijd op het huidige level van het team
@@ -124,16 +136,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     redirect("messages.php?team_id=$team_id");
 }
 
-// Teams van dit spel met berichten; ongelezen telt alleen het huidige level
+// Teams van dit spel met berichten: eerst wie op antwoord wacht (langst wachtende bovenaan), dan de rest op laatste bericht
 $stmt = $db->prepare("
-    SELECT t.id, t.team_name, t.current_level,
-    (SELECT COUNT(*) FROM team_messages WHERE team_id = t.id AND sender = 'team' AND is_read = 0 AND assignment_number = t.current_level) as unread_count
+    SELECT t.id, t.team_name, t.current_level
     FROM teams t
     WHERE t.game_id = ? AND t.id IN (SELECT team_id FROM team_messages)
     ORDER BY (SELECT MAX(created_at) FROM team_messages WHERE team_id = t.id) DESC
 ");
 $stmt->execute([$gameId]);
 $teams_with_msgs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$unanswered = unansweredTeams($db, $gameId);
+usort($teams_with_msgs, function ($a, $b) use ($unanswered) {
+    return ($unanswered[(int)$a['id']]['position'] ?? PHP_INT_MAX) <=> ($unanswered[(int)$b['id']]['position'] ?? PHP_INT_MAX);
+});
 $escalations = openEscalationsByTeam($db, $gameId);
 
 $chat_messages = [];
@@ -155,10 +170,6 @@ if ($selected_team_id) {
     }
 
     if ($selected_team) {
-        // Markeer berichten als gelezen
-        $db->prepare("UPDATE team_messages SET is_read = 1 WHERE team_id = ? AND sender = 'team' AND assignment_number = ?")
-           ->execute([$selected_team_id, $selected_team['current_level']]);
-
         // Haal assignment info op
         $stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? AND assignment_number = ?");
         $stmt->execute([$gameId, $selected_team['current_level']]);
@@ -299,6 +310,18 @@ function renderChat(PDO $db, array $messages, int $gameId, int $teamId): string 
     return $html;
 }
 
+// Onder de chat: de AI is met het laatste teambericht bezig of heeft het in de wachtrij, met een knop om te annuleren
+function renderAiActivity(?string $activity, int $teamId): string {
+    if ($activity === null) {
+        return '';
+    }
+    $text = $activity === 'processing' ? 'De AI is bezig met een reactie…' : 'In de wachtrij van de AI…';
+    return '<div class="ai-activity" role="status"><span class="spinner" aria-hidden="true"></span>' . icon('bot') . '<span>' . $text . '</span>'
+        . '<form method="POST" class="inline" data-cancel-ai>' . csrfField()
+        . '<input type="hidden" name="action" value="cancel_ai"><input type="hidden" name="team_id" value="' . $teamId . '">'
+        . '<button type="submit" class="btn btn-sm btn-secondary" title="De AI reageert dan niet op dit bericht; jij antwoordt zelf">' . icon('x') . 'Annuleren</button></form></div>';
+}
+
 // Tussenstand van het huidige level (alleen voor docenten, nooit op team.php)
 function renderProgress(?array $progress, int $teamId): string {
     if (!$progress) {
@@ -317,7 +340,7 @@ function renderProgress(?array $progress, int $teamId): string {
     return $html;
 }
 
-function renderSidebar(array $teams, ?int $selectedId, array $escalations): string {
+function renderSidebar(array $teams, ?int $selectedId, array $escalations, array $unanswered): string {
     if (!$teams) {
         return '<p class="muted text-sm team-list-empty">Nog geen berichten van teams.</p>';
     }
@@ -329,8 +352,11 @@ function renderSidebar(array $teams, ?int $selectedId, array $escalations): stri
         $html .= '<a href="?team_id=' . (int)$t['id'] . '" class="team-item' . ($active ? ' active' : '') . '" data-name="' . htmlspecialchars($lower) . '"' . ($active ? ' aria-current="page"' : '') . '>';
         $html .= '<span class="team-item-name">' . htmlspecialchars($name) . '</span>';
         $html .= '<span class="team-item-badges">';
-        if ($t['unread_count'] > 0) {
-            $html .= '<span class="count" title="Ongelezen berichten">' . (int)$t['unread_count'] . '<span class="sr-only"> ongelezen</span></span>';
+        if (isset($unanswered[(int)$t['id']])) {
+            // Plek in de rij: 1 = wacht het langst op antwoord
+            $wait = $unanswered[(int)$t['id']];
+            $html .= '<span class="count" title="Wacht op antwoord sinds ' . formatDateTime($wait['since']) . ' (nr. ' . $wait['position'] . ' in de rij)">'
+                . $wait['position'] . '<span class="sr-only">e in de rij, wacht op antwoord</span></span>';
         }
         if (isset($escalations[(int)$t['id']])) {
             $html .= '<span class="count count-warning" title="Operator nodig">' . icon('hand') . '<span class="sr-only">Operator nodig</span></span>';
@@ -345,19 +371,16 @@ function renderSidebar(array $teams, ?int $selectedId, array $escalations): stri
 // AJAX endpoints voor live updates
 if (isset($_GET['ajax'])) {
     if ($_GET['ajax'] === 'chat' && $selected_team) {
-        // Markeer ook nieuwe berichten die via AJAX binnenkomen als gelezen
-        $db->prepare("UPDATE team_messages SET is_read = 1 WHERE team_id = ? AND sender = 'team' AND assignment_number = ?")
-           ->execute([$selected_team_id, $selected_team['current_level']]);
-
         if (!empty($other_teachers)) {
             echo alertBox('warning', '<strong>Let op:</strong> ' . htmlspecialchars(implode(', ', $other_teachers)) . ' bekijkt deze chat op dit moment ook.');
         }
         // Haal de berichten OPNIEUW op binnen de AJAX call voor de meest verse data
-        echo renderChat($db, chatMessages($db, $selected_team_id, (int)$selected_team['current_level']), $gameId, $selected_team_id);
+        echo renderChat($db, chatMessages($db, $selected_team_id, (int)$selected_team['current_level']), $gameId, $selected_team_id)
+            . renderAiActivity(aiActivity($db, $selected_team_id), $selected_team_id);
     } elseif ($_GET['ajax'] === 'progress' && $selected_team) {
         echo renderProgress(getTeamProgress($db, $selected_team_id, (int)$selected_team['current_level']), $selected_team_id);
     } elseif ($_GET['ajax'] === 'sidebar') {
-        echo renderSidebar($teams_with_msgs, $selected_team_id, $escalations);
+        echo renderSidebar($teams_with_msgs, $selected_team_id, $escalations, $unanswered);
     }
     exit;
 }
@@ -408,6 +431,10 @@ $extraCSS = '
     .escalation-compare .section-label { margin: 0 0 4px; }
     .escalation-compare .quote { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; }
     .chat > .alert { margin-bottom: 0; }
+    .ai-activity { align-self: flex-end; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 8px 6px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-pill); font-size: 13px; color: var(--text-muted); }
+    .ai-activity .icon { width: 14px; height: 14px; }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--line-strong); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     /* AI-paneel */
     .msg-ai { background: var(--surface); border-left: 1px solid var(--line); overflow-y: auto; min-height: 0; }
     .msg-ai > summary { display: none; }
@@ -438,7 +465,7 @@ $extraCSS = '
     }
 </style>';
 
-$chatHtml = $selected_team ? renderChat($db, $chat_messages, $gameId, $selected_team_id) : '';
+$chatHtml = $selected_team ? renderChat($db, $chat_messages, $gameId, $selected_team_id) . renderAiActivity(aiActivity($db, $selected_team_id), $selected_team_id) : '';
 $selectedLevel = $selected_team ? (int)$selected_team['current_level'] : 0;
 $hasOpenEscalation = $selected_team && isset($escalations[$selected_team_id]);
 include 'admin_header.php';
@@ -452,7 +479,7 @@ include 'admin_header.php';
                     <input type="search" id="team-search" placeholder="Zoek een team…" aria-label="Zoek een team" autocomplete="off">
                 </div>
             </div>
-            <nav class="msg-team-list" id="sidebar-list"><?= renderSidebar($teams_with_msgs, $selected_team_id, $escalations) ?></nav>
+            <nav class="msg-team-list" id="sidebar-list"><?= renderSidebar($teams_with_msgs, $selected_team_id, $escalations, $unanswered) ?></nav>
         </aside>
 
         <?php if ($selected_team): ?>
@@ -608,6 +635,16 @@ $extraJS = "
                 });
         }
         setInterval(updateChat, 5000);
+
+        // AI annuleren zonder de pagina te herladen, zodat een half getypt antwoord blijft staan
+        document.addEventListener('submit', e => {
+            const form = e.target.closest('form[data-cancel-ai]');
+            if (!form) return;
+            e.preventDefault();
+            form.querySelector('button').disabled = true;
+            fetch('messages.php?team_id=' + encodeURIComponent(form.elements.team_id.value) + '&ajax=cancel_ai', { method: 'POST', body: new FormData(form) })
+                .finally(updateChat);
+        });
         // Op een smaller scherm begint het AI-paneel ingeklapt, zodat de chat de ruimte heeft
         const aiPanel = document.querySelector('.msg-ai');
         if (aiPanel && window.matchMedia('(max-width: 1400px)').matches) aiPanel.open = false;

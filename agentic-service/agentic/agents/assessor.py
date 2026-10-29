@@ -1,5 +1,11 @@
 """Beoordelaar: beoordeelt het totaal van wat het team op dit level gaf, met de rubric. Bij meerdere
-ASSESSOR_MODELS telt de meerderheid; zijn de modellen het oneens, dan is de beoordeling niet zeker."""
+ASSESSOR_MODELS telt de meerderheid; zijn de modellen het oneens, dan is de beoordeling niet zeker.
+
+Teams geven hun antwoord vaak in delen. Zet de beoordelaar een aspect lager dan de tussenstand zonder een
+nieuwer teambericht over dat aspect te citeren (hij vergat een eerder deel), dan krijgt hij één herkansing
+met die aspecten erbij. Met zo'n citaat is het een nieuw, fout standpunt en gaat het aspect terecht omlaag.
+Het oordeel moet passen bij de tussenstand ná dit bericht (merge_progress(), dezelfde regel als
+updateTeamProgress() in conf/ai.php); zo niet, dan is het niet consistent en beslist een operator."""
 import re
 import unicodedata
 from collections import Counter
@@ -11,16 +17,25 @@ _RANK = {"onvoldoende": 0, "voldoende": 1, "goed": 2}
 _QUOTES = "\"'“”„‘’‚«»`´"
 
 
-def build_prompt(task, max_tokens=20000):
-    return "\n\n".join([
+def build_prompt(task, max_tokens=20000, forgotten=None):
+    parts = [
         context.assignment_block(task, criteria=True),
         context.rubric_block(task.get("rubric")),
         context.clarifications_block(task),
         context.progress_block(task),
         context.build_chat(task, max_tokens, context.progress_summary(task)),
         context.new_message_block(task),
-        "Beoordeel alles wat het team op dit level heeft gegeven.",
-    ])
+        "Beoordeel alles wat het team op dit level heeft gegeven, niet alleen het nieuwe bericht.",
+    ]
+    if forgotten:
+        parts += [
+            context.block("AL BEREIKT", "\n".join(context.format_aspect(a) for a in forgotten)),
+            "Let op: deze aspecten had het team in eerdere berichten al bereikt, maar je beoordeling zette ze lager "
+            "zonder een later teambericht over dat aspect te citeren. Neem niveau, bewijs en bericht over uit AL BEREIKT. "
+            "Alleen als het team er in een later bericht zelf iets anders (fouts) over zei, zet je het lager, met dat "
+            "latere bericht als bewijs. Noem in feedback_team niets als ontbrekend dat het team al gaf.",
+        ]
+    return "\n\n".join(parts)
 
 
 def normalize_quote(text):
@@ -30,20 +45,69 @@ def normalize_quote(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _team_texts(messages):
+    return {m.get("id"): normalize_quote(m.get("text", "")) for m in messages if m.get("sender") == "team"}
+
+
+def _cited(aspect, team):
+    """Staat het citaat van dit aspect echt in het genoemde teambericht?"""
+    quote = normalize_quote(aspect.get("bewijs", ""))
+    msg_id = aspect.get("bericht") or 0
+    return bool(quote) and msg_id in team and quote in team[msg_id]
+
+
 def verify_citations(aspects, messages):
     """Komt elk citaat echt voor in het genoemde teambericht? Een aspect boven onvoldoende moet een
     citaat hebben; een opgegeven citaat (ook bij onvoldoende) moet kloppen."""
-    team = {m.get("id"): normalize_quote(m.get("text", "")) for m in messages if m.get("sender") == "team"}
+    team = _team_texts(messages)
     for a in aspects:
-        quote = normalize_quote(a.get("bewijs", ""))
-        msg_id = a.get("bericht") or 0
-        if not quote and not msg_id:
+        if not normalize_quote(a.get("bewijs", "")) and not a.get("bericht"):
             if a.get("niveau") != "onvoldoende":
                 return False
             continue
-        if not quote or msg_id not in team or quote not in team[msg_id]:
+        if not _cited(a, team):
             return False
     return True
+
+
+def _newer_statement(new, old, team):
+    """Mag `new` het aspect in de tussenstand (`old`) vervangen? Alleen met een geldig citaat uit een nieuwer
+    teambericht (ook als het lager is: het team zegt er iets fouts over), of uit hetzelfde bericht als het hoger is."""
+    if not _cited(new, team):
+        return False
+    if not old:
+        return True
+    old_msg = old.get("bericht") or 0
+    return new["bericht"] > old_msg or (new["bericht"] == old_msg and _RANK[new["niveau"]] >= _RANK.get(old.get("niveau"), 0))
+
+
+def merge_progress(previous, aspects, messages):
+    """De tussenstand na deze beoordeling, zoals updateTeamProgress() in conf/ai.php hem opslaat: per aspect
+    het laatste standpunt met een geldig citaat. Zonder nieuwer citaat blijft een aspect staan."""
+    team = _team_texts(messages)
+    merged = {normalize_quote(a.get("naam")): a for a in previous or []}
+    for a in aspects:
+        key = normalize_quote(a.get("naam"))
+        if key and a.get("niveau") in _RANK and _newer_statement(a, merged.get(key), team):
+            merged[key] = a
+    return list(merged.values())
+
+
+def forgotten_aspects(previous, aspects, messages, rubric=None):
+    """Aspecten uit de tussenstand die de beoordeling lager zet (of weglaat) zonder een nieuwer teambericht
+    over dat aspect te citeren: dan vergat de beoordelaar een eerder gegeven deel."""
+    team = _team_texts(messages)
+    now = {normalize_quote(a.get("naam")): a for a in aspects}
+    names = {normalize_quote(a.get("naam")) for a in (rubric or {}).get("aspecten", [])}
+    forgotten = []
+    for old in previous or []:
+        key = normalize_quote(old.get("naam"))
+        new = now.get(key)
+        if names and key not in names:
+            continue
+        if _RANK.get(old.get("niveau"), 0) > _RANK.get((new or {}).get("niveau"), 0) and not (new and _newer_statement(new, old, team)):
+            forgotten.append(old)
+    return forgotten
 
 
 def expected_pass(rubric, aspects):
@@ -62,9 +126,7 @@ def majority(verdicts):
     return min((v for v, n in counts.items() if n == best), key=lambda v: _RANK[v])
 
 
-def assess(llm, settings, task):
-    """{'verdict', 'unanimous', 'citations_ok', 'consistent', 'output', 'runs'}"""
-    user = build_prompt(task, settings.MAX_CHAT_TOKENS)
+def _run_all(llm, settings, user):
     system = system_prompt("assessor")
     outputs, runs = [], []
     for model in settings.ASSESSOR_MODELS:
@@ -72,13 +134,26 @@ def assess(llm, settings, task):
         outputs.append(output)
         runs.append(meta)
     verdict = majority([o["oordeel"] for o in outputs])
-    main = next(o for o in outputs if o["oordeel"] == verdict)
+    return outputs, runs, verdict, next(o for o in outputs if o["oordeel"] == verdict)
+
+
+def assess(llm, settings, task):
+    """{'verdict', 'unanimous', 'citations_ok', 'consistent', 'output', 'runs', 'forgotten'}"""
+    previous = (task.get("progress") or {}).get("aspects") or []
     messages = context.chat_messages(task)
+    outputs, runs, verdict, main = _run_all(llm, settings, build_prompt(task, settings.MAX_CHAT_TOKENS))
+    forgotten = forgotten_aspects(previous, main["aspecten"], messages, task.get("rubric"))
+    if forgotten:
+        # Eén herkansing met de vergeten aspecten erbij; beide rondes staan in assessor_json
+        outputs, more, verdict, main = _run_all(llm, settings, build_prompt(task, settings.MAX_CHAT_TOKENS, forgotten))
+        runs += more
+    merged = merge_progress(previous, main["aspecten"], messages)
     return {
         "verdict": verdict,
         "unanimous": len({o["oordeel"] for o in outputs}) == 1,
         "citations_ok": verify_citations(main["aspecten"], messages),
-        "consistent": expected_pass(task.get("rubric"), main["aspecten"]) == (verdict != "onvoldoende"),
+        "consistent": expected_pass(task.get("rubric"), merged) == (verdict != "onvoldoende"),
         "output": main,
         "runs": runs,
+        "forgotten": [a.get("naam") for a in forgotten],
     }

@@ -1,0 +1,26 @@
+{
+  "name": "27_kas_in_delen_zonder_bevestiging",
+  "assignment": "kas",
+  "messages": [
+    {
+      "id": 100,
+      "sender": "team",
+      "text": "Het motief: hij had gokschulden en verduisterde de kas om die af te lossen."
+    },
+    {
+      "id": 101,
+      "sender": "ai",
+      "text": "Jullie zijn er nog niet: wie deed het precies?"
+    },
+    {
+      "id": 102,
+      "sender": "team",
+      "text": "Het was Jan de Vries, de conciërge."
+    }
+  ],
+  "expected": {
+    "intent": "antwoord",
+    "verdict": "goed",
+    "human": false
+  }
+}

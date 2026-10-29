@@ -388,7 +388,8 @@ function assignmentDialog(PDO $db, int $assignmentId): array {
 /**
  * FROM/WHERE voor de wachtrij van de AI: teams waarvan het laatste teambericht nog geen reactie (docent, AI
  * of suggestie) en nog geen (niet-verouderde) beoordeling heeft, in lopende of gepauzeerde spellen, met
- * AI-modus ≠ off. Gedeeld door aiPendingTasks() en aiQueueStats(); `tm` is dat laatste bericht.
+ * AI-modus ≠ off, en waarvoor een operator de AI niet heeft geannuleerd. Gedeeld door aiPendingTasks(),
+ * aiQueueStats() en aiActivity(); `tm` is dat laatste bericht.
  */
 function aiWaitingSql(): string {
     return "FROM teams t
@@ -397,6 +398,7 @@ function aiWaitingSql(): string {
         JOIN team_messages tm ON tm.id = (SELECT MAX(id) FROM team_messages WHERE team_id = t.id AND assignment_number = t.current_level AND sender = 'team')
         WHERE " . effectiveStatusSql('g') . " IN ('running', 'paused')
         AND COALESCE(t.ai_mode, 'suggest') != 'off'
+        AND tm.id > COALESCE(t.ai_cancelled_message_id, 0)
         AND NOT EXISTS (SELECT 1 FROM team_messages r WHERE r.team_id = t.id AND r.assignment_number = t.current_level
                         AND r.sender IN ('teacher', 'ai', 'suggestion') AND r.id > tm.id)
         AND NOT EXISTS (SELECT 1 FROM ai_evaluations e WHERE e.team_id = t.id AND e.message_id = tm.id AND e.decision != 'stale')";
@@ -520,17 +522,54 @@ function formatWaitSeconds(int $seconds): string {
 }
 
 /**
- * Claimt een team voor een agent (lock van 5 minuten, of verlengen door dezelfde agent).
+ * Claimt een team voor een agent (lock van 5 minuten, of verlengen door dezelfde agent). Weigert als een
+ * operator de AI voor het laatste teambericht heeft geannuleerd: zo stopt een agent die al bezig is bij
+ * zijn volgende verlenging.
  */
 function claimTeam(PDO $db, int $teamId, string $agentId): bool {
     $stmt = $db->prepare("UPDATE teams SET ai_processing_by = ?, ai_processing_at = datetime('now')
-        WHERE id = ? AND (ai_processing_at IS NULL OR ai_processing_at <= datetime('now', ?) OR ai_processing_by = ?)");
+        WHERE id = ? AND (ai_processing_at IS NULL OR ai_processing_at <= datetime('now', ?) OR ai_processing_by = ?)
+        AND (ai_cancelled_message_id IS NULL OR ai_cancelled_message_id < COALESCE((SELECT MAX(id) FROM team_messages
+            WHERE team_id = teams.id AND assignment_number = teams.current_level AND sender = 'team'), 0))");
     $stmt->execute([$agentId, $teamId, '-' . AI_CLAIM_MINUTES . ' minutes', $agentId]);
     return $stmt->rowCount() > 0;
 }
 
 function releaseTeam(PDO $db, int $teamId, string $agentId): void {
     $db->prepare("UPDATE teams SET ai_processing_by = NULL, ai_processing_at = NULL WHERE id = ? AND ai_processing_by = ?")->execute([$teamId, $agentId]);
+}
+
+/**
+ * Wat de AI nu doet met het laatste bericht van een team: 'processing' (een agent heeft het team geclaimd),
+ * 'queued' (staat in de wachtrij) of null (niets: beantwoord, beoordeeld, AI uit of geannuleerd).
+ */
+function aiActivity(PDO $db, int $teamId): ?string {
+    $stmt = $db->prepare("SELECT t.ai_processing_by IS NOT NULL AND t.ai_processing_at > datetime('now', ?) " . aiWaitingSql() . " AND t.id = ?");
+    $stmt->execute(['-' . AI_CLAIM_MINUTES . ' minutes', $teamId]);
+    $busy = $stmt->fetchColumn();
+    if ($busy === false) {
+        return null;
+    }
+    return (int)$busy === 1 ? 'processing' : 'queued';
+}
+
+/**
+ * Een operator annuleert de AI voor het laatste teambericht (hij antwoordt zelf). Het bericht verdwijnt uit
+ * de wachtrij, de claim vervalt en een agent die er nog mee bezig is, stopt bij zijn volgende verlenging of
+ * krijgt bij het indienen een 409. Een nieuw teambericht gaat weer gewoon naar de AI.
+ */
+function cancelAiTask(PDO $db, int $teamId, ?int $userId): bool {
+    if (aiActivity($db, $teamId) === null) {
+        return false;
+    }
+    $stmt = $db->prepare("SELECT MAX(tm.id) FROM team_messages tm JOIN teams t ON t.id = tm.team_id
+        WHERE tm.team_id = ? AND tm.assignment_number = t.current_level AND tm.sender = 'team'");
+    $stmt->execute([$teamId]);
+    $messageId = (int)$stmt->fetchColumn();
+    $db->prepare("UPDATE teams SET ai_cancelled_message_id = ?, ai_processing_by = NULL, ai_processing_at = NULL WHERE id = ?")
+       ->execute([$messageId, $teamId]);
+    logAudit($db, $userId, 'AI_CANCEL', "AI-beoordeling van bericht ID $messageId van team ID $teamId geannuleerd");
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -592,8 +631,11 @@ function quoteInTeamMessage(PDO $db, int $teamId, int $level, int $messageId, st
 }
 
 /**
- * Werkt de tussenstand bij. Per aspect telt het nieuwste standpunt (hoogste bericht-id), maar alleen
- * met een citaat dat echt in het genoemde teambericht van dit team en dit level staat.
+ * Werkt de tussenstand bij: per aspect het laatste standpunt van het team, met een citaat dat echt in het
+ * genoemde teambericht van dit team en dit level staat. Alleen een aspect met een citaat uit een nieuwer
+ * bericht verandert, ook omlaag (het team zegt er iets fouts over en gaat de verkeerde kant op). Een aspect
+ * zonder (geldig) citaat verandert niet: gaat een later bericht over iets anders, dan blijft het staan
+ * (teams geven hun antwoord vaak in delen). Hetzelfde bericht opnieuw beoordeeld: alleen omhoog.
  */
 function updateTeamProgress(PDO $db, int $teamId, int $level, array $aspects, ?string $summary, int $messageId): void {
     $team = $db->prepare("SELECT game_id FROM teams WHERE id = ?");
@@ -616,8 +658,12 @@ function updateTeamProgress(PDO $db, int $teamId, int $level, array $aspects, ?s
         if ($key === '' || !quoteInTeamMessage($db, $teamId, $level, $msgId, (string)$a['bewijs'])) {
             continue;
         }
-        if (isset($byName[$key]) && (int)$byName[$key]['bericht'] > $msgId) {
-            continue; // een later standpunt staat er al
+        if (isset($byName[$key])) {
+            $rank = array_flip(AI_VERDICTS);
+            $oldMsg = (int)$byName[$key]['bericht'];
+            if ($msgId < $oldMsg || ($msgId === $oldMsg && $rank[$a['niveau']] < $rank[$byName[$key]['niveau']])) {
+                continue; // er staat al een nieuwer standpunt, of hetzelfde bericht hoger
+            }
         }
         $byName[$key] = ['naam' => trim((string)$a['naam']), 'niveau' => $a['niveau'], 'bewijs' => (string)$a['bewijs'], 'bericht' => $msgId];
     }
@@ -679,6 +725,17 @@ function formatSuggestion(array $e): string {
     return implode("\n", $lines);
 }
 
+/**
+ * Oudere AI-suggesties van dit level verdwijnen uit de chat zodra de AI iets nieuws zegt; een open escalatie
+ * blijft staan (met haar knoppen). De beoordelingen blijven in ai_evaluations (ai_log.php) en hun aspecten
+ * in de tussenstand. Berichten die het team zag (sender 'ai') blijven altijd staan.
+ */
+function clearOldSuggestions(PDO $db, int $teamId, int $level): void {
+    $db->prepare("DELETE FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'suggestion'
+        AND (ai_evaluation_id IS NULL OR ai_evaluation_id NOT IN (SELECT id FROM ai_evaluations WHERE decision = 'escalate' AND resolved_at IS NULL))")
+       ->execute([$teamId, $level]);
+}
+
 function insertTeamMessage(PDO $db, int $teamId, int $level, string $sender, string $message, ?int $evaluationId = null): void {
     $db->prepare("INSERT INTO team_messages (team_id, assignment_number, sender, message, is_read, ai_evaluation_id) VALUES (?, ?, ?, ?, 0, ?)")
        ->execute([$teamId, $level, $sender, $message, $evaluationId]);
@@ -725,7 +782,8 @@ function submitEvaluation(PDO $db, array $p): array {
     $stmt = $db->prepare("SELECT MAX(id) FROM team_messages WHERE team_id = ? AND assignment_number = ? AND sender = 'team'");
     $stmt->execute([$teamId, $currentLevel]);
     $lastMessage = (int)$stmt->fetchColumn();
-    $stale = $level !== $currentLevel || $messageId !== $lastMessage;
+    // Ook verouderd: een operator heeft de AI voor dit bericht geannuleerd
+    $stale = $level !== $currentLevel || $messageId !== $lastMessage || $messageId <= (int)$team['ai_cancelled_message_id'];
 
     $assignment = null;
     if (!$stale) {
@@ -776,6 +834,9 @@ function submitEvaluation(PDO $db, array $p): array {
     $where = "team ID $teamId, level $level, beoordeling #$evaluationId";
     $levelUpAdvice = in_array($verdict, ['voldoende', 'goed'], true);
 
+    if ($decision !== 'ignored') {
+        clearOldSuggestions($db, $teamId, $level);
+    }
     switch ($decision) {
         case 'suggest':
         case 'escalate':
