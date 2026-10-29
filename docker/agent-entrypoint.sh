@@ -1,6 +1,7 @@
 #!/bin/sh
 # Start de AI-agent. De API key komt uit AI_API_KEY, of anders uit de database van de
 # webcontainer (volume read-only op /data), waar de webcontainer de key 'docker-agent' aanmaakt.
+# In dat laatste geval leest de agent de key daar bij een 401 opnieuw (AI_API_KEY_DB).
 set -e
 
 if [ "${AI_AGENT_ENABLED:-1}" != "1" ]; then
@@ -24,6 +25,8 @@ EOF
         [ -n "$AI_API_KEY" ] || { echo "Nog geen key 'docker-agent' (draait de webcontainer al?), opnieuw over 5s"; sleep 5; }
     done
     export AI_API_KEY
+    # Bij een 401 (bijv. na een restore met een andere key) leest de agent de key hier zelf opnieuw
+    export AI_API_KEY_DB=/data/leaderboard.db AI_API_KEY_NAME=docker-agent
 fi
 
 # Alleen cloudmodellen (AI_CLOUD_ONLY, standaard aan): bij een lokaal model start de agent niet, maar wacht

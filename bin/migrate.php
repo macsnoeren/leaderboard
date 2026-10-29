@@ -224,7 +224,10 @@ try {
         $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
         $stmt = $db->prepare("SELECT MAX(assignment_number) FROM assignments WHERE game_id = ?");
         $stmt->execute([$gameId]);
-        if ((int)$stmt->fetchColumn() === count($ids)) {
+        $max = (int)$stmt->fetchColumn();
+        // Anders blijft de query open en weigert SQLite later een DROP TABLE ("database table is locked")
+        $stmt->closeCursor();
+        if ($max === count($ids)) {
             continue;
         }
         if (assignmentLockLevel($db, (int)$gameId) > 0) {
@@ -244,6 +247,9 @@ try {
     try {
         $db->exec("ALTER TABLE games ADD COLUMN finish_message TEXT");
     } catch (PDOException $e) {}
+
+    // 24. Downloadlinks uit de vroegere level-up-mail (download.php) bestaan niet meer
+    $db->exec("DROP TABLE IF EXISTS download_tokens");
 
     echo "Migratie succesvol uitgevoerd.\n";
 } catch (PDOException $e) {

@@ -68,6 +68,21 @@ class ImportTest(unittest.TestCase):
         self.assertIsNone(self.conn.execute("SELECT artifact_file FROM assignments WHERE game_id = ?", (game_id,)).fetchone()[0])
         self.assertIn("niet toegestaan", reporter.warnings[0])
 
+    def test_attachment_limits(self):
+        path = os.path.join(self.tmp, "a.tar.gz")
+        make_archive(path, [{"assignment_number": n, "title": f"T{n}", "artifact_file": f"{n}.pdf"} for n in (1, 2, 3, 4)],
+                     {"files/1.pdf": b"x" * 600, "files/2.pdf": b"x" * 1001, "files/3.pdf": b"x" * 300, "files/4.pdf": b"x" * 200})
+        reporter = Reporter()
+        game_id = imp.import_archive(self.conn, self.env.htdocs, path, reporter, name="X", created_by=self.admin,
+                                     max_attachment=1000, max_game_attachments=1000)
+        files = [r[0] for r in self.conn.execute("SELECT artifact_file FROM assignments WHERE game_id = ? ORDER BY assignment_number", (game_id,))]
+        # 1 past, 2 is te groot, 3 past nog (900), 4 zou het spel boven 1000 brengen
+        self.assertEqual([f is not None for f in files], [True, False, True, False])
+        self.assertEqual(len(self.artifacts()), 2)
+        self.assertEqual(len(reporter.warnings), 2)
+        self.assertIn("2.pdf van opdracht 2 overgeslagen: groter dan", reporter.warnings[0])
+        self.assertIn("4.pdf van opdracht 4 overgeslagen: de bijlagen van het spel", reporter.warnings[1])
+
     def test_attachment_name(self):
         path = os.path.join(self.tmp, "a.tar.gz")
         make_archive(path, {"format": "operationroom-game", "format_version": 3, "game": {"name": "X"}, "files": {},

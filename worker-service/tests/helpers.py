@@ -89,7 +89,6 @@ def seed_game(env, name="Operatie Zebra", status="running"):
     c.execute("INSERT INTO announcements (game_id, team_id, message, created_by) VALUES (?, NULL, 'Welkom', ?)", (game, teacher))
     c.execute("INSERT INTO announcements (game_id, team_id, message, created_by) VALUES (?, ?, 'Alleen voor jullie', ?)", (game, t2, teacher))
     c.execute("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES (?, 1, 3)", (t1,))
-    c.execute("INSERT INTO download_tokens (team_id, level, token, expires_at) VALUES (?, 1, 'downloadtokengeheim', datetime('now'))", (t1,))
     tokens = [r[0] for r in c.execute("SELECT access_token FROM teams")]
     return {"game": game, "teacher": teacher, "teams": (t1, t2), "messages": (m1, m2, m3, m4, m5), "evaluation": ev,
             "tokens": tokens, "assignment": a1}

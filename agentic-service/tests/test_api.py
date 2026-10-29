@@ -1,8 +1,12 @@
-"""Client voor api.php: URL, methode, header X-API-Token en body; 409 bij claim = False."""
+"""Client voor api.php: URL, methode, header X-API-Token en body; 409 bij claim = False; bij een 401 de key
+opnieuw inlezen."""
+import os
+import sqlite3
+import tempfile
 import unittest
 from unittest import mock
 
-from agentic.api import ApiClient, ApiError, MaintenanceError
+from agentic.api import ApiClient, ApiError, MaintenanceError, read_api_key
 
 
 def response(status=200, data=None):
@@ -28,6 +32,11 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((method, url), ("GET", "http://app/api.php"))
         self.assertEqual(kwargs["params"], {"action": "get_pending"})
         self.assertEqual(kwargs["headers"]["X-API-Token"], "geheim")
+
+    def test_get_pending_limit(self):
+        self.session.request.return_value = response(data=[])
+        self.api.get_pending(limit=5)
+        self.assertEqual(self.last()[1]["params"], {"limit": 5, "action": "get_pending"})
 
     def test_claim_task(self):
         self.session.request.return_value = response()
@@ -96,6 +105,77 @@ class MaintenanceApiTest(unittest.TestCase):
         api = ApiClient("http://app/api.php", "geheim", "agent-1", session=session)
         with self.assertRaises(MaintenanceError):
             api.get_pending()
+
+
+class KeyReloadTest(unittest.TestCase):
+    def setUp(self):
+        self.session = mock.Mock()
+        self.keys = ["geheim"]
+        self.api = ApiClient("http://app/api.php", "geheim", "agent-1", session=self.session,
+                             key_loader=lambda: self.keys[-1])
+
+    def sent_keys(self):
+        return [c.kwargs["headers"]["X-API-Token"] for c in self.session.request.call_args_list]
+
+    def test_new_key_after_401(self):
+        # Na een restore: de oude key werkt niet meer, de database heeft een nieuwe
+        self.keys.append("nieuw")
+        self.session.request.side_effect = [response(401, {"error": "Unauthorized"}), response(data=[])]
+        self.assertEqual(self.api.get_pending(), [])
+        self.assertEqual(self.sent_keys(), ["geheim", "nieuw"])
+        self.assertEqual(self.api.api_key, "nieuw")
+        # Daarna gaat de nieuwe key gewoon mee
+        self.session.request.side_effect = None
+        self.session.request.return_value = response(data=[])
+        self.api.get_pending()
+        self.assertEqual(self.sent_keys()[-1], "nieuw")
+
+    def test_same_key_is_not_retried(self):
+        self.session.request.return_value = response(401, {"error": "Unauthorized"})
+        with self.assertRaises(ApiError) as ctx:
+            self.api.get_pending()
+        self.assertEqual(ctx.exception.status, 401)
+        self.assertEqual(self.session.request.call_count, 1)
+
+    def test_new_key_also_refused_retries_once(self):
+        self.session.request.return_value = response(401, {"error": "Unauthorized"})
+        keys = iter(["nieuw", "nog-nieuwer"])
+        self.api.key_loader = lambda: next(keys)
+        with self.assertRaises(ApiError):
+            self.api.get_pending()
+        self.assertEqual(self.sent_keys(), ["geheim", "nieuw"])
+
+    def test_loader_failure_or_empty_keeps_401(self):
+        self.session.request.return_value = response(401, {"error": "Unauthorized"})
+        for loader in (lambda: None, lambda: "", mock.Mock(side_effect=RuntimeError("weg"))):
+            self.api.key_loader = loader
+            with self.assertRaises(ApiError):
+                self.api.get_pending()
+        self.assertEqual(self.api.api_key, "geheim")
+
+    def test_without_loader(self):
+        self.api.key_loader = None
+        self.session.request.return_value = response(401, {"error": "Unauthorized"})
+        with self.assertRaises(ApiError):
+            self.api.get_pending()
+        self.assertEqual(self.session.request.call_count, 1)
+
+
+class ReadApiKeyTest(unittest.TestCase):
+    def test_reads_key_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "leaderboard.db")
+            db = sqlite3.connect(path)
+            db.execute("CREATE TABLE api_keys (id INTEGER PRIMARY KEY, key_name TEXT, api_key TEXT)")
+            db.execute("INSERT INTO api_keys (key_name, api_key) VALUES ('ander', 'x'), ('docker-agent', 'sleutel')")
+            db.commit()
+            db.close()
+            self.assertEqual(read_api_key(path, "docker-agent"), "sleutel")
+            self.assertIsNone(read_api_key(path, "bestaat-niet"))
+
+    def test_missing_database(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(read_api_key(os.path.join(tmp, "geen.db"), "docker-agent"))
 
 
 if __name__ == "__main__":

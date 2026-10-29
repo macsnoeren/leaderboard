@@ -155,7 +155,7 @@ include 'admin_header.php';
                 <div class="field">
                     <label for="imp-file">Archief (.tar.gz)</label>
                     <input type="file" name="archive" id="imp-file" accept=".gz,.tgz,application/gzip" required>
-                    <div class="hint">Een export uit Spelinstellingen, of een archief van het oude <span class="mono">export_assignments.py</span>. Max. <?= maxArchiveMb() ?> MB.</div>
+                    <div class="hint">Een export uit Spelinstellingen, of een archief van het oude <span class="mono">export_assignments.py</span>. Max. <?= formatBytes(maxArchiveUploadBytes()) ?>.</div>
                 </div>
                 <div class="field">
                     <label for="imp-name">Naam van het nieuwe spel</label>

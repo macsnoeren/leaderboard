@@ -27,7 +27,6 @@ function freshDb(): PDO {
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
     $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
     $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
-    $db->exec("CREATE TABLE download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
     $db->exec("CREATE TABLE team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
     $db->exec("CREATE TABLE team_presence (team_id INTEGER, username TEXT, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (team_id, username))");
     $db->exec("CREATE TABLE announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
@@ -288,12 +287,11 @@ addMessage($db, $t1, 1, 'team', 'hallo');
 addMessage($db, $keep, 1, 'team', 'blijf');
 levelUp($db, $t1, 1);
 $db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES ($t1, 1, 2), ($keep, 1, 1)");
-$db->exec("INSERT INTO download_tokens (team_id, level, token) VALUES ($t2, 1, 'x')");
 $db->exec("INSERT INTO announcements (game_id, team_id, message) VALUES ($game, NULL, 'Alle'), ($game, $t2, 'Twee'), ($other, NULL, 'Ander')");
 $archiveBefore = $db->query("SELECT * FROM completed_assignments ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
 resetGame($db, $game, 1);
 check('geen teams meer in dit spel', (int)$db->query("SELECT COUNT(*) FROM teams WHERE game_id = $game")->fetchColumn() === 0);
-check('geen berichten, downloads of tokens van dit spel', (int)$db->query("SELECT (SELECT COUNT(*) FROM team_messages WHERE team_id IN ($t1, $t2)) + (SELECT COUNT(*) FROM team_downloads WHERE team_id IN ($t1, $t2)) + (SELECT COUNT(*) FROM download_tokens WHERE team_id IN ($t1, $t2))")->fetchColumn() === 0);
+check('geen berichten of downloads van dit spel', (int)$db->query("SELECT (SELECT COUNT(*) FROM team_messages WHERE team_id IN ($t1, $t2)) + (SELECT COUNT(*) FROM team_downloads WHERE team_id IN ($t1, $t2))")->fetchColumn() === 0);
 check('mededelingen van dit spel weg, ander spel niet', (int)$db->query("SELECT COUNT(*) FROM announcements WHERE game_id = $game")->fetchColumn() === 0 && (int)$db->query("SELECT COUNT(*) FROM announcements WHERE game_id = $other")->fetchColumn() === 1);
 check('archief ongewijzigd (met teamnaam)', $db->query("SELECT * FROM completed_assignments ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) === $archiveBefore && $archiveBefore[0]['team_name'] === 'Een');
 check('opdrachten blijven', totalAssignments($db, $game) === 2);
@@ -573,7 +571,6 @@ foreach ([$weg, $blijft] as $g) {
     $db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id) VALUES ($g, $t, 1, 1)");
     $db->exec("INSERT INTO ai_team_progress (game_id, team_id, assignment_number) VALUES ($g, $t, 1)");
     $db->exec("INSERT INTO team_downloads (team_id, assignment_number, download_count) VALUES ($t, 1, 1)");
-    $db->exec("INSERT INTO download_tokens (team_id, level, token) VALUES ($t, 1, 'tok$g')");
     $db->exec("INSERT INTO team_presence (team_id, username) VALUES ($t, 'x')");
     $db->exec("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history) VALUES ($g, $t, 'Team $g', 1, 'Team: hallo')");
     $db->exec("INSERT INTO announcements (game_id, message) VALUES ($g, 'Welkom')");
@@ -582,7 +579,7 @@ foreach ([$weg, $blijft] as $g) {
 $counts = function (PDO $db) {
     $out = [];
     foreach (['games', 'teams', 'assignments', 'assignment_ai_dialog', 'team_messages', 'ai_evaluations', 'ai_team_progress', 'team_downloads',
-              'download_tokens', 'team_presence', 'completed_assignments', 'announcements', 'game_teachers', 'worker_jobs'] as $table) {
+              'team_presence', 'completed_assignments', 'announcements', 'game_teachers', 'worker_jobs'] as $table) {
         $out[$table] = (int)$db->query("SELECT COUNT(*) FROM $table")->fetchColumn();
     }
     return $out;
@@ -614,6 +611,113 @@ check('onbekend spel → foutmelding', deleteGame($db, 999, 1, $htdocs) !== null
 array_map('unlink', glob("$htdocs/*/*"));
 rmdir("$htdocs/artifacts");
 rmdir("$htdocs/uploads");
+rmdir($htdocs);
+
+echo "iniBytes\n";
+ini_set('memory_limit', '256M');
+check('256M → bytes', iniBytes('memory_limit') === 256 * 1024 * 1024);
+ini_set('memory_limit', '1G');
+check('1G → bytes', iniBytes('memory_limit') === 1024 ** 3);
+ini_set('memory_limit', '-1');
+check('stuk past in post_max_size', uploadChunkBytes() > 0 && uploadChunkBytes() <= UPLOAD_CHUNK_BYTES
+      && (iniBytes('post_max_size') === 0 || uploadChunkBytes() < iniBytes('post_max_size')));
+
+// Kleine grenzen voor de rest van de tests: 1 MB per bijlage, 2 MB per spel
+define('MAX_ATTACHMENT_MB', 1);
+define('MAX_GAME_ATTACHMENTS_MB', 2);
+const KB = 1024;
+
+echo "gameAttachmentBytes / attachmentSizeError\n";
+$db = freshDb();
+$htdocs = sys_get_temp_dir() . '/game_test_' . bin2hex(random_bytes(4));
+mkdir("$htdocs/artifacts", 0777, true);
+file_put_contents("$htdocs/artifacts/groot.pdf", str_repeat('x', 600 * KB));
+file_put_contents("$htdocs/artifacts/klein.pdf", str_repeat('x', 500 * KB));
+file_put_contents("$htdocs/artifacts/ander.pdf", str_repeat('x', 900 * KB));
+$game = addGame($db);
+$other = addGame($db);
+addAssignments($db, $game, 4);
+addAssignments($db, $other, 1);
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/groot.pdf' WHERE game_id = $game AND assignment_number IN (1, 2)");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/weg.pdf' WHERE game_id = $game AND assignment_number = 3");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/klein.pdf' WHERE game_id = $game AND assignment_number = 4");
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/ander.pdf' WHERE game_id = $other");
+$smallId = (int)$db->query("SELECT id FROM assignments WHERE game_id = $game AND assignment_number = 4")->fetchColumn();
+check('gedeeld bestand telt één keer, ontbrekend niet, ander spel niet', gameAttachmentBytes($db, $game, null, $htdocs) === 1100 * KB);
+check('zonder de bijlage die vervangen wordt', gameAttachmentBytes($db, $game, $smallId, $htdocs) === 600 * KB);
+check('past nog', attachmentSizeError($db, $game, 900 * KB, null, $htdocs) === null);
+check('groter dan 1 MB → foutmelding', strpos((string)attachmentSizeError($db, $game, 1025 * KB, null, $htdocs), 'maximaal 1,0 MB') !== false);
+check('spel komt boven 2 MB → foutmelding', strpos((string)attachmentSizeError($db, $game, 1024 * KB, null, $htdocs), 'samen maximaal 2,0 MB') !== false);
+check('vervangen telt de oude bijlage niet mee', attachmentSizeError($db, $game, 1024 * KB, $smallId, $htdocs) === null);
+
+echo "upload in stukken\n";
+$incoming = "$htdocs/incoming";
+$uploads = [];
+$stream = function (string $data) {
+    $s = fopen('php://memory', 'w+b');
+    fwrite($s, $data);
+    rewind($s);
+    return $s;
+};
+check('verkeerd type → foutmelding', startAttachmentUpload($db, $uploads, $game, 'shell.php', 10, null, $incoming, $htdocs) === ['error' => 'Bestandstype niet toegestaan.']);
+check('leeg bestand → foutmelding', isset(startAttachmentUpload($db, $uploads, $game, 'a.pdf', 0, null, $incoming, $htdocs)['error']));
+check('te groot → foutmelding vooraf', isset(startAttachmentUpload($db, $uploads, $game, 'a.pdf', 2 * 1024 * KB, null, $incoming, $htdocs)['error']));
+check('mislukte starts laten niets achter', $uploads === [] && glob("$incoming/*") === []);
+$start = startAttachmentUpload($db, $uploads, $game, '../Kaart.pdf', 6, null, $incoming, $htdocs);
+$id = $start['id'] ?? '';
+check('start: id, stukgrootte en een leeg bestand', preg_match('/^[0-9a-f]{32}$/', $id) && $start['chunk'] === uploadChunkBytes() && filesize(attachmentUploadPath($id, $incoming)) === 0);
+check('start: naam zonder pad in de sessie', $uploads[$id] === ['game_id' => $game, 'name' => 'Kaart.pdf', 'size' => 6]);
+check('eerste stuk', appendAttachmentChunk($uploads, $id, $game, 0, $stream('abc'), $incoming) === ['received' => 3]);
+check('hetzelfde stuk nog eens wordt genegeerd', appendAttachmentChunk($uploads, $id, $game, 0, $stream('abc'), $incoming) === ['received' => 3]);
+check('ander spel → foutmelding', isset(appendAttachmentChunk($uploads, $id, $other, 3, $stream('def'), $incoming)['error']));
+check('onbekend id → foutmelding', isset(appendAttachmentChunk($uploads, str_repeat('0', 32), $game, 0, $stream('x'), $incoming)['error']));
+check('ongeldig id → foutmelding', isset(appendAttachmentChunk($uploads, '../../x', $game, 0, $stream('x'), $incoming)['error']));
+check('meer dan aangekondigd wordt afgekapt', appendAttachmentChunk($uploads, $id, $game, 3, $stream('defghi'), $incoming) === ['received' => 6]
+      && file_get_contents(attachmentUploadPath($id, $incoming)) === 'abcdef');
+$taken = takeAttachmentUpload($db, $uploads, $id, $game, null, $incoming, $htdocs);
+check('compleet: pad, naam en extensie', $taken === ['path' => attachmentUploadPath($id, $incoming), 'name' => 'Kaart.pdf', 'ext' => 'pdf']);
+check('daarna niet meer in de sessie', !isset($uploads[$id]));
+check('twee keer ophalen kan niet', isset(takeAttachmentUpload($db, $uploads, $id, $game, null, $incoming, $htdocs)['error']));
+unlink($taken['path']);
+
+$half = startAttachmentUpload($db, $uploads, $game, 'b.zip', 10, null, $incoming, $htdocs)['id'];
+appendAttachmentChunk($uploads, $half, $game, 0, $stream('12345'), $incoming);
+check('half aangekomen → foutmelding', strpos((string)(takeAttachmentUpload($db, $uploads, $half, $game, null, $incoming, $htdocs)['error'] ?? ''), 'niet helemaal') !== false);
+check('half aangekomen bestand is weg', !is_file(attachmentUploadPath($half, $incoming)));
+
+$late = startAttachmentUpload($db, $uploads, $game, 'c.pdf', 900 * KB, null, $incoming, $htdocs)['id'];
+appendAttachmentChunk($uploads, $late, $game, 0, $stream(str_repeat('x', 900 * KB)), $incoming);
+file_put_contents("$htdocs/artifacts/intussen.pdf", str_repeat('x', 200 * KB));
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/intussen.pdf' WHERE game_id = $game AND assignment_number = 3");
+check('spel intussen te vol → foutmelding bij het opslaan', strpos((string)(takeAttachmentUpload($db, $uploads, $late, $game, null, $incoming, $htdocs)['error'] ?? ''), 'samen maximaal') !== false
+      && !is_file(attachmentUploadPath($late, $incoming)));
+
+$stale = startAttachmentUpload($db, $uploads, $game, 'd.pdf', 5, null, $incoming, $htdocs)['id'];
+$fresh = startAttachmentUpload($db, $uploads, $game, 'e.pdf', 5, null, $incoming, $htdocs)['id'];
+touch(attachmentUploadPath($stale, $incoming), time() - UPLOAD_STALE_SECONDS - 60);
+cleanupAttachmentUploads($uploads, $incoming);
+check('afgebroken upload opgeruimd, lopende niet', !is_file(attachmentUploadPath($stale, $incoming)) && !isset($uploads[$stale])
+      && is_file(attachmentUploadPath($fresh, $incoming)) && isset($uploads[$fresh]));
+
+echo "copyAssignments en de grens per spel\n";
+$target = addGame($db);
+addAssignments($db, $target, 1);
+file_put_contents("$htdocs/artifacts/vol.pdf", str_repeat('x', 1000 * KB));
+$db->exec("UPDATE assignments SET artifact_file = 'artifacts/vol.pdf' WHERE game_id = $target");
+$before = (int)$db->query("SELECT COUNT(*) FROM assignments")->fetchColumn();
+$files = count(glob("$htdocs/artifacts/*"));
+try {
+    copyAssignments($db, $game, $target, 1, $htdocs);
+    $refused = false;
+} catch (RuntimeException $e) {
+    $refused = strpos($e->getMessage(), 'maximaal 2,0 MB') !== false;
+}
+check('kopie boven de grens wordt geweigerd', $refused);
+check('geweigerde kopie: geen opdrachten en geen bestanden erbij', (int)$db->query("SELECT COUNT(*) FROM assignments")->fetchColumn() === $before && count(glob("$htdocs/artifacts/*")) === $files);
+check('kopie naar een leeg spel past', copyAssignments($db, $game, addGame($db), 1, $htdocs) === 4);
+array_map('unlink', array_merge(glob("$htdocs/artifacts/*"), glob("$incoming/*")));
+rmdir("$htdocs/artifacts");
+rmdir($incoming);
 rmdir($htdocs);
 
 if ($failures > 0) {

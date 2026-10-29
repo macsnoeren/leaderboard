@@ -76,7 +76,7 @@ class ExportTest(unittest.TestCase):
         files, _ = self.export(include_progress=True)
         progress = json.loads(files["progress.json"])
         blob = b"".join(files.values()).decode("utf-8", "ignore")
-        for secret in [EMAIL, "downloadtokengeheim", "agent-geheim", "J. Jansen", "jjansen", *self.ids["tokens"]]:
+        for secret in [EMAIL, "agent-geheim", "J. Jansen", "jjansen", *self.ids["tokens"]]:
             self.assertNotIn(secret, blob)
         self.assertNotIn("resolved_by", files["progress.json"].decode())
         self.assertEqual(len(progress["teams"]), 2)

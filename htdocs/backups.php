@@ -21,15 +21,7 @@ if (isset($_GET['download'])) {
         exit('Backup niet gevonden.');
     }
     logAudit($db, $adminId, 'BACKUP_DOWNLOAD', "Backup {$backup['file']} gedownload");
-    session_write_close();
-    $path = backupsDir() . '/' . $backup['file'];
-    header('Content-Type: application/gzip');
-    header('Content-Disposition: attachment; filename="' . $backup['file'] . '"');
-    header('Content-Length: ' . filesize($path));
-    header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: private, no-store');
-    readfile($path);
-    exit;
+    sendFile(backupsDir() . '/' . $backup['file'], 'attachment; filename="' . $backup['file'] . '"', 'application/gzip');
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -217,6 +209,6 @@ include 'admin_header.php';
             <input type="file" name="archive" accept=".gz,.tgz,application/gzip" required aria-label="Backup (.tar.gz)" style="flex: 1; width: auto; min-width: 220px;">
             <button type="submit" class="btn btn-secondary"><?= icon('plus') ?>Uploaden</button>
         </form>
-        <p class="muted small" style="margin-top: 10px;">Bijvoorbeeld een backup van een andere installatie (max. <?= maxArchiveMb() ?> MB). De worker controleert hem eerst; daarna kun je hem terugzetten.</p>
+        <p class="muted small" style="margin-top: 10px;">Bijvoorbeeld een backup van een andere installatie (max. <?= formatBytes(maxArchiveUploadBytes()) ?>). De worker controleert hem eerst; daarna kun je hem terugzetten.</p>
     </div>
 <?php include 'admin_footer.php'; ?>

@@ -63,7 +63,9 @@ Buiten de webroot, gedeeld door website en worker (in Docker een eigen volume):
 
 ```
 storage/
-  incoming/          uploads voor import/restore (willekeurige naam; weg na afloop van de taak)
+  incoming/          uploads voor import/restore (willekeurige naam; weg na afloop van de taak), en
+                     attachment-<id>.part: een bijlage die de website in stukken ontvangt (weg na het opslaan,
+                     of door de website na 2 uur zonder nieuw stuk)
   jobs/<id>/         resultaten van export en rapport (weg na RESULT_TTL_DAYS; de rij blijft, "verlopen")
   backups/           backups met een .json met metadata (trigger, tellingen, vastgezet) ernaast
   tmp/               werkmap van de worker
@@ -114,6 +116,8 @@ Elk formaat wordt eerst vertaald naar één `ImportModel` (`worker/formats/`); d
   import met voortgang (dan kloppen de levels niet meer: geweigerd).
 - Teams krijgen nieuwe `access_token`s en hebben geen e-mailadres; links opnieuw mailen na het invullen
   van een adres.
+- Bijlagen groter dan `MAX_ATTACHMENT_MB`, of waarmee het spel boven `MAX_GAME_ATTACHMENTS_MB` komt, worden
+  overgeslagen met een melding (dezelfde grenzen als op de website), net als bijlagen met een verkeerde extensie.
 - Alles in één transactie; bij een fout worden de al geschreven bestanden weer verwijderd.
 - Het oude "wis de opdrachten van spel X en importeer" bestaat niet meer: importeer als nieuw spel en
   verwijder het oude.
@@ -165,7 +169,7 @@ De onderhoudsmodus is een bestand, geen databasevlag, omdat de database wordt ve
 dan een 503: een pagina die zichzelf ververst, leeg bij `?ajax…`, JSON bij `api.php` (de AI-agent wacht).
 De commandoregel slaat de controle over. Na een restore blijft iedereen ingelogd zolang `session_version`
 in de backup klopt; een admin die niet in de backup staat, is uitgelogd. Is de `docker-agent`-key anders,
-herstart dan de agent-container.
+dan leest de AI-agent bij de eerste 401 zelf de nieuwe key in (zie `agentic-service/README.md`).
 
 ## Rapport
 
@@ -223,7 +227,8 @@ groep met schrijfrechten), omdat ze dezelfde bestanden lezen en schrijven.
 | `BACKUP_MANUAL_DAYS` | `90` | handmatige en geüploade backups (0 = nooit verwijderen) |
 | `BACKUP_PRE_RESTORE_DAYS` | `30` | veiligheidsbackups (0 = nooit verwijderen) |
 | `BACKUP_MIN_FREE_MB` | `500` | minder vrij = geen backup |
-| `MAX_ARCHIVE_MB`, `MAX_ARCHIVE_FILES` | `500`, `10000` | grenzen voor archieven (uitgepakt); `MAX_ARCHIVE_MB` ook in `conf/config.php` |
+| `MAX_ARCHIVE_MB`, `MAX_ARCHIVE_FILES` | `10240`, `10000` | grenzen voor archieven (uitgepakt; een backup bevat alle spellen); `MAX_ARCHIVE_MB` ook in `conf/config.php` |
+| `MAX_ATTACHMENT_MB`, `MAX_GAME_ATTACHMENTS_MB` | `500`, `2048` | grootste bijlage en alle bijlagen van een spel samen bij een import; ook in `conf/config.php` |
 | `RESTORE_GRACE_SECONDS` | `5` | wachttijd na het aanzetten van de onderhoudsmodus |
 | `REPORT_FONT`, `REPORT_FONT_BOLD` | DejaVu Sans | Unicode-lettertype; zonder valt de PDF terug op Helvetica (Latin-1) |
 

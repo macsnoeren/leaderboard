@@ -42,6 +42,15 @@ De modus staat per team in `teams.ai_mode` (keuzelijst in `teacher.php`, of *Voo
 
 ## Hoe het werkt
 
+**Wachtrij.** `get_pending` geeft de teams waarvan het laatste bericht nog op de AI wacht, oudste bericht
+eerst, met per team één taak (het laatste bericht) en zonder teams die een agent nu verwerkt. Vlak vóór elk
+team haalt de agent een verse lijst op (`?limit=5`, `PENDING_BATCH` in `main.py`) en claimt de eerste die hij
+kan krijgen; is de lijst leeg, dan volgen de design-taken en wacht hij `POLL_INTERVAL`. Zo beoordeelt hij
+nooit een bericht dat al beantwoord is of intussen door een nieuwer bericht is vervangen, ook niet als de rij
+lang is. Meerdere agents tegelijk kan (`docker compose … up -d --scale agent=3`): de claim voorkomt dubbel
+werk. Wachtrij en reactietijd per spel staan op het dashboard (tegel "Wacht op AI", `aiQueueStats()`); zie
+"Veel teams tegelijk" in de [README](../README.md).
+
 Per teambericht (`agentic/pipeline.py`):
 
 1. **Voorfilter** (code): lege berichten en verdachte patronen ("negeer", "level up", …) krijgen de vlag
@@ -173,6 +182,12 @@ ollama signin                     # eenmalig, voor de -cloud-modellen
 python3 tools/check_ollama.py     # werken de modellen?
 python3 main.py                   # Ctrl+C meldt de agent netjes af
 ```
+
+Weigert `api.php` de key (401, bijvoorbeeld na een restore of nadat de key in API-sleutels is vervangen),
+dan leest de agent hem één keer opnieuw in en probeert het verzoek nog eens; herstarten is niet nodig.
+Hij leest uit de database van de webapp als `API_KEY_DB` is ingesteld (pad naar `leaderboard.db`, alleen
+lezen, met `API_KEY_NAME`, standaard `docker-agent`; zo werkt de Docker-agent), en anders uit `config.py`
+(pas daar dus gewoon `API_KEY` aan terwijl de agent draait).
 
 ## Modellen
 

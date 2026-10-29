@@ -30,7 +30,6 @@ function freshDb(): PDO {
     $db->exec("CREATE UNIQUE INDEX idx_assignments_game_number ON assignments(game_id, assignment_number)");
     $db->exec("CREATE TABLE completed_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER, team_id INTEGER, team_name TEXT, assignment_number INTEGER, chat_history TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, leveled_by INTEGER, leveled_by_name TEXT, ai_evaluation_id INTEGER, accepted_message_id INTEGER, accepted_answer TEXT, level_started_at DATETIME)");
     $db->exec("CREATE TABLE team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, sender TEXT, message TEXT, is_read INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ai_evaluation_id INTEGER)");
-    $db->exec("CREATE TABLE download_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, level INTEGER, token TEXT, expires_at DATETIME)");
     $db->exec("CREATE TABLE team_downloads (id INTEGER PRIMARY KEY AUTOINCREMENT, team_id INTEGER, assignment_number INTEGER, download_count INTEGER DEFAULT 0, UNIQUE(team_id, assignment_number))");
     $db->exec("CREATE TABLE team_presence (team_id INTEGER, username TEXT, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (team_id, username))");
     $db->exec("CREATE TABLE announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER, message TEXT NOT NULL, created_by INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
@@ -301,6 +300,39 @@ $task = array_values(array_filter(aiPendingTasks($db), function ($t) use ($ok) {
 check('recent_attempts telt antwoorden van 10 min, dit level, zonder stale', $task['recent_attempts'] === 2);
 check('recent_questions telt vragen', $task['recent_questions'] === 1);
 check('escalation_open en progress', $task['escalation_open'] === true && $task['progress']['summary'] === 'Dader nog niet');
+
+echo "Wachtrij en reactietijd\n";
+$db = freshDb();
+$g = addGame($db, 'running');
+$other = addGame($db, 'running');
+addAssignment($db, $g, 1);
+addAssignment($db, $other, 1);
+check('lege wachtrij', aiQueueStats($db, $g) === ['waiting' => 0, 'oldest_seconds' => null, 'evaluated' => 0, 'avg_response_seconds' => null, 'avg_processing_seconds' => null]);
+$a = addTeam($db, $g, 'A');
+$ma = addMessage($db, $a, 1, 'team', 'eerste');
+$b = addTeam($db, $g, 'B');
+$mb = addMessage($db, $b, 1, 'team', 'tweede');
+$db->exec("UPDATE team_messages SET created_at = datetime('now', '-300 seconds') WHERE id = $ma");
+$db->exec("UPDATE team_messages SET created_at = datetime('now', '-60 seconds') WHERE id = $mb");
+$c = addTeam($db, $g, 'C');
+addMessage($db, $c, 1, 'team', 'derde');
+claimTeam($db, $c, 'agent-1');
+addMessage($db, addTeam($db, $other, 'Ander spel'), 1, 'team', 'ander');
+$stats = aiQueueStats($db, $g);
+check('wachtrij telt ook teams die een agent nu verwerkt, alleen dit spel', $stats['waiting'] === 3);
+check('oudste bericht wacht sinds 5 min', $stats['oldest_seconds'] >= 300 && $stats['oldest_seconds'] < 310);
+check('limit: alleen de oudste, zonder geclaimde', array_column(aiPendingTasks($db, 1), 'team_id') === [$a] && count(aiPendingTasks($db)) === 3);
+// A na 40 s beoordeeld (verwerking 30 s), B na 20 s (10 s); een verouderde en een van ruim een uur geleden tellen niet
+$db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id, intent, decision, duration_ms, created_at) VALUES
+    ($g, $a, 1, $ma, 'antwoord', 'suggest', 30000, datetime('now', '-260 seconds')),
+    ($g, $b, 1, $mb, 'antwoord', 'suggest', 10000, datetime('now', '-40 seconds')),
+    ($g, $a, 1, $ma, 'antwoord', 'stale', 99000, datetime('now', '-100 seconds')),
+    ($g, $c, 1, $ma, 'antwoord', 'suggest', 99000, datetime('now', '-61 minutes'))");
+$stats = aiQueueStats($db, $g);
+check('beoordeelde teams uit de wachtrij', $stats['waiting'] === 1);
+check('afgelopen uur: aantal, gemiddelde reactie- en verwerkingstijd', $stats['evaluated'] === 2 && $stats['avg_response_seconds'] === 30 && $stats['avg_processing_seconds'] === 20);
+check('ander spel heeft eigen cijfers', aiQueueStats($db, $other)['waiting'] === 1 && aiQueueStats($db, $other)['evaluated'] === 0);
+check('duur kort weergegeven', formatWaitSeconds(45) === '45 s' && formatWaitSeconds(185) === '3 min' && formatWaitSeconds(3900) === '1 u 5 min' && formatWaitSeconds(7200) === '2 u');
 
 echo "Serverregels\n";
 $rank = ['ignored' => 0, 'suggest' => 1, 'reply' => 2, 'level_up' => 3];
