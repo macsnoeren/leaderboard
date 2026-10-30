@@ -49,6 +49,7 @@ def make_service(tasks=None, jobs=None, model_ok=True):
     api.get_design_jobs.side_effect = lambda: calls.append(("get_design_jobs",)) or (jobs or [])
     api.claim_task.side_effect = claim_task
     api.claim_design.return_value = True
+    api.claim_replay.return_value = None
     api.submit_evaluation.side_effect = submit_evaluation
     api.submit_design.side_effect = lambda p: calls.append(("submit_design", p["assignment_id"])) or {}
     llm = mock.Mock()
@@ -169,6 +170,80 @@ class MainTest(unittest.TestCase):
         api.heartbeat.side_effect = lambda ok: service.stop_event.set()
         service.run()
         api.unregister_agent.assert_called_once()
+
+
+class FakeReplay:
+    """Een replay met `n` stappen; `fail_at` = stap die een fout geeft."""
+    def __init__(self, job, llm, settings, n=3, fail_at=None):
+        self.job_id = job["job_id"]
+        self.steps = list(range(n))
+        self.pos = 0
+        self.fail_at = fail_at
+
+    @property
+    def done(self):
+        return self.pos >= len(self.steps)
+
+    @property
+    def percent(self):
+        return int(self.pos * 100 / len(self.steps))
+
+    def step(self):
+        if self.pos == self.fail_at:
+            raise KeyError("kapot")
+        self.pos += 1
+        return f"stap {self.pos}"
+
+
+class ReplayLoopTest(unittest.TestCase):
+    def service(self, **fake):
+        service, api, calls = make_service()
+        api.claim_replay.side_effect = [{"job_id": 9}, None]
+        api.replay_progress.return_value = True
+        patcher = mock.patch("main.ReplayRun", side_effect=lambda job, llm, settings: FakeReplay(job, llm, settings, **fake))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        render = mock.patch("main.render_replay", return_value="<html>rapport</html>")
+        render.start()
+        self.addCleanup(render.stop)
+        return service, api
+
+    def test_replay_runs_after_teams_and_submits_report(self):
+        service, api = self.service()
+        service.run_once()
+        self.assertEqual([c.args for c in api.replay_progress.call_args_list], [(9, 33, "stap 1"), (9, 66, "stap 2"), (9, 100, "stap 3")])
+        api.submit_replay.assert_called_once_with(9, html="<html>rapport</html>")
+        self.assertIsNone(service.replay)
+
+    def test_slice_gives_teams_a_turn(self):
+        # Na REPLAY_SLICE_SECONDS stopt de ronde; de volgende ronde kijkt eerst weer naar de teams
+        service, api = self.service(n=5)
+        ticks = iter([0, 10, 70, 70, 80])
+        self.assertTrue(service.process_replay(clock=lambda: next(ticks)))
+        self.assertEqual(api.replay_progress.call_count, 2)
+        api.submit_replay.assert_not_called()
+        service.process_replay(clock=lambda: 0)
+        api.submit_replay.assert_called_once()
+
+    def test_progress_refused_stops_without_report(self):
+        service, api = self.service()
+        api.replay_progress.return_value = False
+        self.assertFalse(service.process_replay())
+        api.submit_replay.assert_not_called()
+        self.assertIsNone(service.replay)
+
+    def test_error_is_reported(self):
+        service, api = self.service(fail_at=1)
+        service.process_replay()
+        self.assertIn("Interne fout", api.submit_replay.call_args.kwargs["error"])
+        self.assertIsNone(service.replay)
+
+    def test_stopping_agent_fails_the_replay(self):
+        service, api = self.service(n=5)
+        service.process_replay(clock=iter([0, 61]).__next__)
+        api.heartbeat.side_effect = lambda ok: service.stop_event.set()
+        service.run()
+        self.assertIn("gestopt", api.submit_replay.call_args.kwargs["error"])
 
 
 class MaintenanceTest(unittest.TestCase):

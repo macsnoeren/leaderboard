@@ -70,12 +70,14 @@ function jobRowsHtml(PDO $db, array $jobs, array $user): string {
 }
 
 $jobs = jobsForUser($db, $user, $gameId);
-$active = workerActive($db);
 $pending = hasPendingJobs($jobs);
+// Waarschuwingen: wachtende taken zonder worker, of een AI-replay zonder actieve AI-agent
+$workerWarning = hasPendingJobs($jobs, false) && !workerActive($db);
+$agentWarning = hasPendingJobs($jobs, true) && aiAgentStatus($db)['status'] === 'inactive';
 
 if (isset($_GET['ajax'])) {
     header('Content-Type: application/json');
-    echo json_encode(['html' => jobRowsHtml($db, $jobs, $user), 'pending' => $pending, 'worker' => $active]);
+    echo json_encode(['html' => jobRowsHtml($db, $jobs, $user), 'pending' => $pending, 'worker_warning' => $workerWarning, 'agent_warning' => $agentWarning]);
     exit;
 }
 
@@ -93,12 +95,15 @@ include 'admin_header.php';
 
     <?= renderFlash() ?>
 
-    <div id="worker-warning"<?= $pending && !$active ? '' : ' hidden' ?>>
+    <div id="worker-warning"<?= $workerWarning ? '' : ' hidden' ?>>
         <?= alertBox('warning', 'Er draait op dit moment geen worker: taken blijven in de wachtrij staan tot de worker-service weer draait.') ?>
+    </div>
+    <div id="agent-warning"<?= $agentWarning ? '' : ' hidden' ?>>
+        <?= alertBox('warning', 'Er draait op dit moment geen AI-agent: een AI-replay blijft in de wachtrij staan tot de agent weer draait.') ?>
     </div>
 
     <div class="card">
-        <p class="muted text-sm" style="margin-bottom: 16px;">Exports, imports, rapporten<?= $isAdmin ? ' en backups' : '' ?> worden in de achtergrond gemaakt. Een export of rapport kun je <?= resultTtlDays() ?> dagen downloaden.</p>
+        <p class="muted text-sm" style="margin-bottom: 16px;">Exports, imports, rapporten, AI-replays<?= $isAdmin ? ' en backups' : '' ?> worden in de achtergrond gemaakt. Een export of rapport kun je <?= resultTtlDays() ?> dagen downloaden.</p>
         <?php if (empty($jobs)): ?>
             <?= emptyState('inbox', 'Nog geen taken. Exporteren en rapporten maken doe je bij Spelinstellingen.') ?>
         <?php else: ?>
@@ -131,7 +136,8 @@ include 'admin_header.php';
                         if (!data) return;
                         const rows = document.getElementById('job-rows');
                         if (rows) rows.innerHTML = data.html;
-                        document.getElementById('worker-warning').hidden = !(data.pending && !data.worker);
+                        document.getElementById('worker-warning').hidden = !data.worker_warning;
+                        document.getElementById('agent-warning').hidden = !data.agent_warning;
                         pending = data.pending;
                     })
                     .finally(() => { if (pending) setTimeout(poll, 3000); });

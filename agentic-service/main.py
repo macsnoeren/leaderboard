@@ -4,24 +4,30 @@ Starten: python3 main.py (met config.py hiernaast; zie config.py.sample). Stoppe
 de agent meldt zich dan netjes af.
 
 Per ronde: heartbeat (met model_ok), eerst de teamberichten (een lopend spel gaat voor), daarna de
-opdrachten waar de opdracht-assistent naar moet kijken.
+opdrachten waar de opdracht-assistent naar moet kijken, en dan een stuk van een AI-replay (hooguit
+REPLAY_SLICE_SECONDS, zodat nieuwe teamberichten niet lang wachten).
 """
 import importlib
 import logging
 import signal
 import threading
+import time
 import uuid
 
 from agentic.agents import designer
 from agentic.api import ApiClient, ApiError, MaintenanceError, read_api_key
 from agentic.llm import LLMClient, LLMError
 from agentic.pipeline import Pipeline, TaskCancelled
+from agentic.replay import ReplayRun
+from agentic.replay_report import render as render_replay
 from agentic.settings import load_settings, local_models
 
 logger = logging.getLogger("agentic")
 
 # Zoveel teams vraagt de agent per keer op: genoeg om teams over te slaan die een andere agent net claimt
 PENDING_BATCH = 5
+# Zo lang werkt de agent per ronde aan een AI-replay; daarna kijkt hij eerst weer naar de teams
+REPLAY_SLICE_SECONDS = 60
 
 
 class AgentService:
@@ -31,6 +37,7 @@ class AgentService:
         self.llm = llm
         self.pipeline = pipeline or Pipeline(llm, settings, keepalive=lambda task: api.claim_task(task["team_id"]))
         self.stop_event = stop_event or threading.Event()
+        self.replay = None  # de AI-replay waar deze agent mee bezig is (ReplayRun)
 
     def model_ok(self):
         return self.llm.last_ok if self.llm.last_ok is not None else self.llm.ping()
@@ -135,12 +142,60 @@ class AgentService:
             self.heartbeat()
         return done
 
+    def process_replay(self, clock=time.monotonic):
+        """Werkt hooguit REPLAY_SLICE_SECONDS aan een AI-replay (claimt er een als er geen loopt). Na elke stap
+        voortgang; is de replay klaar, dan het rapport. Geeft True als er nog een replay loopt."""
+        if self.replay is None:
+            try:
+                job = self.api.claim_replay()
+            except MaintenanceError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.error("Ophalen van een AI-replay mislukt: %s", e)
+                return False
+            if not job:
+                return False
+            self.replay = ReplayRun(job, self.llm, self.settings)
+            logger.info("AI-replay %s gestart: %d stappen", self.replay.job_id, len(self.replay.steps))
+        run = self.replay
+        start = clock()
+        try:
+            while not run.done and not self.stop_event.is_set():
+                label = run.step()
+                if not self.api.replay_progress(run.job_id, run.percent, label):
+                    logger.warning("AI-replay %s is niet meer van deze agent; gestopt", run.job_id)
+                    self.replay = None
+                    return False
+                if clock() - start >= REPLAY_SLICE_SECONDS:
+                    break
+            if run.done:
+                self.api.submit_replay(run.job_id, html=render_replay(run, self.settings))
+                logger.info("AI-replay %s klaar", run.job_id)
+                self.replay = None
+        except MaintenanceError:
+            raise
+        except Exception as e:  # noqa: BLE001 - een kapotte replay mag de agent niet stoppen
+            logger.exception("AI-replay %s mislukt", run.job_id)
+            self.abort_replay(f"Interne fout in de AI-agent: {e}")
+        return self.replay is not None
+
+    def abort_replay(self, reason):
+        if self.replay is None:
+            return
+        try:
+            self.api.submit_replay(self.replay.job_id, error=reason)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Melden dat AI-replay %s mislukte, lukte niet: %s", self.replay.job_id, e)
+        self.replay = None
+
     def run_once(self):
         try:
             self.heartbeat()
             self.process_tasks()  # een lopend spel gaat voor
             if not self.stop_event.is_set():
                 self.process_design_jobs()
+            if not self.stop_event.is_set():
+                self.process_replay()
         except MaintenanceError:
             # De worker zet een backup terug (onderhoudsmodus): niets beoordelen, volgende ronde opnieuw
             logger.info("Webapp in onderhoudsmodus; wachten")
@@ -155,8 +210,10 @@ class AgentService:
                     logger.error("API-fout: %s", e)
                 except Exception:  # noqa: BLE001 - de agent blijft draaien
                     logger.exception("Onverwachte fout in deze ronde")
-                self.stop_event.wait(self.settings.POLL_INTERVAL)
+                # Loopt er een replay, dan meteen verder (na een blik op de teams)
+                self.stop_event.wait(1 if self.replay is not None else self.settings.POLL_INTERVAL)
         finally:
+            self.abort_replay("De AI-agent is gestopt tijdens deze replay; start hem opnieuw")
             self.api.unregister_agent()
             logger.info("AI-agent %s afgemeld", self.api.agent_id)
 

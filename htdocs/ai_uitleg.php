@@ -89,6 +89,7 @@ include 'admin_header.php';
             <a href="#beslissen"><?= icon('check-circle') ?>Wat er met de uitkomst gebeurt</a>
             <a href="#escalatie"><?= icon('hand') ?>Operator nodig</a>
             <a href="#controle"><?= icon('trending-up') ?>Controle achteraf</a>
+            <a href="#replay"><?= icon('refresh') ?>AI-replay</a>
             <a href="#privacy"><?= icon('lock') ?>Privacy en modellen</a>
         </div>
     </nav>
@@ -282,6 +283,19 @@ include 'admin_header.php';
         <div class="card-title"><?= icon('trending-up') ?>Controle achteraf</div>
         <p>In het <a href="ai_log.php">AI-logboek</a> staat elke beoordeling van het actieve spel: wat elke agent zei, met zijn redenering, en wat er uiteindelijk gebeurde. Markeer beoordelingen met <em>AI had gelijk</em> of <em>AI had ongelijk</em>; de knoppen bij “Operator nodig” tellen ook mee. Zo zie je per opdracht hoe vaak de AI het met de operators eens was.</p>
         <?= alertBox('info', '<strong>Advies:</strong> begin een nieuw spel met <strong>Suggesties</strong> of <strong>Antwoorden</strong>. Zet <strong>Automatisch</strong> pas aan als de overeenstemming per opdracht minstens 90 % is en er geen onterechte level-ups waren.') ?>
+    </section>
+
+    <section class="card" id="replay">
+        <div class="card-title"><?= icon('refresh') ?>AI-replay: een gespeeld spel opnieuw laten beoordelen</div>
+        <p>Is de AI aangepast, dan wil je weten of ze het nu beter doet. Kies bij <a href="game.php">Spelinstellingen</a> onder <em>AI-replay</em> een of meer teams (hooguit tien). De AI-agent loopt hun chats dan level voor level door en beoordeelt elk teambericht opnieuw, met de chat tot dat moment, alsof het team in de modus <strong>Automatisch</strong> stond. Er gaat niets naar de teams en er verandert niets in het spel. Het rapport (HTML) verschijnt bij <a href="jobs.php">Taken</a>.</p>
+        <ul class="plain">
+            <li>Per beurt zie je links wat er <strong>toen</strong> gebeurde (de AI van toen en wat de operator deed) en rechts wat de AI <strong>nu</strong> zou doen, met de reactie aan het team en de tussenstand.</li>
+            <li>Wat er toen goed was, haalt de replay uit jullie eigen handelen: het bericht waarna een operator het team doorzette was goed; een bericht waarop een operator antwoordde zonder door te zetten nog niet; een level-up door de AI die een operator terugdraaide was fout; anders telt <em>AI had gelijk/ongelijk</em> uit het AI-logboek.</li>
+            <li>Bovenaan staat een samenvatting (eens, strenger, soepeler, naar de operator, onterechte level-ups) en een lijst om na te kijken.</li>
+            <li>Met het vinkje <em>nieuwe rubric</em> stelt de opdracht-assistent eerst een nieuwe rubric voor en test de replay daarmee. De opdrachten zelf veranderen niet.</li>
+            <li>De agent doet de replay tussen de echte teamberichten door: een lopend spel gaat voor. Reken op 10 à 15 seconden per teambericht.</li>
+            <li>Bedenk bij het lezen: had de AI toen anders gereageerd, dan had het team daarna misschien iets anders geschreven. De replay meet dus per bericht, niet een heel spel.</li>
+        </ul>
     </section>
 
     <section class="card" id="privacy">

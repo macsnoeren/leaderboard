@@ -9,6 +9,8 @@ import sqlite3
 
 # Draaien alleen als er niets anders draait; een restore in de wachtrij houdt de rest tegen
 EXCLUSIVE_TYPES = ("restore", "backup")
+# Deze taken voert de AI-agent uit (via api.php, AGENT_JOB_TYPES in conf/worker.php); de worker slaat ze over
+AGENT_TYPES = ("ai_replay",)
 ORPHAN_MINUTES = 10
 
 
@@ -45,8 +47,10 @@ def get_job(conn, job_id):
 def claim_next(conn, worker_id):
     """Pakt de oudste taak die nu mag draaien en zet hem op running. Geeft de rij terug, of None."""
     exclusive = ", ".join("?" for _ in EXCLUSIVE_TYPES)
+    agent = ", ".join("?" for _ in AGENT_TYPES)
     with transaction(conn):
-        running = [r["type"] for r in conn.execute("SELECT type FROM worker_jobs WHERE status = 'running'")]
+        running = [r["type"] for r in conn.execute(f"SELECT type FROM worker_jobs WHERE status = 'running' AND type NOT IN ({agent})",
+                                                    AGENT_TYPES)]
         if any(t in EXCLUSIVE_TYPES for t in running):
             return None
         restore = conn.execute("SELECT id FROM worker_jobs WHERE status = 'queued' AND type = 'restore' ORDER BY id LIMIT 1").fetchone()
@@ -54,11 +58,12 @@ def claim_next(conn, worker_id):
             # Een restore gaat voor alles en wacht tot de rest klaar is
             candidate = None if running else restore["id"]
         elif running:
-            row = conn.execute(f"SELECT id FROM worker_jobs WHERE status = 'queued' AND type NOT IN ({exclusive}) ORDER BY id LIMIT 1",
-                               EXCLUSIVE_TYPES).fetchone()
+            row = conn.execute(f"SELECT id FROM worker_jobs WHERE status = 'queued' AND type NOT IN ({exclusive}, {agent}) "
+                               "ORDER BY id LIMIT 1", EXCLUSIVE_TYPES + AGENT_TYPES).fetchone()
             candidate = row["id"] if row else None
         else:
-            row = conn.execute("SELECT id FROM worker_jobs WHERE status = 'queued' ORDER BY id LIMIT 1").fetchone()
+            row = conn.execute(f"SELECT id FROM worker_jobs WHERE status = 'queued' AND type NOT IN ({agent}) ORDER BY id LIMIT 1",
+                               AGENT_TYPES).fetchone()
             candidate = row["id"] if row else None
         if candidate is None:
             return None
@@ -101,11 +106,14 @@ def fail_job(conn, job_id, message):
 
 
 def fail_orphans(conn, minutes=ORPHAN_MINUTES):
-    """Taken die running zijn zonder heartbeat van de laatste minuten (de worker stopte) worden failed."""
+    """Taken die running zijn zonder heartbeat van de laatste minuten (de worker stopte) worden failed.
+    Taken van de AI-agent niet: die ruimt api.php zelf op (claimAiReplay())."""
+    agent = ", ".join("?" for _ in AGENT_TYPES)
     cur = conn.execute(
         "UPDATE worker_jobs SET status = 'failed', message = 'Onderbroken: de worker stopte tijdens deze taak', "
-        "finished_at = datetime('now') WHERE status = 'running' AND (heartbeat_at IS NULL OR heartbeat_at < datetime('now', ?))",
-        (f"-{int(minutes)} minutes",))
+        "finished_at = datetime('now') WHERE status = 'running' AND (heartbeat_at IS NULL OR heartbeat_at < datetime('now', ?)) "
+        f"AND type NOT IN ({agent})",
+        (f"-{int(minutes)} minutes",) + AGENT_TYPES)
     return cur.rowcount
 
 

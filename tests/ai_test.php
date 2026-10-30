@@ -4,6 +4,8 @@
  * Uitvoeren: docker run --rm -v "$PWD":/app -w /app php:8.3-cli php tests/ai_test.php
  */
 
+// Rapporten van de AI-replay komen in een tijdelijke opslagmap
+define('STORAGE_DIR', sys_get_temp_dir() . '/ai_test_' . bin2hex(random_bytes(4)));
 require_once __DIR__ . '/../conf/ai.php';
 
 $failures = 0;
@@ -41,6 +43,7 @@ function freshDb(): PDO {
     $db->exec("CREATE TABLE ai_evaluations (id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, team_id INTEGER NOT NULL, team_name TEXT, assignment_number INTEGER NOT NULL, message_id INTEGER NOT NULL, intent TEXT, intent_json TEXT, helper_json TEXT, assessor_json TEXT, validator_json TEXT, verdict TEXT, decision TEXT, reason TEXT, reply_text TEXT, escalation_reason TEXT, resolved_by INTEGER, resolved_at DATETIME, teacher_verdict TEXT, agent_id TEXT, models TEXT, duration_ms INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE INDEX idx_ai_evaluations_team ON ai_evaluations(team_id, assignment_number)");
     $db->exec("CREATE INDEX idx_assignment_ai_dialog ON assignment_ai_dialog(assignment_id)");
+    $db->exec("CREATE TABLE worker_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, game_id INTEGER, params_json TEXT, status TEXT NOT NULL DEFAULT 'queued', progress INTEGER DEFAULT 0, message TEXT, result_file TEXT, result_name TEXT, result_size INTEGER, result_game_id INTEGER, created_by INTEGER, created_at DATETIME, started_at DATETIME, heartbeat_at DATETIME, finished_at DATETIME, expires_at DATETIME, worker_id TEXT)");
     return $db;
 }
 
@@ -667,6 +670,79 @@ recordHeartbeat($db, 'agent-2', true);
 check('één agent met werkend model → active', aiAgentStatus($db) === ['status' => 'active', 'count' => 2]);
 recordHeartbeat($db, 'agent-2', false);
 check('heartbeat werkt model_ok bij (geen dubbele rij)', aiAgentStatus($db) === ['status' => 'model_down', 'count' => 2]);
+
+echo "AI-replay\n";
+$db = freshDb();
+$game = addGame($db, 'finished');
+$other = addGame($db, 'running');
+$gameRow = ['id' => $game, 'name' => 'Spel finished'];
+addAssignment($db, $game, 1, ['ai_rubric' => json_encode(validRubric()), 'ai_rubric_status' => 'approved']);
+$asId = addAssignment($db, $game, 2);
+$db->prepare("INSERT INTO assignment_ai_dialog (assignment_id, role, message) VALUES (?, 'teacher', 'De naam hoeft niet.')")->execute([$asId]);
+$t1 = addTeam($db, $game, 'Tijgers', 2);
+$t2 = addTeam($db, $game, 'Leeuwen', 1);
+$foreign = addTeam($db, $other, 'Elders', 1);
+check('replay zonder teams van dit spel → foutmelding', is_string(enqueueAiReplay($db, $gameRow, [$foreign], false, 5)));
+$many = [];
+for ($i = 0; $i <= AI_REPLAY_MAX_TEAMS; $i++) {
+    $many[] = addTeam($db, $game, "Extra $i", 1);
+}
+check('meer dan ' . AI_REPLAY_MAX_TEAMS . ' teams → foutmelding', is_string(enqueueAiReplay($db, $gameRow, $many, false, 5)));
+$jobId = enqueueAiReplay($db, $gameRow, [$t1, $foreign, $t2], true, 5);
+check('replay in de wachtrij met alleen teams van dit spel, met audit', is_int($jobId)
+    && jobParams($db->query("SELECT * FROM worker_jobs WHERE id = $jobId")->fetch(PDO::FETCH_ASSOC)) === ['game_id' => $game, 'team_ids' => [$t1, $t2], 'new_rubric' => true]
+    && auditCount($db, 'AI_REPLAY_CREATE') === 1);
+
+$m1 = addMessage($db, $t1, 1, 'team', 'Het was Jan.');
+addMessage($db, $t1, 1, 'suggestion', 'GEHEIME SUGGESTIE');
+$m2 = addMessage($db, $t1, 1, 'teacher', 'Klopt, door!');
+$m3 = addMessage($db, $t1, 2, 'team', 'De directeur?');
+$db->exec("INSERT INTO ai_evaluations (game_id, team_id, assignment_number, message_id, intent, verdict, decision, reason, teacher_verdict)
+    VALUES ($game, $t1, 2, $m3, 'antwoord', 'goed', 'level_up', 'Klopt', 'disagree')");
+$db->exec("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history, leveled_by, leveled_by_name, accepted_message_id)
+    VALUES ($game, $t1, 'Tijgers', 1, '', 5, 'operator', $m1)");
+$db->exec("INSERT INTO completed_assignments (game_id, team_id, team_name, assignment_number, chat_history, level_started_at, accepted_message_id)
+    VALUES ($game, $t1, 'Tijgers', 2, '', datetime('now'), $m3)");
+logAudit($db, 5, 'TEAM_LEVEL_DOWN', "Team 'Tijgers' (ID $t1) terug naar level 2");
+logAudit($db, 5, 'TEAM_LEVEL_DOWN', "Team 'Ander' (ID 999) terug naar level 1");
+
+$data = claimAiReplay($db, 'agent-1');
+check('claim geeft de taak en zet hem op running voor deze agent', $data['job_id'] === $jobId
+    && $db->query("SELECT status || ':' || worker_id FROM worker_jobs WHERE id = $jobId")->fetchColumn() === 'running:agent-1');
+check('een tweede claim vindt niets', claimAiReplay($db, 'agent-2') === null);
+check('spel, opdrachten met rubric en verduidelijkingen', $data['game']['name'] === 'Spel finished' && $data['new_rubric'] === true
+    && $data['assignments'][0]['rubric']['kern'] === validRubric()['kern'] && $data['assignments'][1]['clarifications'] === [['role' => 'teacher', 'message' => 'De naam hoeft niet.']]);
+$team = $data['teams'][0];
+check('alleen de gekozen teams', array_column($data['teams'], 'team_name') === ['Tijgers', 'Leeuwen']);
+check('berichten zonder suggesties, met level', array_column($team['messages'], 'id') === [$m1, $m2, $m3] && $team['messages'][2]['level'] === 2
+    && strpos(json_encode($data), 'GEHEIME') === false);
+check('oude beoordeling met oordeel van de operator', $team['evaluations'][0]['message_id'] === $m3 && $team['evaluations'][0]['teacher_verdict'] === 'disagree');
+check('level-ups: door een operator en door de AI', array_column($team['completed'], 'leveled_by') === ['operator', 'ai'] && $team['completed'][1]['accepted_message_id'] === $m3);
+check('level terug alleen van dit team', array_column($team['level_downs'], 'to_level') === [2]);
+check('geen e-mail of token', strpos(json_encode($data), '@school.nl') === false && strpos(json_encode($data), 'access_token') === false);
+
+check('voortgang van de eigen agent', updateAiReplayProgress($db, $jobId, 'agent-1', 40, 'Team Tijgers, level 1')
+    && (int)$db->query("SELECT progress FROM worker_jobs WHERE id = $jobId")->fetchColumn() === 40);
+check('voortgang van een andere agent → false', !updateAiReplayProgress($db, $jobId, 'agent-2', 50, 'x'));
+check('afronden door een andere agent → 409', finishAiReplay($db, $jobId, 'agent-2', '<html></html>', null)['status'] === 409);
+$r = finishAiReplay($db, $jobId, 'agent-1', '<!doctype html><title>Rapport</title>', null);
+$row = $db->query("SELECT * FROM worker_jobs WHERE id = $jobId")->fetch(PDO::FETCH_ASSOC);
+check('rapport opgeslagen, taak klaar en downloadbaar', $r['status'] === 200 && $row['status'] === 'done' && $row['expires_at'] !== null
+    && preg_match('#^jobs/' . $jobId . '/ai-replay-spel-finished-\d{8}-\d{4}\.html$#', $row['result_file'])
+    && file_get_contents(STORAGE_DIR . '/' . $row['result_file']) === '<!doctype html><title>Rapport</title>' && jobResultPath($row) !== null
+    && auditCount($db, 'JOB_DONE') === 1);
+check('nogmaals afronden → 409', finishAiReplay($db, $jobId, 'agent-1', 'x', null)['status'] === 409);
+
+$failed = enqueueAiReplay($db, $gameRow, [$t2], false, 5);
+claimAiReplay($db, 'agent-1');
+check('fout van de agent → mislukt', finishAiReplay($db, $failed, 'agent-1', null, 'Model weg')['job_status'] === 'failed'
+    && strpos($db->query("SELECT message FROM worker_jobs WHERE id = $failed")->fetchColumn(), 'Model weg') !== false);
+$stale = enqueueAiReplay($db, $gameRow, [$t2], false, 5);
+claimAiReplay($db, 'agent-1');
+$db->exec("UPDATE worker_jobs SET heartbeat_at = datetime('now', '-11 minutes') WHERE id = $stale");
+$next = enqueueAiReplay($db, $gameRow, [$t2], false, 5);
+check('een replay zonder voortgang mislukt bij de volgende claim', claimAiReplay($db, 'agent-2')['job_id'] === $next
+    && $db->query("SELECT status FROM worker_jobs WHERE id = $stale")->fetchColumn() === 'failed');
 
 if ($failures > 0) {
     echo "\n$failures test(s) mislukt\n";

@@ -149,6 +149,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             flash('success', 'Het rapport wordt gemaakt. Zodra het klaar is, kun je het hier downloaden.');
             redirect('jobs.php');
 
+        case 'ai_replay':
+            // De AI-agent beoordeelt de chats van de gekozen teams opnieuw; het rapport komt bij Taken
+            $result = enqueueAiReplay($db, $game, (array)($_POST['team_ids'] ?? []), !empty($_POST['new_rubric']), $userId);
+            if (is_string($result)) {
+                flash('error', $result);
+                break;
+            }
+            flash('success', 'De AI-replay staat in de wachtrij. De AI-agent doet hem tussen de echte teamberichten door; zodra het rapport klaar is, kun je het hier downloaden.');
+            redirect('jobs.php');
+
         case 'delete_game':
             // Alleen beheerders: zij maken spellen aan (games.php), dus zij verwijderen ze ook
             if ($user['role'] !== 'admin') {
@@ -189,6 +199,11 @@ $ends = utcToLocalParts($game['ends_at']);
 $status = $game['effective_status'];
 $actions = allowedGameActions($game);
 $teamCount = count(rankedTeams($db, $gameId));
+// Teams die iets in de chat zetten, voor de AI-replay
+$stmt = $db->prepare("SELECT t.id, t.team_name, t.current_level, COUNT(tm.id) AS sent FROM teams t
+    JOIN team_messages tm ON tm.team_id = t.id AND tm.sender = 'team' WHERE t.game_id = ? GROUP BY t.id ORDER BY t.team_name COLLATE NOCASE");
+$stmt->execute([$gameId]);
+$replayTeams = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $statusForms = [
     'start' => ['play', 'Start', 'btn-primary', 'Bericht bij de start (optioneel)', 'Het spel starten? Alle ' . $teamCount . ' teams gaan tegelijk naar level 1.'],
@@ -200,6 +215,7 @@ $statusForms = [
 $pageTitle = 'Spelinstellingen';
 $extraCSS = '<style>
     .status-form { display: flex; gap: 8px; margin-top: 12px; }
+    .replay-teams { border: 0; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 14px; }
     .status-form input { flex: 1; }
     .status-form .btn { min-width: 130px; }
     .join-code { font-family: var(--font-mono); font-size: 32px; letter-spacing: .14em; font-weight: 800; line-height: 1.1; }
@@ -395,6 +411,36 @@ include 'admin_header.php';
                     </label>
                     <button type="submit" class="btn btn-secondary"><?= icon('file') ?>Rapport maken</button>
                 </form>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><?= icon('bot') ?>AI-replay</div>
+                    <a href="ai_uitleg.php#replay" class="btn btn-sm btn-ghost"><?= icon('info') ?>Uitleg</a>
+                </div>
+                <p class="text-sm" style="margin-bottom: 12px;">De huidige AI beoordeelt de chats van gekozen teams opnieuw, bericht voor bericht, en zet dat naast wat er toen gebeurde. Je krijgt een rapport (HTML) bij Taken. Er gaat niets naar de teams. Reken op 10 à 15 seconden per teambericht.</p>
+                <?php if (!$replayTeams): ?>
+                    <p class="muted small">Nog geen teams met berichten in dit spel.</p>
+                <?php else: ?>
+                <form method="POST">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="action" value="ai_replay">
+                    <fieldset class="replay-teams">
+                        <legend class="section-label">Teams (hooguit <?= AI_REPLAY_MAX_TEAMS ?>)</legend>
+                        <?php foreach ($replayTeams as $t): ?>
+                            <label class="check">
+                                <input type="checkbox" name="team_ids[]" value="<?= (int)$t['id'] ?>">
+                                <span><?= htmlspecialchars($t['team_name']) ?> <span class="muted small">— <?= (int)$t['sent'] ?> bericht<?= (int)$t['sent'] === 1 ? '' : 'en' ?>, level <?= (int)$t['current_level'] ?></span></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </fieldset>
+                    <label class="check field">
+                        <input type="checkbox" name="new_rubric" value="1">
+                        <span>Laat de opdracht-assistent eerst een nieuwe rubric voorstellen en test daarmee (alleen voor deze replay; de opdrachten veranderen niet)</span>
+                    </label>
+                    <button type="submit" class="btn btn-secondary"><?= icon('play') ?>Replay starten</button>
+                </form>
+                <?php endif; ?>
             </div>
         </div>
     </div>

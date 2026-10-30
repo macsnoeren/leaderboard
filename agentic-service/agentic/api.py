@@ -101,6 +101,21 @@ class ApiClient:
     def submit_evaluation(self, payload):
         return self._post("submit_evaluation", payload)
 
+    def claim_replay(self):
+        """De oudste AI-replay in de wachtrij, met alle gegevens (zie aiReplayData() in conf/ai.php), of None."""
+        return (self._post("claim_replay", {}) or {}).get("job")
+
+    def replay_progress(self, job_id, progress, message):
+        """False als de replay niet (meer) van deze agent is (bijv. mislukt verklaard na een lange stilte)."""
+        status, _ = self._request("POST", "replay_progress", {"job_id": job_id, "agent_id": self.agent_id,
+                                                               "progress": int(progress), "message": message})
+        return status == 200
+
+    def submit_replay(self, job_id, html=None, error=None):
+        body = {"job_id": job_id}
+        body.update({"html": html} if error is None else {"error": error})
+        return self._post("submit_replay", body, ok_statuses=(200,))
+
     def heartbeat(self, model_ok):
         return self._post("heartbeat", {"model_ok": bool(model_ok)})
 

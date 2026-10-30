@@ -149,6 +149,35 @@ en de actie binnen `ai_mode`, `ai_auto_allowed`, de rubricstatus en een eventuel
 Valt een controle af, dan wordt de actie omlaag bijgesteld, nooit omhoog. Elke actie komt in `audit_logs`
 met `user_id` NULL (`AI_SUGGEST`, `AI_REPLY`, `AI_LEVEL_UP`, `AI_ESCALATE`).
 
+## AI-replay
+
+Een gespeeld spel opnieuw laten beoordelen door de huidige AI, om te zien of een nieuwe prompt, rubric of
+modelkeuze het beter doet. De operator kiest teams in `game.php` (hooguit `AI_REPLAY_MAX_TEAMS`, optioneel
+"nieuwe rubric"); dat wordt een taak `ai_replay` in `worker_jobs`, die de **agent** uitvoert (de worker slaat
+hem over). Het rapport (één HTML-bestand) komt bij Taken, net als een export.
+
+- **Protocol**: `claim_replay` (de oudste replay in de wachtrij, met opdrachten, rubrics, verduidelijkingen en
+  per team de berichten zonder suggesties, de oude beoordelingen, de level-ups met wie doorzette en de keren
+  dat een operator het team terugzette; `aiReplayData()`) → `replay_progress` na elke stap (ook de heartbeat
+  van de taak; 409 = niet meer van deze agent, stoppen) → `submit_replay` met `html` of `error`. Een replay
+  zonder voortgang van 10 minuten mislukt bij de volgende claim.
+- **Tussen het echte werk door** (`main.py`): per ronde eerst de teamberichten en de design-taken, dan hooguit
+  `REPLAY_SLICE_SECONDS` replay. Stopt de agent, dan meldt hij de replay als mislukt.
+- **Per beurt** (`agentic/replay.py`): net als in het spel beoordeelt de AI alleen het laatste bericht van een
+  reeks teamberichten op rij, met de chat tot dat moment, in modus `auto` met de rubric als goedgekeurd, en een
+  tussenstand die tijdens de replay wordt opgebouwd (`merge_progress()`). Er wordt niets ingediend.
+- **Wat er toen goed was** (`truth()`): het bericht waarna een operator doorzette = goed; een bericht waarop
+  een operator antwoordde zonder door te zetten = nog niet; een AI-level-up die een operator terugdraaide =
+  fout; anders `teacher_verdict` uit `ai_log.php`; anders onbekend. Uitkomst per beurt: eens, strenger,
+  soepeler, naar de operator, vraag, of geen vergelijking; voor de AI van toen en de huidige AI.
+- **Nieuwe rubric**: de opdracht-assistent krijgt meteen de laatste ronde (dus een rubric, geen vragen); mislukt
+  dat, dan de huidige rubric, met de fout in het rapport.
+- **Rapport** (`agentic/replay_report.py`): samenvatting, lijst om na te kijken, gebruikte rubrics, en per team
+  per level de chat met per beurt "toen" naast "nu". Alles ge-escaped, geen externe bronnen. Teamnamen staan in
+  het rapport (het is voor operators), nooit in een prompt.
+- Beperking: had de AI anders gereageerd, dan had het team daarna iets anders geschreven. De replay meet per
+  bericht, niet een heel spel.
+
 ## Opdracht-assistent
 
 `agents/designer.py`, gestart met *Laat AI meekijken* in `assignments.php` (`ai_design_status`
@@ -199,6 +228,8 @@ agentic/
   prefilter.py          voorfilter in code
   policy.py             beslisregels (pure functies)
   pipeline.py           de stappen per teambericht
+  replay.py             AI-replay: chats van gekozen teams opnieuw beoordelen
+  replay_report.py      HTML-rapport van een replay
   agents/               intent, helper, assessor, validator, designer
   prompts/              de prompts per agent
 tests/                  unittest + unittest.mock, met een FakeLLM

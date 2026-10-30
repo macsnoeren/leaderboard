@@ -12,6 +12,7 @@
  */
 
 require_once __DIR__ . '/game.php';
+require_once __DIR__ . '/worker.php';
 
 const AI_MODES = ['off', 'suggest', 'reply', 'auto'];
 const AI_MODE_LABELS = [
@@ -1083,4 +1084,190 @@ function aiAgentStatus(PDO $db): array {
         FROM ai_service_status WHERE last_heartbeat > (strftime('%s', 'now') - 120)")->fetch(PDO::FETCH_ASSOC);
     $n = (int)$row['n'];
     return ['status' => $n === 0 ? 'inactive' : ((int)$row['ok'] > 0 ? 'active' : 'model_down'), 'count' => $n];
+}
+
+// ---------------------------------------------------------------------------
+// AI-replay: de huidige AI beoordeelt de chats van gekozen teams opnieuw
+// ---------------------------------------------------------------------------
+//
+// Een taak in worker_jobs (type ai_replay), maar uitgevoerd door de AI-agent (alleen die bereikt de
+// modellen); de worker slaat dit type over. De agent claimt de taak via api.php, krijgt de chats, meldt
+// voortgang en levert een HTML-rapport in, dat net als een export bij Taken te downloaden is.
+
+const AI_REPLAY_MAX_TEAMS = 10;
+const AI_REPLAY_MAX_BYTES = 20 * 1024 * 1024;
+// Zonder voortgangsmelding van de agent zo lang: de agent stopte, de taak is mislukt
+const AI_REPLAY_ORPHAN_MINUTES = 10;
+
+/**
+ * Zet een replay in de wachtrij voor teams van dit spel (andere id's vallen weg). Geeft het taak-id of een
+ * foutmelding (string).
+ */
+function enqueueAiReplay(PDO $db, array $game, array $teamIds, bool $newRubric, int $userId) {
+    $teams = [];
+    foreach (array_unique(array_map('intval', $teamIds)) as $id) {
+        $team = findTeamInGame($db, $id, (int)$game['id']);
+        if ($team) {
+            $teams[(int)$team['id']] = $team['team_name'];
+        }
+    }
+    if (!$teams) {
+        return 'Kies minstens één team.';
+    }
+    if (count($teams) > AI_REPLAY_MAX_TEAMS) {
+        return 'Kies hooguit ' . AI_REPLAY_MAX_TEAMS . ' teams per replay.';
+    }
+    return enqueueJob($db, 'ai_replay', (int)$game['id'], ['game_id' => (int)$game['id'], 'team_ids' => array_keys($teams), 'new_rubric' => $newRubric],
+        $userId, "AI-replay van " . count($teams) . " team(s) in spel '{$game['name']}'" . ($newRubric ? ', met nieuwe rubric' : ''));
+}
+
+/**
+ * Claimt de oudste replay in de wachtrij voor deze agent en geeft alles wat hij nodig heeft, of null.
+ * Een replay zonder voortgang van de laatste AI_REPLAY_ORPHAN_MINUTES minuten (de agent stopte) mislukt eerst.
+ */
+function claimAiReplay(PDO $db, string $agentId): ?array {
+    $stmt = $db->prepare("UPDATE worker_jobs SET status = 'failed', message = 'Onderbroken: de AI-agent stopte tijdens deze replay',
+        finished_at = datetime('now') WHERE type = 'ai_replay' AND status = 'running' AND (heartbeat_at IS NULL OR heartbeat_at < datetime('now', ?))");
+    $stmt->execute(['-' . AI_REPLAY_ORPHAN_MINUTES . ' minutes']);
+    $stmt = $db->prepare("UPDATE worker_jobs SET status = 'running', worker_id = ?, progress = 0, message = 'De AI-agent is begonnen',
+        started_at = datetime('now'), heartbeat_at = datetime('now')
+        WHERE id = (SELECT id FROM worker_jobs WHERE type = 'ai_replay' AND status = 'queued' ORDER BY id LIMIT 1) AND status = 'queued'");
+    $stmt->execute([$agentId]);
+    if ($stmt->rowCount() !== 1) {
+        return null;
+    }
+    $stmt = $db->prepare("SELECT * FROM worker_jobs WHERE type = 'ai_replay' AND status = 'running' AND worker_id = ? ORDER BY started_at DESC, id DESC LIMIT 1");
+    $stmt->execute([$agentId]);
+    $job = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $job ? aiReplayData($db, $job) : null;
+}
+
+/**
+ * De gegevens voor een replay: opdrachten met rubric en verduidelijkingen, en per gekozen team de berichten
+ * (zonder suggesties), de oude AI-beoordelingen, de level-ups (wie zette door, welk bericht) en de keren dat
+ * een operator het team terugzette. Teamnamen zijn voor het rapport; ze gaan nooit naar een model.
+ */
+function aiReplayData(PDO $db, array $job): array {
+    $params = jobParams($job);
+    $gameId = (int)$job['game_id'];
+    $stmt = $db->prepare("SELECT * FROM games WHERE id = ?");
+    $stmt->execute([$gameId]);
+    $game = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $stmt = $db->prepare("SELECT * FROM assignments WHERE game_id = ? ORDER BY assignment_number");
+    $stmt->execute([$gameId]);
+    $assignments = array_map(function ($a) use ($db) {
+        return [
+            'number' => (int)$a['assignment_number'],
+            'title' => (string)$a['title'],
+            'description' => (string)$a['description'],
+            'instruction' => (string)$a['instruction'],
+            'criteria' => (string)$a['criteria'],
+            'time_limit' => (int)$a['time_limit'],
+            'has_attachment' => !empty($a['artifact_file']),
+            'rubric' => decodeRubric($a['ai_rubric']),
+            'rubric_status' => $a['ai_rubric_status'] ?: 'none',
+            'clarifications' => array_map(function ($d) {
+                return ['role' => $d['role'], 'message' => $d['message']];
+            }, assignmentDialog($db, (int)$a['id'])),
+        ];
+    }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+    $teams = [];
+    foreach ((array)($params['team_ids'] ?? []) as $teamId) {
+        $team = findTeamInGame($db, (int)$teamId, $gameId);
+        if (!$team) {
+            continue; // intussen verwijderd
+        }
+        $id = (int)$team['id'];
+        $stmt = $db->prepare("SELECT id, assignment_number, sender, message, created_at FROM team_messages
+            WHERE team_id = ? AND sender IN ('team', 'teacher', 'ai') ORDER BY created_at ASC, id ASC");
+        $stmt->execute([$id]);
+        $messages = array_map(function ($m) {
+            return ['id' => (int)$m['id'], 'level' => (int)$m['assignment_number'], 'sender' => $m['sender'], 'time' => $m['created_at'], 'text' => $m['message']];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt = $db->prepare("SELECT message_id, assignment_number, intent, verdict, decision, reason, reply_text, teacher_verdict, created_at
+            FROM ai_evaluations WHERE team_id = ? ORDER BY id");
+        $stmt->execute([$id]);
+        $evaluations = array_map(function ($e) {
+            return ['message_id' => (int)$e['message_id'], 'level' => (int)$e['assignment_number'], 'intent' => $e['intent'], 'verdict' => $e['verdict'],
+                    'decision' => $e['decision'], 'reason' => (string)$e['reason'], 'reply_text' => (string)$e['reply_text'],
+                    'teacher_verdict' => $e['teacher_verdict'], 'time' => $e['created_at']];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt = $db->prepare("SELECT assignment_number, accepted_message_id, leveled_by, leveled_by_name, level_started_at, created_at
+            FROM completed_assignments WHERE game_id = ? AND team_id = ? ORDER BY id");
+        $stmt->execute([$gameId, $id]);
+        $completed = array_map(function ($c) {
+            // Wie zette door: operator, AI, of onbekend (rijen van vóór leveled_by)
+            $by = $c['leveled_by'] !== null || $c['leveled_by_name'] !== null ? 'operator' : ($c['level_started_at'] !== null ? 'ai' : null);
+            return ['level' => (int)$c['assignment_number'], 'accepted_message_id' => $c['accepted_message_id'] === null ? null : (int)$c['accepted_message_id'],
+                    'leveled_by' => $by, 'time' => $c['created_at']];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        // levelDown() schrijft "Team '…' (ID n) terug naar level k"
+        $stmt = $db->prepare("SELECT description, created_at FROM audit_logs WHERE event_type = 'TEAM_LEVEL_DOWN' AND description LIKE ? ORDER BY id");
+        $stmt->execute(["%(ID $id) terug naar level %"]);
+        $levelDowns = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            if (preg_match('/\(ID ' . $id . '\) terug naar level (\d+)$/', (string)$row['description'], $m)) {
+                $levelDowns[] = ['to_level' => (int)$m[1], 'time' => $row['created_at']];
+            }
+        }
+        $teams[] = ['team_id' => $id, 'team_name' => $team['team_name'], 'current_level' => (int)$team['current_level'],
+                    'messages' => $messages, 'evaluations' => $evaluations, 'completed' => $completed, 'level_downs' => $levelDowns];
+    }
+    return [
+        'job_id' => (int)$job['id'],
+        'game' => ['name' => (string)($game['name'] ?? ''), 'ai_max_attempts' => (int)($game['ai_max_attempts'] ?? 5),
+                   'ai_max_questions' => (int)($game['ai_max_questions'] ?? 5)],
+        'new_rubric' => !empty($params['new_rubric']),
+        'created_at' => $job['created_at'],
+        'assignments' => $assignments,
+        'teams' => $teams,
+    ];
+}
+
+/**
+ * Voortgang van de agent (ook zijn heartbeat voor deze taak). False als de taak niet (meer) van hem is.
+ */
+function updateAiReplayProgress(PDO $db, int $jobId, string $agentId, int $progress, string $message): bool {
+    $stmt = $db->prepare("UPDATE worker_jobs SET progress = ?, message = ?, heartbeat_at = datetime('now')
+        WHERE id = ? AND type = 'ai_replay' AND status = 'running' AND worker_id = ?");
+    $stmt->execute([max(0, min(99, $progress)), textCut($message, 500), $jobId, $agentId]);
+    return $stmt->rowCount() === 1;
+}
+
+/**
+ * Rondt een replay af: met $html het rapport in storage/jobs/<id>/ (downloadbaar zoals een export), met
+ * $error mislukt. Geeft ['status' => HTTP-code, ...].
+ */
+function finishAiReplay(PDO $db, int $jobId, string $agentId, ?string $html, ?string $error): array {
+    $stmt = $db->prepare("SELECT w.*, g.name AS game_name FROM worker_jobs w LEFT JOIN games g ON g.id = w.game_id
+        WHERE w.id = ? AND w.type = 'ai_replay' AND w.status = 'running' AND w.worker_id = ?");
+    $stmt->execute([$jobId, $agentId]);
+    $job = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$job) {
+        return ['status' => 409, 'error' => 'Deze replay is niet (meer) van deze agent'];
+    }
+    if ($error !== null || $html === null || $html === '') {
+        $message = 'Mislukt: ' . textCut($error ?? 'geen rapport ontvangen', 400);
+        $db->prepare("UPDATE worker_jobs SET status = 'failed', message = ?, finished_at = datetime('now') WHERE id = ?")->execute([$message, $jobId]);
+        logAudit($db, null, 'JOB_FAILED', "AI-replay mislukt (taak #$jobId)");
+        return ['status' => 200, 'job_status' => 'failed'];
+    }
+    if (strlen($html) > AI_REPLAY_MAX_BYTES) {
+        return ['status' => 413, 'error' => 'Rapport te groot'];
+    }
+    $slug = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower((string)$job['game_name'])), '-') ?: 'spel';
+    $name = 'ai-replay-' . substr($slug, 0, 60) . '-' . gmdate('Ymd-Hi') . '.html';
+    $dir = storageDir() . '/jobs/' . $jobId;
+    if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
+        return ['status' => 500, 'error' => 'Opslag niet beschikbaar'];
+    }
+    if (file_put_contents("$dir/$name", $html) === false) {
+        return ['status' => 500, 'error' => 'Rapport kon niet worden opgeslagen'];
+    }
+    $db->prepare("UPDATE worker_jobs SET status = 'done', progress = 100, message = 'Rapport klaar', result_file = ?, result_name = ?, result_size = ?,
+                  finished_at = datetime('now'), heartbeat_at = datetime('now'), expires_at = datetime('now', ?) WHERE id = ?")
+       ->execute(["jobs/$jobId/$name", $name, strlen($html), '+' . resultTtlDays() . ' days', $jobId]);
+    logAudit($db, null, 'JOB_DONE', "AI-replay klaar (taak #$jobId)");
+    return ['status' => 200, 'job_status' => 'done'];
 }

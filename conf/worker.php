@@ -16,7 +16,10 @@ const WORKER_JOB_TYPES = [
     'backup' => 'Backup maken',
     'backup_upload' => 'Backup uploaden',
     'restore' => 'Backup terugzetten',
+    'ai_replay' => 'AI-replay (HTML)',
 ];
+// Deze taken voert de AI-agent uit (via api.php), niet de worker
+const AGENT_JOB_TYPES = ['ai_replay'];
 // Alleen voor beheerders: een import maakt een spel, de rest raakt de hele omgeving
 const WORKER_ADMIN_JOBS = ['game_import', 'backup', 'backup_upload', 'restore'];
 const WORKER_JOB_AUDIT = [
@@ -26,6 +29,7 @@ const WORKER_JOB_AUDIT = [
     'backup' => 'BACKUP_CREATE',
     'backup_upload' => 'BACKUP_UPLOAD',
     'restore' => 'BACKUP_RESTORE',
+    'ai_replay' => 'AI_REPLAY_CREATE',
 ];
 const WORKER_STATUS_LABELS = [
     'queued' => 'in wachtrij',
@@ -141,6 +145,9 @@ function jobDescription(array $job): string {
             return (string)($p['original_name'] ?? 'backup');
         case 'restore':
             return (string)($p['backup'] ?? $p['original_name'] ?? 'backup');
+        case 'ai_replay':
+            $n = count((array)($p['team_ids'] ?? []));
+            return $n . ' team' . ($n === 1 ? '' : 's') . (!empty($p['new_rubric']) ? ', met nieuwe rubric' : ', met de huidige rubric');
     }
     return '';
 }
@@ -263,8 +270,15 @@ function workerActive(PDO $db): bool {
     return $stmt->fetchColumn() > 0;
 }
 
-function hasPendingJobs(array $jobs): bool {
+/**
+ * Staat er iets in de wachtrij of is iets bezig? $agent: true = alleen taken van de AI-agent, false = alleen
+ * die van de worker, null = alle.
+ */
+function hasPendingJobs(array $jobs, ?bool $agent = null): bool {
     foreach ($jobs as $job) {
+        if ($agent !== null && in_array($job['type'], AGENT_JOB_TYPES, true) !== $agent) {
+            continue;
+        }
         if (in_array($job['status'], ['queued', 'running'], true)) {
             return true;
         }

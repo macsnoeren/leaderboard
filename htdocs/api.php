@@ -90,6 +90,32 @@ if ($method === 'POST' && $action === 'submit_design') {
     respond($status, $status === 200 ? ['status' => 'success'] + $result : $result);
 }
 
+// AI-replay: de oudste replay in de wachtrij claimen (met alle gegevens), voortgang melden, rapport inleveren
+if ($method === 'POST' && $action === 'claim_replay') {
+    $input = jsonInput();
+    $agentId = trim((string)($input['agent_id'] ?? ''));
+    if ($agentId === '') {
+        respond(400, ['error' => 'agent_id ontbreekt']);
+    }
+    respond(200, ['job' => claimAiReplay($db, $agentId)]);
+}
+
+if ($method === 'POST' && $action === 'replay_progress') {
+    $input = jsonInput();
+    $ok = updateAiReplayProgress($db, (int)($input['job_id'] ?? 0), trim((string)($input['agent_id'] ?? '')),
+        (int)($input['progress'] ?? 0), (string)($input['message'] ?? ''));
+    respond($ok ? 200 : 409, $ok ? ['status' => 'success'] : ['error' => 'Deze replay is niet (meer) van deze agent']);
+}
+
+if ($method === 'POST' && $action === 'submit_replay') {
+    $input = jsonInput();
+    $result = finishAiReplay($db, (int)($input['job_id'] ?? 0), trim((string)($input['agent_id'] ?? '')),
+        is_string($input['html'] ?? null) ? $input['html'] : null, is_string($input['error'] ?? null) ? $input['error'] : null);
+    $status = $result['status'];
+    unset($result['status']);
+    respond($status, $status === 200 ? ['status' => 'success'] + $result : $result);
+}
+
 // Heartbeat van de agent, met model_ok: lukte de laatste modelaanroep?
 if ($method === 'POST' && $action === 'heartbeat') {
     $input = jsonInput();

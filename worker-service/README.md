@@ -30,9 +30,15 @@ kunnen lezen en vervangen). Er is ook een commandoregel voor beheer en noodgeval
 | `backup` | admin (`backups.php`), of de planner (`created_by` NULL) | `storage/backups/operationroom-backup-<datum>.tar.gz` |
 | `backup_upload` | admin | geüploade backup, eerst volledig gecontroleerd, daarna in de lijst |
 | `restore` | admin, met het eigen wachtwoord (fout telt mee in `login_attempts`, scope `restore`) | omgeving vervangen |
+| `ai_replay` | operator van het spel, admin (`game.php`); **uitgevoerd door de AI-agent**, niet door de worker | `ai-replay-<naam>-<datum>.html` |
+
+`ai_replay` staat in dezelfde wachtrij (zodat Taken, downloads en opruimen gedeeld zijn), maar alleen de
+AI-agent bereikt de modellen: hij claimt de taak via `api.php` (`claimAiReplay()` in `conf/ai.php`) en levert
+het rapport daar ook in. De worker slaat dit type over (`AGENT_TYPES` in `worker/db.py`), ook in
+`fail_orphans()`; een replay zonder voortgang mislukt bij de volgende claim van de agent.
 
 Downloaden mag alleen wie de taak mocht starten (`jobDownloadAllowed()`); backups downloaden alleen admins
-via `backups.php?download=`. Audit: `GAME_EXPORT`, `GAME_IMPORT`, `REPORT_CREATE`, `BACKUP_CREATE`,
+via `backups.php?download=`. Audit: `GAME_EXPORT`, `GAME_IMPORT`, `REPORT_CREATE`, `AI_REPLAY_CREATE`, `BACKUP_CREATE`,
 `BACKUP_DOWNLOAD`, `BACKUP_PIN`, `BACKUP_DELETE`, `BACKUP_RESTORE`, `JOB_DOWNLOAD`; de worker logt het eind
 van een taak met `user_id` NULL (`JOB_DONE`/`JOB_FAILED`). Nooit wachtwoorden of tokens in `params_json`.
 

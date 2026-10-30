@@ -1,6 +1,6 @@
 <?php
 /**
- * Download van het resultaat van een taak (export, rapport, backup). Alleen wie de taak mag zien
+ * Download van het resultaat van een taak (export, rapport, AI-replay, backup). Alleen wie de taak mag zien
  * (jobDownloadAllowed()); elke download komt in de audit-log.
  */
 session_start();
@@ -25,7 +25,8 @@ if ($path === null) {
 }
 
 $name = preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($job['result_name'] ?: basename($path)));
-$type = substr($name, -4) === '.pdf' ? 'application/pdf' : 'application/gzip';
+$types = ['.pdf' => 'application/pdf', '.html' => 'text/html; charset=utf-8'];
+$type = $types[strrchr($name, '.') ?: ''] ?? 'application/gzip';
 logAudit($db, (int)$user['id'], 'JOB_DOWNLOAD', jobTypeLabel($job['type']) . " gedownload (taak #{$job['id']}, $name)");
 
 sendFile($path, 'attachment; filename="' . $name . '"', $type);

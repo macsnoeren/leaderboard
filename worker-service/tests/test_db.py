@@ -69,6 +69,23 @@ class DbTest(unittest.TestCase):
         export = db.create_job(self.conn, "game_export", {}, game_id=1)
         self.assertEqual(db.claim_next(self.conn, "w1")["id"], export)
 
+    def test_ai_replay_is_left_to_the_agent(self):
+        # De AI-agent voert een replay uit; de worker pakt hem niet op en wacht er ook niet op
+        db.create_job(self.conn, "ai_replay", {"team_ids": [1]}, game_id=1)
+        self.assertIsNone(db.claim_next(self.conn, "w1"))
+        report = db.create_job(self.conn, "report", {}, game_id=1)
+        self.assertEqual(db.claim_next(self.conn, "w1")["id"], report)
+        db.create_job(self.conn, "ai_replay", {}, game_id=1, status="running")
+        db.finish_job(self.conn, report)
+        restore = db.create_job(self.conn, "restore", {"backup": "x"})
+        self.assertEqual(db.claim_next(self.conn, "w1")["id"], restore)
+
+    def test_orphans_leave_agent_jobs_alone(self):
+        replay = db.create_job(self.conn, "ai_replay", {}, game_id=1, status="running")
+        self.conn.execute("UPDATE worker_jobs SET heartbeat_at = datetime('now', '-11 minutes') WHERE id = ?", (replay,))
+        self.assertEqual(db.fail_orphans(self.conn), 0)
+        self.assertEqual(db.get_job(self.conn, replay)["status"], "running")
+
     def test_orphans(self):
         old = db.create_job(self.conn, "report", {}, game_id=1, status="running")
         recent = db.create_job(self.conn, "report", {}, game_id=1, status="running")
